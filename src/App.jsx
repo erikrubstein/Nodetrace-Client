@@ -409,6 +409,7 @@ function App() {
   const [settingsWidth, setSettingsWidth] = useState(280)
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
   const fileInputRef = useRef(null)
+  const importInputRef = useRef(null)
   const nameInputRef = useRef(null)
   const viewportRef = useRef(null)
   const previewViewportRef = useRef(null)
@@ -900,6 +901,47 @@ function App() {
     await persistProjectSettings(defaultProjectSettings)
   }
 
+  function exportProject() {
+    if (!selectedProjectId) {
+      return
+    }
+
+    window.location.href = `/api/projects/${selectedProjectId}/export`
+    setFileMenuOpen(false)
+  }
+
+  async function importProject(file) {
+    if (!file) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('archive', file)
+
+      const importedTree = await api('/api/projects/import', {
+        method: 'POST',
+        body: formData,
+      })
+
+      setTree(importedTree)
+      setSelectedProjectId(importedTree.project.id)
+      setSelectedNodeId(importedTree.root?.id ?? null)
+      setFileMenuOpen(false)
+      await loadProjects(importedTree.project.id)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+      if (importInputRef.current) {
+        importInputRef.current.value = ''
+      }
+    }
+  }
+
   async function addFolder(parentId = selectedNode?.id) {
     if (!parentId || !selectedProjectId) {
       return
@@ -1215,6 +1257,25 @@ function App() {
                   Open Project
                 </button>
                 <button
+                  className="menu-item"
+                  disabled={!selectedProjectId || busy}
+                  onClick={exportProject}
+                  type="button"
+                >
+                  Export Project
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={busy}
+                  onClick={() => {
+                    setFileMenuOpen(false)
+                    importInputRef.current?.click()
+                  }}
+                  type="button"
+                >
+                  Import Project
+                </button>
+                <button
                   className="menu-item danger-text"
                   disabled={!tree?.project || busy}
                   onClick={() => {
@@ -1238,6 +1299,13 @@ function App() {
             onChange={(event) =>
               uploadFiles(Array.from(event.target.files || []), pendingUploadParentId || selectedNode?.id)
             }
+            type="file"
+          />
+          <input
+            ref={importInputRef}
+            accept=".zip"
+            hidden
+            onChange={(event) => importProject(event.target.files?.[0] || null)}
             type="file"
           />
         </div>
