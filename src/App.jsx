@@ -4,11 +4,29 @@ import './App.css'
 const NODE_WIDTH = 112
 const NODE_HEIGHT = 112
 const MIN_INSPECTOR_WIDTH = 240
+const VARIANT_VISUAL_SIZE = 78
+const VARIANT_VISUAL_OFFSET = Math.round((NODE_WIDTH - VARIANT_VISUAL_SIZE) / 2)
 const defaultProjectSettings = {
   orientation: 'horizontal',
   horizontalGap: 72,
   verticalGap: 44,
   imageMode: 'square',
+}
+
+function getProjectIdFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const projectId = Number(params.get('project'))
+  return Number.isFinite(projectId) && projectId > 0 ? projectId : null
+}
+
+function updateProjectIdInUrl(projectId) {
+  const url = new URL(window.location.href)
+  if (projectId) {
+    url.searchParams.set('project', String(projectId))
+  } else {
+    url.searchParams.delete('project')
+  }
+  window.history.replaceState({}, '', url)
 }
 
 async function api(url, options = {}) {
@@ -136,6 +154,14 @@ function AddPhotoIcon() {
   return <i aria-hidden="true" className="fa-solid fa-image" />
 }
 
+function AddVariantIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-images" />
+}
+
+function FitViewIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-expand" />
+}
+
 function PreviewIcon() {
   return <i aria-hidden="true" className="fa-solid fa-eye" />
 }
@@ -188,19 +214,25 @@ async function createPreviewFile(file) {
 }
 
 function countLeaves(node) {
-  if (!node?.children?.length) {
+  const childCount = node?.children?.length || 0
+  const variantCount = node?.variants?.length || 0
+
+  if (!childCount && !variantCount) {
     return 1
   }
 
-  return node.children.reduce((total, child) => total + countLeaves(child), 0)
+  const childLeaves = (node.children || []).reduce((total, child) => total + countLeaves(child), 0)
+  return Math.max(childLeaves, 1 + variantCount)
 }
 
 function countDescendants(node) {
-  if (!node?.children?.length) {
+  if (!node) {
     return 0
   }
 
-  return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0)
+  const childCount = (node.children || []).reduce((total, child) => total + 1 + countDescendants(child), 0)
+  const variantCount = (node.variants || []).length
+  return childCount + variantCount
 }
 
 function buildVisibleTree(node) {
@@ -221,14 +253,17 @@ function buildVisibleTree(node) {
           totalItems: countDescendants(node),
           previewItems: collectCollapsedPreviewItems(node),
           children: [],
+          variants: [],
         },
       ],
+      variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
     }
   }
 
   return {
     ...node,
     children: (node.children || []).map((child) => buildVisibleTree(child)),
+    variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
   }
 }
 
@@ -245,32 +280,73 @@ function buildLayout(root, settings) {
 
   function place(node, depth, left, top) {
     const leaves = countLeaves(node)
+    const childLeaves = (node.children || []).reduce((total, child) => total + countLeaves(child), 0)
+    const variantCount = node.variants?.length || 0
+    const ownLeaves = 1 + variantCount
 
     if (orientation === 'horizontal') {
       const branchHeight = leaves * spanY
       const x = 56 + depth * spanX
-      const y = top + branchHeight / 2 - NODE_HEIGHT / 2
+      const ownHeight = ownLeaves * spanY
+      const childHeight = Math.max(childLeaves, 1) * spanY
+      const ownTop = top + (branchHeight - ownHeight) / 2
+      const childTopBase = top + (branchHeight - childHeight) / 2
+      const y = ownTop + spanY / 2 - NODE_HEIGHT / 2
 
       nodes.push({ id: node.id, node, x, y })
 
-      let cursorTop = top
+      let cursorTop = childTopBase
       for (const child of node.children || []) {
         const childLeaves = countLeaves(child)
         place(child, depth + 1, left, cursorTop)
         cursorTop += childLeaves * spanY
       }
+
+      let variantTop = ownTop + spanY
+      for (const variant of node.variants || []) {
+        const variantY = variantTop + spanY / 2 - NODE_HEIGHT / 2
+        nodes.push({ id: variant.id, node: variant, x, y: variantY, variantOf: node.id })
+        links.push({
+          key: `${node.id}-${variant.id}-variant`,
+          x1: x + NODE_WIDTH / 2,
+          y1: y + NODE_HEIGHT,
+          x2: x + NODE_WIDTH / 2,
+          y2: variantY + VARIANT_VISUAL_OFFSET,
+          dashed: true,
+        })
+        variantTop += spanY
+      }
     } else {
       const branchWidth = leaves * spanX
-      const x = left + branchWidth / 2 - NODE_WIDTH / 2
+      const ownWidth = ownLeaves * spanX
+      const childWidth = Math.max(childLeaves, 1) * spanX
+      const ownLeft = left + (branchWidth - ownWidth) / 2
+      const childLeftBase = left + (branchWidth - childWidth) / 2
+      const x = ownLeft + spanX / 2 - NODE_WIDTH / 2
       const y = 56 + depth * spanY
 
       nodes.push({ id: node.id, node, x, y })
 
-      let cursorLeft = left
+      let cursorLeft = childLeftBase
       for (const child of node.children || []) {
         const childLeaves = countLeaves(child)
         place(child, depth + 1, cursorLeft, top)
         cursorLeft += childLeaves * spanX
+      }
+
+      let variantLeft = ownLeft + spanX
+      for (const variant of node.variants || []) {
+        const variantX = variantLeft + spanX / 2 - NODE_WIDTH / 2
+        nodes.push({ id: variant.id, node: variant, x: variantX, y, variantOf: node.id })
+        links.push({
+          key: `${node.id}-${variant.id}-variant`,
+          x1: x + NODE_WIDTH,
+          y1: y + NODE_HEIGHT / 2,
+          x2: variantX + VARIANT_VISUAL_OFFSET,
+          y2: y + NODE_HEIGHT / 2,
+          dashed: true,
+        })
+        variantLeft += spanX
       }
     }
   }
@@ -280,7 +356,7 @@ function buildLayout(root, settings) {
 
   const byId = new Map(nodes.map((item) => [item.id, item]))
   for (const item of nodes) {
-    if (item.node.parent_id == null) {
+    if (item.node.parent_id == null || item.node.variant_of_id != null) {
       continue
     }
 
@@ -296,6 +372,7 @@ function buildLayout(root, settings) {
         y1: parent.y + NODE_HEIGHT / 2,
         x2: item.x,
         y2: item.y + NODE_HEIGHT / 2,
+        dashed: false,
       })
     } else {
       links.push({
@@ -304,8 +381,27 @@ function buildLayout(root, settings) {
         y1: parent.y + NODE_HEIGHT,
         x2: item.x + NODE_WIDTH / 2,
         y2: item.y,
+        dashed: false,
       })
     }
+  }
+
+  const minX = Math.min(...nodes.map((item) => item.x))
+  const minY = Math.min(...nodes.map((item) => item.y))
+  const shiftX = minX < 56 ? 56 - minX : 0
+  const shiftY = minY < 56 ? 56 - minY : 0
+
+  if (shiftX || shiftY) {
+    nodes.forEach((item) => {
+      item.x += shiftX
+      item.y += shiftY
+    })
+    links.forEach((link) => {
+      link.x1 += shiftX
+      link.x2 += shiftX
+      link.y1 += shiftY
+      link.y2 += shiftY
+    })
   }
 
   const width = Math.max(...nodes.map((item) => item.x + NODE_WIDTH)) + 240
@@ -331,6 +427,18 @@ function collectCollapsedPreviewItems(node, limit = 9, items = []) {
     })
 
     collectCollapsedPreviewItems(child, limit, items)
+  }
+
+  for (const variant of node.variants || []) {
+    if (items.length >= limit) {
+      break
+    }
+
+    items.push({
+      id: variant.id,
+      imageUrl: variant.previewUrl || variant.imageUrl || null,
+      type: variant.type,
+    })
   }
 
   return items
@@ -380,7 +488,7 @@ function collectParentOptions(root, blockedIds) {
   const options = []
 
   function walk(node, depth) {
-    if (!blockedIds.has(node.id)) {
+    if (!blockedIds.has(node.id) && !node.isVariant) {
       options.push({
         id: node.id,
         label: `${'  '.repeat(depth)}${node.name}`,
@@ -444,6 +552,7 @@ function App() {
   const [inspectorWidth, setInspectorWidth] = useState(320)
   const [settingsWidth, setSettingsWidth] = useState(280)
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
+  const [pendingUploadMode, setPendingUploadMode] = useState('child')
   const fileInputRef = useRef(null)
   const importInputRef = useRef(null)
   const nameInputRef = useRef(null)
@@ -511,7 +620,7 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
-        await loadProjects()
+        await loadProjects(getProjectIdFromUrl())
       } catch (loadError) {
         setError(loadError.message)
         setStatus('Unable to load projects.')
@@ -520,6 +629,10 @@ function App() {
 
     initialize()
   }, [])
+
+  useEffect(() => {
+    updateProjectIdInUrl(selectedProjectId)
+  }, [selectedProjectId])
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -651,7 +764,7 @@ function App() {
   )
 
   useEffect(() => {
-    async function moveDraggedNode(nodeId, parentId) {
+    async function moveDraggedNode(nodeId, parentId, asVariant = false) {
       setBusy(true)
       setError('')
 
@@ -659,7 +772,7 @@ function App() {
         await api(`/api/nodes/${nodeId}/move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parentId }),
+          body: JSON.stringify(asVariant ? { variantOfId: parentId } : { parentId, variantOfId: null }),
         })
 
         await refresh(selectedProjectId, nodeId)
@@ -686,7 +799,7 @@ function App() {
             const worldX = (event.clientX - rect.left - transform.x) / transform.scale
             const worldY = (event.clientY - rect.top - transform.y) / transform.scale
             const hoverNode = layout.nodes.find((item) => {
-              if (item.id === dragState.nodeId) {
+              if (item.id === dragState.nodeId || item.node.type === 'collapsed-group') {
                 return false
               }
 
@@ -740,7 +853,7 @@ function App() {
       }
     }
 
-    function handlePointerUp() {
+    function handlePointerUp(event) {
       if (nodeDragRef.current) {
         const dragState = nodeDragRef.current
         const targetNodeId = dragHoverNodeId
@@ -751,7 +864,7 @@ function App() {
         if (dragState.dragging && targetNodeId) {
           const node = tree?.nodes.find((item) => item.id === dragState.nodeId)
           if (node && node.parent_id != null && targetNodeId !== dragState.nodeId) {
-            moveDraggedNode(dragState.nodeId, targetNodeId)
+            moveDraggedNode(dragState.nodeId, targetNodeId, event.shiftKey)
           }
         }
       }
@@ -788,6 +901,10 @@ function App() {
     setMoveParentId(selectedNode.parent_id ?? '')
     setPreviewTransform({ x: 0, y: 0, scale: 1 })
   }, [selectedNode])
+
+  useEffect(() => {
+    setError('')
+  }, [selectedNodeId, selectedProjectId])
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -1054,8 +1171,8 @@ function App() {
     }
   }
 
-  async function uploadFiles(files, parentId = selectedNode?.id) {
-    if (!parentId || files.length === 0) {
+  async function uploadFiles(files, targetNodeId = selectedNode?.id, mode = 'child') {
+    if (!targetNodeId || files.length === 0) {
       return
     }
 
@@ -1066,7 +1183,12 @@ function App() {
       for (const file of files) {
         const previewFile = await createPreviewFile(file)
         const formData = new FormData()
-        formData.append('parentId', parentId)
+        if (mode === 'variant') {
+          formData.append('variantOfId', targetNodeId)
+          formData.append('variant', 'true')
+        } else {
+          formData.append('parentId', targetNodeId)
+        }
         formData.append('name', '<untitled>')
         formData.append('notes', '')
         formData.append('tags', '')
@@ -1081,13 +1203,13 @@ function App() {
         })
       }
 
-      setSelectedNodeId(parentId)
-      await refresh(selectedProjectId, parentId)
+      await refresh(selectedProjectId, selectedNodeId)
     } catch (submitError) {
       setError(submitError.message)
     } finally {
       setBusy(false)
       setPendingUploadParentId(null)
+      setPendingUploadMode('child')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -1113,8 +1235,54 @@ function App() {
     }
   }
 
+  async function convertNodeToVariant(node, anchorId = node?.parent_id) {
+    if (!node || !anchorId) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      await api(`/api/nodes/${node.id}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantOfId: Number(anchorId) }),
+      })
+
+      await refresh(selectedProjectId, node.id)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function convertVariantToChild(node) {
+    if (!node?.variant_of_id) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      await api(`/api/nodes/${node.id}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId: Number(node.variant_of_id), variantOfId: null }),
+      })
+
+      await refresh(selectedProjectId, node.id)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function moveNodeTo(parentId) {
-    if (!selectedNode || !parentId || selectedNode.parent_id == null) {
+    if (!selectedNode || !parentId || (selectedNode.parent_id == null && !selectedNode.isVariant)) {
       return
     }
 
@@ -1125,7 +1293,7 @@ function App() {
       await api(`/api/nodes/${selectedNode.id}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parentId: Number(parentId) }),
+        body: JSON.stringify({ parentId: Number(parentId), variantOfId: null }),
       })
 
       await refresh(selectedProjectId, selectedNode.id)
@@ -1306,6 +1474,30 @@ function App() {
     }
   }
 
+  function fitCanvasToView() {
+    const viewport = viewportRef.current
+    if (!viewport || !layout.width || !layout.height) {
+      return
+    }
+
+    const rect = viewport.getBoundingClientRect()
+    const padding = 48
+    const availableWidth = Math.max(120, rect.width - padding * 2)
+    const availableHeight = Math.max(120, rect.height - padding * 2)
+    const scale = Math.max(
+      0.2,
+      Math.min(2.5, Math.min(availableWidth / layout.width, availableHeight / layout.height)),
+    )
+    const scaledWidth = layout.width * scale
+    const scaledHeight = layout.height * scale
+
+    setTransform({
+      scale,
+      x: (rect.width - scaledWidth) / 2,
+      y: (rect.height - scaledHeight) / 2,
+    })
+  }
+
   return (
     <div className="app-shell" data-theme={theme}>
       <header className="topbar">
@@ -1387,7 +1579,11 @@ function App() {
             hidden
             multiple
             onChange={(event) =>
-              uploadFiles(Array.from(event.target.files || []), pendingUploadParentId || selectedNode?.id)
+              uploadFiles(
+                Array.from(event.target.files || []),
+                pendingUploadParentId || selectedNode?.id,
+                pendingUploadMode,
+              )
             }
             type="file"
           />
@@ -1527,10 +1723,19 @@ function App() {
         >
           <div className="canvas-tools">
             <IconButton
+              aria-label="Fit view"
+              className="canvas-tool-button"
+              disabled={busy}
+              onClick={fitCanvasToView}
+              tooltip="Fit View"
+            >
+              <FitViewIcon />
+            </IconButton>
+            <IconButton
               aria-label="Add folder"
               className="canvas-tool-button"
-              disabled={!selectedNode || busy}
-              onClick={addFolder}
+              disabled={!selectedNode || selectedNode.isVariant || busy}
+              onClick={() => addFolder()}
               tooltip="Add Folder"
             >
               <AddFolderIcon />
@@ -1538,11 +1743,28 @@ function App() {
             <IconButton
               aria-label="Add photo"
               className="canvas-tool-button"
-              disabled={!selectedNode || busy}
-              onClick={() => fileInputRef.current?.click()}
+              disabled={!selectedNode || selectedNode.isVariant || busy}
+              onClick={() => {
+                setPendingUploadParentId(selectedNode?.id || null)
+                setPendingUploadMode('child')
+                fileInputRef.current?.click()
+              }}
               tooltip="Add Photo"
             >
               <AddPhotoIcon />
+            </IconButton>
+            <IconButton
+              aria-label="Add variant photo"
+              className="canvas-tool-button"
+              disabled={!selectedNode || busy}
+              onClick={() => {
+                setPendingUploadParentId(selectedNode?.id || null)
+                setPendingUploadMode('variant')
+                fileInputRef.current?.click()
+              }}
+              tooltip="Add Variant Photo"
+            >
+              <AddVariantIcon />
             </IconButton>
           </div>
           <div
@@ -1555,7 +1777,15 @@ function App() {
           >
             <svg className="canvas-links" width={layout.width} height={layout.height}>
               {layout.links.map((link) => (
-                <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} />
+                <line
+                  key={link.key}
+                  className={link.dashed ? 'canvas-link--variant' : ''}
+                  strokeDasharray={link.dashed ? '6 5' : undefined}
+                  x1={link.x1}
+                  x2={link.x2}
+                  y1={link.y1}
+                  y2={link.y2}
+                />
               ))}
             </svg>
 
@@ -1566,7 +1796,9 @@ function App() {
                   dragHoverNodeId === item.id ? 'drop-target' : ''
                 } ${projectSettings.imageMode === 'square' ? 'image-square' : 'image-original'} ${
                   item.node.type === 'photo' ? 'photo-node' : 'folder-node'
-                } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''}`}
+                } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''} ${
+                  item.node.isVariant ? 'variant-node' : ''
+                }`}
                 onContextMenu={(event) => {
                   if (item.node.type === 'collapsed-group') {
                     return
@@ -1656,19 +1888,38 @@ function App() {
               }}
               style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
             >
-              <button
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                }}
-                onClick={() => {
-                  setContextMenu(null)
-                  void addFolder(contextMenu.nodeId)
-                }}
-                type="button"
-              >
-                Add Folder
-              </button>
+              {!contextMenuNode?.isVariant ? (
+                <button
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={() => {
+                    setContextMenu(null)
+                    void addFolder(contextMenu.nodeId)
+                  }}
+                  type="button"
+                >
+                  Add Folder
+                </button>
+              ) : null}
+              {!contextMenuNode?.isVariant ? (
+                <button
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={() => {
+                    setPendingUploadParentId(contextMenu.nodeId)
+                    setPendingUploadMode('child')
+                    setContextMenu(null)
+                    fileInputRef.current?.click()
+                  }}
+                  type="button"
+                >
+                  Add Photo
+                </button>
+              ) : null}
               <button
                 onPointerDown={(event) => {
                   event.preventDefault()
@@ -1676,14 +1927,16 @@ function App() {
                 }}
                 onClick={() => {
                   setPendingUploadParentId(contextMenu.nodeId)
+                  setPendingUploadMode('variant')
                   setContextMenu(null)
                   fileInputRef.current?.click()
                 }}
                 type="button"
               >
-                Add Photo
+                Add Variant Photo
               </button>
-              {contextMenuNode?.children?.length || contextMenuNode?.collapsed ? (
+              {!contextMenuNode?.isVariant &&
+              (contextMenuNode?.children?.length || contextMenuNode?.collapsed) ? (
                 <button
                   onPointerDown={(event) => {
                     event.preventDefault()
@@ -1696,6 +1949,39 @@ function App() {
                   type="button"
                 >
                   {contextMenuNode?.collapsed ? 'Expand' : 'Collapse'}
+                </button>
+              ) : null}
+              {contextMenuNode?.isVariant ? (
+                <button
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={() => {
+                    setContextMenu(null)
+                    void convertVariantToChild(contextMenuNode)
+                  }}
+                  type="button"
+                >
+                  Convert to Child
+                </button>
+              ) : null}
+              {!contextMenuNode?.isVariant &&
+              contextMenuNode?.parent_id != null &&
+              !(contextMenuNode?.children?.length > 0) &&
+              !(contextMenuNode?.variants?.length > 0) ? (
+                <button
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={() => {
+                    setContextMenu(null)
+                    void convertNodeToVariant(contextMenuNode, contextMenuNode.parent_id)
+                  }}
+                  type="button"
+                >
+                  Convert to Variant
                 </button>
               ) : null}
               <button
@@ -1733,9 +2019,13 @@ function App() {
               <div className="inspector__section">
                 <div className="inspector__title">
                   {selectedNode
-                    ? selectedNode.type === 'photo'
-                      ? 'Photo'
-                      : 'Folder'
+                    ? selectedNode.isVariant
+                      ? selectedNode.type === 'photo'
+                        ? 'Variant Photo'
+                        : 'Variant Folder'
+                      : selectedNode.type === 'photo'
+                        ? 'Photo'
+                        : 'Folder'
                     : 'Selection'}
                 </div>
                 {selectedNode ? (
@@ -1781,7 +2071,7 @@ function App() {
                     <label>
                       <span>Parent</span>
                       <select
-                        disabled={selectedNode.parent_id == null || busy}
+                        disabled={(selectedNode.parent_id == null && !selectedNode.isVariant) || busy}
                         value={moveParentId}
                         onChange={async (event) => {
                           const nextParentId = event.target.value

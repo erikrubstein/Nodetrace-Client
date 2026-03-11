@@ -47,6 +47,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
     parent_id INTEGER,
+    variant_of_id INTEGER,
     type TEXT NOT NULL CHECK(type IN ('folder', 'photo')),
     name TEXT NOT NULL,
     notes TEXT DEFAULT '',
@@ -58,7 +59,8 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id),
-    FOREIGN KEY(parent_id) REFERENCES nodes(id)
+    FOREIGN KEY(parent_id) REFERENCES nodes(id),
+    FOREIGN KEY(variant_of_id) REFERENCES nodes(id)
   );
 `)
 
@@ -74,6 +76,9 @@ if (!nodeColumns.some((column) => column.name === 'preview_path')) {
 if (!nodeColumns.some((column) => column.name === 'collapsed')) {
   db.exec(`ALTER TABLE nodes ADD COLUMN collapsed INTEGER DEFAULT 0`)
 }
+if (!nodeColumns.some((column) => column.name === 'variant_of_id')) {
+  db.exec(`ALTER TABLE nodes ADD COLUMN variant_of_id INTEGER`)
+}
 
 const insertProject = db.prepare(`
   INSERT INTO projects (name, description, settings_json, created_at, updated_at)
@@ -82,10 +87,10 @@ const insertProject = db.prepare(`
 
 const insertNode = db.prepare(`
   INSERT INTO nodes (
-    project_id, parent_id, type, name, notes, tags_json, image_path, preview_path,
+    project_id, parent_id, variant_of_id, type, name, notes, tags_json, image_path, preview_path,
     original_filename, created_at, updated_at
   ) VALUES (
-    @project_id, @parent_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
+    @project_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
     @original_filename, @created_at, @updated_at
   )
 `)
@@ -111,7 +116,7 @@ const deleteNodesByProjectStmt = db.prepare(`DELETE FROM nodes WHERE project_id 
 const getNode = db.prepare(`SELECT * FROM nodes WHERE id = ?`)
 const getNodesByProject = db.prepare(`SELECT * FROM nodes WHERE project_id = ?`)
 const listNodeNamesByProject = db.prepare(`SELECT name FROM nodes WHERE project_id = ?`)
-const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ?`)
+const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ? OR variant_of_id = ?`)
 const updateProjectTimestamp = db.prepare(`
   UPDATE projects
   SET updated_at = ?
@@ -135,6 +140,7 @@ const updateNodeStmt = db.prepare(`
 const updateNodeParentStmt = db.prepare(`
   UPDATE nodes
   SET parent_id = @parent_id,
+      variant_of_id = @variant_of_id,
       updated_at = @updated_at
   WHERE id = @id
 `)
@@ -157,6 +163,7 @@ const createProjectWithRoot = db.transaction(({ name, description }) => {
     name,
     notes: '',
     tags_json: '[]',
+    variant_of_id: null,
     image_path: null,
     preview_path: null,
     original_filename: null,
@@ -183,6 +190,7 @@ const createNode = db.transaction((payload) => {
     created_at: now,
     updated_at: now,
     tags_json: JSON.stringify(payload.tags),
+    variant_of_id: payload.variant_of_id ?? null,
   })
 
   updateProjectTimestamp.run(now, payload.project_id)
@@ -202,11 +210,12 @@ const updateNode = db.transaction(({ id, project_id, name, notes, tags, collapse
   updateProjectTimestamp.run(now, project_id)
 })
 
-const moveNode = db.transaction(({ id, project_id, parent_id }) => {
+const moveNode = db.transaction(({ id, project_id, parent_id, variant_of_id }) => {
   const now = new Date().toISOString()
   updateNodeParentStmt.run({
     id,
     parent_id,
+    variant_of_id,
     updated_at: now,
   })
   updateProjectTimestamp.run(now, project_id)
@@ -218,7 +227,7 @@ const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
     const current = stack.pop()
     if (!current.visited) {
       stack.push({ id: current.id, visited: true })
-      const children = getNodeChildren.all(current.id)
+      const children = getNodeChildren.all(current.id, current.id)
       for (const child of children) {
         stack.push({ id: child.id, visited: false })
       }
@@ -321,6 +330,7 @@ function serializeNode(row) {
     ...row,
     tags: JSON.parse(row.tags_json || '[]'),
     collapsed: Boolean(row.collapsed),
+    isVariant: row.variant_of_id != null,
     hasImage: row.type === 'photo' && Boolean(row.image_path),
     imageUrl: row.image_path ? `/uploads/${row.image_path.replaceAll('\\', '/')}` : null,
     previewUrl: row.preview_path ? `/uploads/${row.preview_path.replaceAll('\\', '/')}` : null,
@@ -329,10 +339,18 @@ function serializeNode(row) {
 
 function buildTree(project, rows) {
   const nodes = rows.map(serializeNode)
-  const byId = new Map(nodes.map((node) => [node.id, { ...node, children: [] }]))
+  const byId = new Map(nodes.map((node) => [node.id, { ...node, children: [], variants: [] }]))
   let root = null
 
   for (const node of byId.values()) {
+    if (node.variant_of_id != null) {
+      const anchor = byId.get(node.variant_of_id)
+      if (anchor) {
+        anchor.variants.push(node)
+      }
+      continue
+    }
+
     if (node.parent_id == null) {
       root = node
       continue
@@ -380,11 +398,36 @@ function ensureNodeBelongsToProject(node, projectId) {
 }
 
 function ensureNotRoot(node) {
-  if (node.parent_id == null) {
+  if (node.parent_id == null && node.variant_of_id == null) {
     const error = new Error('The project root cannot be deleted or moved')
     error.status = 400
     throw error
   }
+}
+
+function ensureCanHaveChildren(node) {
+  if (node.variant_of_id != null) {
+    const error = new Error('Variants cannot have children')
+    error.status = 400
+    throw error
+  }
+}
+
+function ensureNoChildren(node) {
+  const children = getNodeChildren.all(node.id, node.id)
+  if (children.length > 0) {
+    const error = new Error('Only leaf nodes can become variants')
+    error.status = 400
+    throw error
+  }
+}
+
+function resolveVariantAnchor(node) {
+  if (node.variant_of_id == null) {
+    return node
+  }
+
+  return assertNode(node.variant_of_id)
 }
 
 function ensureNoCycle(nodeId, parentId) {
@@ -487,6 +530,7 @@ function exportProjectArchive(projectId) {
       return {
         old_id: row.id,
         parent_old_id: row.parent_id,
+        variant_of_old_id: row.variant_of_id,
         type: row.type,
         name: row.name,
         notes: row.notes || '',
@@ -559,14 +603,19 @@ function importProjectArchive(archivePath, projectNameOverride = '') {
     const projectUploadDir = path.join(uploadsDir, String(projectId))
     fs.mkdirSync(projectUploadDir, { recursive: true })
 
-    const pendingRows = importedRows.filter((row) => row.parent_old_id != null)
+    const pendingRows = importedRows.filter((row) => row.old_id !== rootRow.old_id)
     while (pendingRows.length > 0) {
       let importedCount = 0
 
       for (let index = pendingRows.length - 1; index >= 0; index -= 1) {
         const row = pendingRows[index]
-        const parentId = oldToNew.get(row.parent_old_id)
-        if (!parentId) {
+        const parentId = row.parent_old_id != null ? oldToNew.get(row.parent_old_id) : null
+        const variantOfId =
+          row.variant_of_old_id != null ? oldToNew.get(row.variant_of_old_id) : null
+        if (
+          (row.parent_old_id != null && !parentId) ||
+          (row.variant_of_old_id != null && !variantOfId)
+        ) {
           continue
         }
 
@@ -590,6 +639,7 @@ function importProjectArchive(archivePath, projectNameOverride = '') {
         const nodeId = createNode({
           project_id: projectId,
           parent_id: parentId,
+          variant_of_id: variantOfId,
           type: row.type === 'photo' ? 'photo' : 'folder',
           name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Imported Folder'),
           notes: row.notes || '',
@@ -908,6 +958,7 @@ app.post('/api/projects/:id/folders', (req, res, next) => {
 
     const parentNode = assertNode(parentId)
     ensureNodeBelongsToProject(parentNode, projectId)
+    ensureCanHaveChildren(parentNode)
 
     const name = String(req.body.name || '').trim()
     if (!name) {
@@ -917,6 +968,7 @@ app.post('/api/projects/:id/folders', (req, res, next) => {
     const nodeId = createNode({
       project_id: projectId,
       parent_id: parentId,
+      variant_of_id: null,
       type: 'folder',
       name,
       notes: String(req.body.notes || '').trim(),
@@ -939,18 +991,37 @@ app.post('/api/projects/:id/photos', upload.fields([{ name: 'file', maxCount: 1 
     assertProject(projectId)
 
     const clientId = String(req.body.clientId || '').trim()
+    const variantRequested = String(req.body.variant || '').trim() === 'true'
     let parentId = Number(req.body.parentId)
+    let variantOfId = req.body.variantOfId != null ? Number(req.body.variantOfId) : null
     if ((!parentId || Number.isNaN(parentId)) && clientId) {
       const clients = cleanupProjectClients(projectId)
       const controllingClient = clients.find((client) => client.id === clientId)
       if (!controllingClient) {
         return res.status(400).json({ error: 'Selected client is not active' })
       }
-      parentId = controllingClient.selectedNodeId
+      if (variantRequested) {
+        variantOfId = controllingClient.selectedNodeId
+      } else {
+        parentId = controllingClient.selectedNodeId
+      }
     }
 
-    const parentNode = assertNode(parentId)
-    ensureNodeBelongsToProject(parentNode, projectId)
+    if (variantRequested || (variantOfId != null && !Number.isNaN(variantOfId))) {
+      const rawAnchorNode = assertNode(Number(variantOfId))
+      ensureNodeBelongsToProject(rawAnchorNode, projectId)
+      const anchorNode = resolveVariantAnchor(rawAnchorNode)
+      parentId = anchorNode.parent_id
+      variantOfId = anchorNode.id
+    }
+
+    const parentNode = parentId != null ? assertNode(parentId) : null
+    if (parentNode) {
+      ensureNodeBelongsToProject(parentNode, projectId)
+      if (!variantOfId) {
+        ensureCanHaveChildren(parentNode)
+      }
+    }
 
     const originalFile = req.files?.file?.[0]
     const previewFile = req.files?.preview?.[0] || null
@@ -965,6 +1036,7 @@ app.post('/api/projects/:id/photos', upload.fields([{ name: 'file', maxCount: 1 
     const nodeId = createNode({
       project_id: projectId,
       parent_id: parentId,
+      variant_of_id: variantOfId,
       type: 'photo',
       name: resolvedName,
       notes: String(req.body.notes || '').trim(),
@@ -1028,17 +1100,40 @@ app.post('/api/nodes/:id/move', (req, res, next) => {
     const nodeId = Number(req.params.id)
     const node = assertNode(nodeId)
     ensureNotRoot(node)
+    const variantOfId = req.body.variantOfId != null ? Number(req.body.variantOfId) : null
+    let parentId = req.body.parentId != null ? Number(req.body.parentId) : null
 
-    const parentId = Number(req.body.parentId)
-    const targetParent = assertNode(parentId)
-    ensureNodeBelongsToProject(targetParent, node.project_id)
-    ensureNoCycle(nodeId, parentId)
+    if (variantOfId != null && !Number.isNaN(variantOfId)) {
+      ensureNoChildren(node)
+      const requestedAnchor = assertNode(variantOfId)
+      ensureNodeBelongsToProject(requestedAnchor, node.project_id)
+      const anchorNode = resolveVariantAnchor(requestedAnchor)
+      if (anchorNode.id === nodeId) {
+        return res.status(400).json({ error: 'A node cannot be a variant of itself' })
+      }
+      parentId = anchorNode.parent_id
+      moveNode({
+        id: nodeId,
+        project_id: node.project_id,
+        parent_id: parentId,
+        variant_of_id: anchorNode.id,
+      })
+    } else {
+      if (parentId == null || Number.isNaN(parentId)) {
+        return res.status(400).json({ error: 'Parent node is required' })
+      }
+      const targetParent = assertNode(parentId)
+      ensureNodeBelongsToProject(targetParent, node.project_id)
+      ensureCanHaveChildren(targetParent)
+      ensureNoCycle(nodeId, parentId)
 
-    moveNode({
-      id: nodeId,
-      project_id: node.project_id,
-      parent_id: parentId,
-    })
+      moveNode({
+        id: nodeId,
+        project_id: node.project_id,
+        parent_id: parentId,
+        variant_of_id: null,
+      })
+    }
 
     broadcastProjectEvent(node.project_id)
     res.json(serializeNode(assertNode(nodeId)))

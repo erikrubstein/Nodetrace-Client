@@ -107,6 +107,14 @@ export function renderMobileCapturePage() {
       .secondary-row {
         display: grid;
         gap: 10px;
+        grid-template-columns: 1fr;
+      }
+
+      .capture-variant-button {
+        background: var(--surface);
+        color: var(--text);
+        border-radius: 12px;
+        min-height: 56px;
       }
 
       .status {
@@ -142,6 +150,7 @@ export function renderMobileCapturePage() {
       <input id="captureInput" class="capture-input" type="file" accept="image/*" capture="environment" />
 
       <div class="secondary-row">
+        <button id="variantButton" class="capture-variant-button" type="button">Take Variant Photo</button>
         <button id="chooseButton" type="button">Choose Existing Photo</button>
       </div>
     </main>
@@ -150,10 +159,12 @@ export function renderMobileCapturePage() {
       const projectSelect = document.getElementById('projectSelect')
       const clientSelect = document.getElementById('clientSelect')
       const captureInput = document.getElementById('captureInput')
+      const variantButton = document.getElementById('variantButton')
       const chooseButton = document.getElementById('chooseButton')
       const statusEl = document.getElementById('status')
       const search = new URLSearchParams(window.location.search)
       let pollHandle = null
+      let uploadMode = 'child'
 
       function setStatus(message, isError = false) {
         statusEl.textContent = message
@@ -270,6 +281,7 @@ export function renderMobileCapturePage() {
             const previewFile = await createPreviewFile(file)
             const formData = new FormData()
             formData.append('clientId', clientSelect.value)
+            formData.append('variant', uploadMode === 'variant' ? 'true' : 'false')
             formData.append('name', '<untitled>')
             formData.append('notes', '')
             formData.append('tags', '')
@@ -307,12 +319,23 @@ export function renderMobileCapturePage() {
         uploadSelectedFiles(Array.from(captureInput.files || []))
       })
 
+      variantButton.addEventListener('click', () => {
+        uploadMode = 'variant'
+        captureInput.setAttribute('capture', 'environment')
+        captureInput.click()
+      })
+
       chooseButton.addEventListener('click', () => {
+        uploadMode = 'child'
         captureInput.removeAttribute('capture')
         captureInput.click()
         window.setTimeout(() => {
           captureInput.setAttribute('capture', 'environment')
         }, 0)
+      })
+
+      document.querySelector('.capture-button').addEventListener('click', () => {
+        uploadMode = 'child'
       })
 
       loadProjects()
