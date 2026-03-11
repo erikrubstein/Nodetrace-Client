@@ -17,11 +17,19 @@ fs.mkdirSync(uploadsDir, { recursive: true })
 const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 
+const defaultProjectSettings = {
+  orientation: 'horizontal',
+  horizontalGap: 72,
+  verticalGap: 44,
+  imageMode: 'square',
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
+    settings_json TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -35,6 +43,7 @@ db.exec(`
     notes TEXT DEFAULT '',
     tags_json TEXT DEFAULT '[]',
     image_path TEXT,
+    preview_path TEXT,
     original_filename TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -43,17 +52,27 @@ db.exec(`
   );
 `)
 
+const projectColumns = db.prepare(`PRAGMA table_info(projects)`).all()
+if (!projectColumns.some((column) => column.name === 'settings_json')) {
+  db.exec(`ALTER TABLE projects ADD COLUMN settings_json TEXT DEFAULT '{}'`)
+}
+
+const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+if (!nodeColumns.some((column) => column.name === 'preview_path')) {
+  db.exec(`ALTER TABLE nodes ADD COLUMN preview_path TEXT`)
+}
+
 const insertProject = db.prepare(`
-  INSERT INTO projects (name, description, created_at, updated_at)
-  VALUES (@name, @description, @created_at, @updated_at)
+  INSERT INTO projects (name, description, settings_json, created_at, updated_at)
+  VALUES (@name, @description, @settings_json, @created_at, @updated_at)
 `)
 
 const insertNode = db.prepare(`
   INSERT INTO nodes (
-    project_id, parent_id, type, name, notes, tags_json, image_path,
+    project_id, parent_id, type, name, notes, tags_json, image_path, preview_path,
     original_filename, created_at, updated_at
   ) VALUES (
-    @project_id, @parent_id, @type, @name, @notes, @tags_json, @image_path,
+    @project_id, @parent_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
     @original_filename, @created_at, @updated_at
   )
 `)
@@ -74,12 +93,22 @@ const getProjectNodes = db.prepare(`
   WHERE project_id = ?
   ORDER BY COALESCE(parent_id, 0), type, name, id
 `)
+const deleteProjectStmt = db.prepare(`DELETE FROM projects WHERE id = ?`)
+const deleteNodesByProjectStmt = db.prepare(`DELETE FROM nodes WHERE project_id = ?`)
 const getNode = db.prepare(`SELECT * FROM nodes WHERE id = ?`)
+const getNodesByProject = db.prepare(`SELECT * FROM nodes WHERE project_id = ?`)
+const listNodeNamesByProject = db.prepare(`SELECT name FROM nodes WHERE project_id = ?`)
 const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ?`)
 const updateProjectTimestamp = db.prepare(`
   UPDATE projects
   SET updated_at = ?
   WHERE id = ?
+`)
+const updateProjectSettingsStmt = db.prepare(`
+  UPDATE projects
+  SET settings_json = @settings_json,
+      updated_at = @updated_at
+  WHERE id = @id
 `)
 const updateNodeStmt = db.prepare(`
   UPDATE nodes
@@ -102,6 +131,7 @@ const createProjectWithRoot = db.transaction(({ name, description }) => {
   const projectResult = insertProject.run({
     name,
     description,
+    settings_json: JSON.stringify(defaultProjectSettings),
     created_at: now,
     updated_at: now,
   })
@@ -114,12 +144,22 @@ const createProjectWithRoot = db.transaction(({ name, description }) => {
     notes: '',
     tags_json: '[]',
     image_path: null,
+    preview_path: null,
     original_filename: null,
     created_at: now,
     updated_at: now,
   })
 
   return projectResult.lastInsertRowid
+})
+
+const updateProjectSettings = db.transaction(({ id, settings }) => {
+  const now = new Date().toISOString()
+  updateProjectSettingsStmt.run({
+    id,
+    settings_json: JSON.stringify(settings),
+    updated_at: now,
+  })
 })
 
 const createNode = db.transaction((payload) => {
@@ -158,26 +198,60 @@ const moveNode = db.transaction(({ id, project_id, parent_id }) => {
 })
 
 const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
-  const stack = [nodeId]
+  const stack = [{ id: nodeId, visited: false }]
   while (stack.length > 0) {
-    const currentId = stack.pop()
-    const children = getNodeChildren.all(currentId)
-    for (const child of children) {
-      stack.push(child.id)
+    const current = stack.pop()
+    if (!current.visited) {
+      stack.push({ id: current.id, visited: true })
+      const children = getNodeChildren.all(current.id)
+      for (const child of children) {
+        stack.push({ id: child.id, visited: false })
+      }
+      continue
     }
 
-    const node = getNode.get(currentId)
-    if (node?.image_path) {
-      const absolutePath = path.join(uploadsDir, node.image_path)
+    const node = getNode.get(current.id)
+    for (const filePath of [node?.image_path, node?.preview_path]) {
+      if (!filePath) {
+        continue
+      }
+
+      const absolutePath = path.join(uploadsDir, filePath)
       if (fs.existsSync(absolutePath)) {
         fs.unlinkSync(absolutePath)
       }
     }
 
-    deleteNodeStmt.run(currentId)
+    deleteNodeStmt.run(current.id)
   }
 
   updateProjectTimestamp.run(new Date().toISOString(), projectId)
+})
+
+const deleteProjectRecursive = db.transaction((projectId) => {
+  assertProject(projectId)
+  const rows = getNodesByProject.all(projectId)
+
+  for (const node of rows) {
+    for (const filePath of [node.image_path, node.preview_path]) {
+      if (!filePath) {
+        continue
+      }
+
+      const absolutePath = path.join(uploadsDir, filePath)
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath)
+      }
+    }
+  }
+
+  deleteNodesByProjectStmt.run(projectId)
+  deleteProjectStmt.run(projectId)
+
+  const projectUploadDir = path.join(uploadsDir, String(projectId))
+  if (fs.existsSync(projectUploadDir)) {
+    fs.rmSync(projectUploadDir, { recursive: true, force: true })
+  }
 })
 
 function parseTags(input) {
@@ -195,12 +269,45 @@ function parseTags(input) {
     .filter(Boolean)
 }
 
+function createUntitledName(projectId) {
+  const names = new Set(listNodeNamesByProject.all(projectId).map((row) => row.name))
+  let index = 1
+
+  while (names.has(`<untitled ${index}>`)) {
+    index += 1
+  }
+
+  return `<untitled ${index}>`
+}
+
+function normalizeProjectSettings(settingsInput) {
+  const settings = {
+    ...defaultProjectSettings,
+    ...(settingsInput || {}),
+  }
+
+  settings.orientation = settings.orientation === 'vertical' ? 'vertical' : 'horizontal'
+  settings.imageMode = settings.imageMode === 'square' ? 'square' : 'original'
+  settings.horizontalGap = Math.max(24, Math.min(220, Number(settings.horizontalGap) || defaultProjectSettings.horizontalGap))
+  settings.verticalGap = Math.max(16, Math.min(180, Number(settings.verticalGap) || defaultProjectSettings.verticalGap))
+
+  return settings
+}
+
+function serializeProject(row) {
+  return {
+    ...row,
+    settings: normalizeProjectSettings(JSON.parse(row.settings_json || '{}')),
+  }
+}
+
 function serializeNode(row) {
   return {
     ...row,
     tags: JSON.parse(row.tags_json || '[]'),
     hasImage: row.type === 'photo' && Boolean(row.image_path),
     imageUrl: row.image_path ? `/uploads/${row.image_path.replaceAll('\\', '/')}` : null,
+    previewUrl: row.preview_path ? `/uploads/${row.preview_path.replaceAll('\\', '/')}` : null,
   }
 }
 
@@ -222,7 +329,7 @@ function buildTree(project, rows) {
   }
 
   return {
-    project,
+    project: serializeProject(project),
     root,
     nodes: Array.from(byId.values()),
   }
@@ -251,14 +358,6 @@ function assertNode(nodeId) {
 function ensureNodeBelongsToProject(node, projectId) {
   if (node.project_id !== projectId) {
     const error = new Error('Node does not belong to project')
-    error.status = 400
-    throw error
-  }
-}
-
-function ensureFolderParent(parentNode) {
-  if (parentNode.type !== 'folder') {
-    const error = new Error('Children can only be added under folders')
     error.status = 400
     throw error
   }
@@ -297,7 +396,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
-    cb(null, `${Date.now()}-${safeName}`)
+    cb(null, `${Date.now()}-${file.fieldname}-${safeName}`)
   },
 })
 
@@ -307,7 +406,7 @@ app.use(express.json({ limit: '5mb' }))
 app.use('/uploads', express.static(uploadsDir))
 
 app.get('/api/projects', (req, res) => {
-  const projects = listProjects.all()
+  const projects = listProjects.all().map(serializeProject)
   res.json(projects)
 })
 
@@ -340,6 +439,37 @@ app.get('/api/projects/:id/tree', (req, res, next) => {
   }
 })
 
+app.patch('/api/projects/:id/settings', (req, res, next) => {
+  try {
+    const projectId = Number(req.params.id)
+    const project = assertProject(projectId)
+    const currentSettings = normalizeProjectSettings(JSON.parse(project.settings_json || '{}'))
+    const nextSettings = normalizeProjectSettings({
+      ...currentSettings,
+      ...(req.body || {}),
+    })
+
+    updateProjectSettings({
+      id: projectId,
+      settings: nextSettings,
+    })
+
+    res.json(serializeProject(assertProject(projectId)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/projects/:id', (req, res, next) => {
+  try {
+    const projectId = Number(req.params.id)
+    deleteProjectRecursive(projectId)
+    res.status(204).send()
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/projects/:id/folders', (req, res, next) => {
   try {
     const projectId = Number(req.params.id)
@@ -348,7 +478,6 @@ app.post('/api/projects/:id/folders', (req, res, next) => {
     const parentId = Number(req.body.parentId)
     const parentNode = assertNode(parentId)
     ensureNodeBelongsToProject(parentNode, projectId)
-    ensureFolderParent(parentNode)
 
     const name = String(req.body.name || '').trim()
     if (!name) {
@@ -363,6 +492,7 @@ app.post('/api/projects/:id/folders', (req, res, next) => {
       notes: String(req.body.notes || '').trim(),
       tags: parseTags(req.body.tags),
       image_path: null,
+      preview_path: null,
       original_filename: null,
     })
 
@@ -372,7 +502,7 @@ app.post('/api/projects/:id/folders', (req, res, next) => {
   }
 })
 
-app.post('/api/projects/:id/photos', upload.single('file'), (req, res, next) => {
+app.post('/api/projects/:id/photos', upload.fields([{ name: 'file', maxCount: 1 }, { name: 'preview', maxCount: 1 }]), (req, res, next) => {
   try {
     const projectId = Number(req.params.id)
     assertProject(projectId)
@@ -380,22 +510,27 @@ app.post('/api/projects/:id/photos', upload.single('file'), (req, res, next) => 
     const parentId = Number(req.body.parentId)
     const parentNode = assertNode(parentId)
     ensureNodeBelongsToProject(parentNode, projectId)
-    ensureFolderParent(parentNode)
 
-    if (!req.file) {
+    const originalFile = req.files?.file?.[0]
+    const previewFile = req.files?.preview?.[0] || null
+
+    if (!originalFile) {
       return res.status(400).json({ error: 'Photo file is required' })
     }
 
     const requestedName = String(req.body.name || '').trim()
+    const resolvedName =
+      requestedName && requestedName !== '<untitled>' ? requestedName : createUntitledName(projectId)
     const nodeId = createNode({
       project_id: projectId,
       parent_id: parentId,
       type: 'photo',
-      name: requestedName || req.file.originalname,
+      name: resolvedName,
       notes: String(req.body.notes || '').trim(),
       tags: parseTags(req.body.tags),
-      image_path: path.relative(uploadsDir, req.file.path),
-      original_filename: req.file.originalname,
+      image_path: path.relative(uploadsDir, originalFile.path),
+      preview_path: previewFile ? path.relative(uploadsDir, previewFile.path) : null,
+      original_filename: originalFile.originalname,
     })
 
     res.status(201).json(serializeNode(assertNode(nodeId)))
@@ -432,7 +567,6 @@ app.post('/api/nodes/:id/move', (req, res, next) => {
     const parentId = Number(req.body.parentId)
     const targetParent = assertNode(parentId)
     ensureNodeBelongsToProject(targetParent, node.project_id)
-    ensureFolderParent(targetParent)
     ensureNoCycle(nodeId, parentId)
 
     moveNode({

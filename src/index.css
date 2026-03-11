@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 :root {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'JetBrains Mono', monospace;
   line-height: 1.5;
   font-weight: 400;
   color: #1d1c18;
@@ -19,11 +21,18 @@ body,
 #root {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 body {
-  min-height: 100vh;
+  height: 100vh;
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 a {
