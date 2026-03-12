@@ -128,8 +128,13 @@ select {
 
 .project-chip {
   font-size: 0.82rem;
-  color: var(--text);
+  color: var(--muted);
   white-space: nowrap;
+}
+
+.topbar__separator {
+  color: var(--muted);
+  user-select: none;
 }
 
 .canvas-viewport {
@@ -269,6 +274,7 @@ select {
   overflow: hidden;
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--inner-stroke);
+  position: relative;
 }
 
 .graph-node.variant-node .graph-node__visual {
@@ -328,6 +334,33 @@ select {
 
 .graph-node img {
   pointer-events: none;
+}
+
+.graph-node__image {
+  position: relative;
+  z-index: 1;
+}
+
+.graph-node__image--loading {
+  opacity: 0;
+}
+
+.graph-node__spinner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 0;
+}
+
+.graph-node__spinner::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--muted);
+  border-right-color: var(--text);
+  animation: node-spin 0.8s linear infinite;
 }
 
 .graph-node__placeholder {
@@ -432,6 +465,15 @@ select {
   background: var(--panel);
   color: var(--text);
   font-size: 0.82rem;
+}
+
+@keyframes node-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .node-context-menu {
@@ -747,11 +789,26 @@ button:disabled {
   position: relative;
 }
 
+.menu-trigger {
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.menu-trigger:hover,
+.menu-trigger.active {
+  background: var(--menu-active);
+}
+
 .menu-panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  min-width: 180px;
+  min-width: 168px;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -765,6 +822,7 @@ button:disabled {
   border: none;
   border-radius: 0;
   padding: 8px 10px;
+  white-space: nowrap;
 }
 
 .segmented {

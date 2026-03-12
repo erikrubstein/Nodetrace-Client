@@ -117,6 +117,13 @@ const getNode = db.prepare(`SELECT * FROM nodes WHERE id = ?`)
 const getNodesByProject = db.prepare(`SELECT * FROM nodes WHERE project_id = ?`)
 const listNodeNamesByProject = db.prepare(`SELECT name FROM nodes WHERE project_id = ?`)
 const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ? OR variant_of_id = ?`)
+const listCollapsibleNodeIdsByProject = db.prepare(`
+  SELECT DISTINCT parent.id
+  FROM nodes child
+  JOIN nodes parent ON child.parent_id = parent.id
+  WHERE parent.project_id = ?
+    AND parent.variant_of_id IS NULL
+`)
 const updateProjectTimestamp = db.prepare(`
   UPDATE projects
   SET updated_at = ?
@@ -149,6 +156,12 @@ const updateNodeParentStmt = db.prepare(`
   UPDATE nodes
   SET parent_id = @parent_id,
       variant_of_id = @variant_of_id,
+      updated_at = @updated_at
+  WHERE id = @id
+`)
+const updateNodeCollapsedStmt = db.prepare(`
+  UPDATE nodes
+  SET collapsed = @collapsed,
       updated_at = @updated_at
   WHERE id = @id
 `)
@@ -227,6 +240,20 @@ const moveNode = db.transaction(({ id, project_id, parent_id, variant_of_id }) =
     updated_at: now,
   })
   updateProjectTimestamp.run(now, project_id)
+})
+
+const setProjectCollapsedState = db.transaction(({ projectId, collapsed }) => {
+  const now = new Date().toISOString()
+  const nodeIds = listCollapsibleNodeIdsByProject.all(projectId).map((row) => row.id)
+  for (const nodeId of nodeIds) {
+    updateNodeCollapsedStmt.run({
+      id: nodeId,
+      collapsed,
+      updated_at: now,
+    })
+  }
+  updateProjectTimestamp.run(now, projectId)
+  return nodeIds
 })
 
 const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
@@ -1154,6 +1181,19 @@ app.patch('/api/projects/:id/settings', (req, res, next) => {
 
     broadcastProjectEvent(projectId)
     res.json(serializeProject(assertProject(projectId)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/projects/:id/collapse-all', (req, res, next) => {
+  try {
+    const projectId = Number(req.params.id)
+    assertProject(projectId)
+    const collapsed = Boolean(req.body?.collapsed)
+    const updatedIds = setProjectCollapsedState({ projectId, collapsed: collapsed ? 1 : 0 })
+    broadcastProjectEvent(projectId)
+    res.json({ updatedIds, collapsed })
   } catch (error) {
     next(error)
   }

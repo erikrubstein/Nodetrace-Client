@@ -122,10 +122,6 @@ function IconButton({ children, tooltip, ...props }) {
   )
 }
 
-function HamburgerIcon() {
-  return <i aria-hidden="true" className="fa-solid fa-bars" />
-}
-
 function SunIcon() {
   return <i aria-hidden="true" className="fa-solid fa-sun" />
 }
@@ -168,21 +164,6 @@ function CameraIcon() {
 
 function PreviewIcon() {
   return <i aria-hidden="true" className="fa-solid fa-eye" />
-}
-
-function patchTreeNode(root, updatedNode) {
-  if (!root) {
-    return root
-  }
-
-  if (root.id === updatedNode.id) {
-    return { ...root, ...updatedNode }
-  }
-
-  return {
-    ...root,
-    children: (root.children || []).map((child) => patchTreeNode(child, updatedNode)),
-  }
 }
 
 async function createPreviewFile(file) {
@@ -255,12 +236,39 @@ function countDescendants(node) {
   return childCount + variantCount
 }
 
-function buildVisibleTree(node) {
+function buildFocusPathSet(nodes, selectedNodeId) {
+  if (!selectedNodeId || !nodes?.length) {
+    return null
+  }
+
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const pathIds = new Set()
+  let currentId = selectedNodeId
+
+  while (currentId != null && byId.has(currentId) && !pathIds.has(currentId)) {
+    pathIds.add(currentId)
+    const current = byId.get(currentId)
+    currentId = current?.parent_id ?? current?.variant_of_id ?? null
+  }
+
+  return pathIds
+}
+
+function buildVisibleTree(node, options = {}) {
   if (!node) {
     return null
   }
 
-  if (node.collapsed && node.children?.length) {
+  const focusPathIds = options.focusPathIds || null
+  const inFocusPath = focusPathIds ? focusPathIds.has(node.id) : false
+  const collapsibleChildCount = node.children?.length || 0
+  const showCollapsedGroup = collapsibleChildCount > 1
+    ? focusPathIds
+      ? !inFocusPath
+      : node.collapsed
+    : false
+
+  if (showCollapsedGroup) {
     return {
       ...node,
       children: [
@@ -282,7 +290,7 @@ function buildVisibleTree(node) {
 
   return {
     ...node,
-    children: (node.children || []).map((child) => buildVisibleTree(child)),
+    children: (node.children || []).map((child) => buildVisibleTree(child, options)),
     variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
   }
 }
@@ -371,8 +379,7 @@ function buildLayout(root, settings) {
     }
   }
 
-  const visibleRoot = buildVisibleTree(root)
-  place(visibleRoot, 0, 56, 56)
+  place(root, 0, 56, 56)
 
   const byId = new Map(nodes.map((item) => [item.id, item]))
   for (const item of nodes) {
@@ -491,6 +498,9 @@ function collectDescendantIds(node) {
     for (const child of current.children || []) {
       walk(child)
     }
+    for (const variant of current.variants || []) {
+      walk(variant)
+    }
   }
 
   if (node) {
@@ -498,6 +508,24 @@ function collectDescendantIds(node) {
   }
 
   return ids
+}
+
+function flattenSubtreeNodes(node, items = []) {
+  if (!node) {
+    return items
+  }
+
+  const { children = [], variants = [], ...rest } = node
+  items.push({ ...rest })
+
+  for (const child of children) {
+    flattenSubtreeNodes(child, items)
+  }
+  for (const variant of variants) {
+    flattenSubtreeNodes(variant, items)
+  }
+
+  return items
 }
 
 function collectParentOptions(root, blockedIds) {
@@ -536,6 +564,37 @@ async function blobFromUrl(url) {
   return response.blob()
 }
 
+function buildClientTree(project, rows) {
+  const byId = new Map(rows.map((node) => [node.id, { ...node, children: [], variants: [] }]))
+  let root = null
+
+  for (const node of byId.values()) {
+    if (node.variant_of_id != null) {
+      const anchor = byId.get(node.variant_of_id)
+      if (anchor) {
+        anchor.variants.push(node)
+      }
+      continue
+    }
+
+    if (node.parent_id == null) {
+      root = node
+      continue
+    }
+
+    const parent = byId.get(node.parent_id)
+    if (parent) {
+      parent.children.push(node)
+    }
+  }
+
+  return {
+    project,
+    root,
+    nodes: Array.from(byId.values()),
+  }
+}
+
 function App() {
   const desktopClientId =
     localStorage.getItem('photomap-desktop-client-id') ||
@@ -559,7 +618,7 @@ function App() {
   const [status, setStatus] = useState('Loading projects...')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [fileMenuOpen, setFileMenuOpen] = useState(false)
+  const [openMenu, setOpenMenu] = useState(null)
   const [showProjectDialog, setShowProjectDialog] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [exportFileName, setExportFileName] = useState('')
@@ -581,6 +640,7 @@ function App() {
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [focusPathMode, setFocusPathMode] = useState(false)
   const [previewWidth, setPreviewWidth] = useState(340)
   const [inspectorWidth, setInspectorWidth] = useState(320)
   const [settingsWidth, setSettingsWidth] = useState(280)
@@ -592,6 +652,7 @@ function App() {
   const [cameraNotice, setCameraNotice] = useState('')
   const [cameraSelection, setCameraSelection] = useState(null)
   const [historyState, setHistoryState] = useState({ undo: 0, redo: 0 })
+  const [loadedImages, setLoadedImages] = useState({})
   const fileInputRef = useRef(null)
   const importInputRef = useRef(null)
   const nameInputRef = useRef(null)
@@ -609,11 +670,37 @@ function App() {
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
   const replayingHistoryRef = useRef(false)
+  const pendingLocalEventsRef = useRef(0)
+  const treeRef = useRef(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('photomap-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    treeRef.current = tree
+  }, [tree])
+
+  useEffect(() => {
+    const activeUrls = new Set(
+      (tree?.nodes || [])
+        .map((node) => node.previewUrl || node.imageUrl)
+        .filter(Boolean),
+    )
+    setLoadedImages((current) => {
+      let changed = false
+      const next = {}
+      for (const [url, loaded] of Object.entries(current)) {
+        if (activeUrls.has(url)) {
+          next[url] = loaded
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+  }, [tree])
 
   async function loadProjects(preferredProjectId) {
     const projectList = await api('/api/projects')
@@ -648,11 +735,6 @@ function App() {
         ? preferredNodeId
         : payload.root?.id ?? null,
     )
-  }
-
-  async function refresh(projectId = selectedProjectId, preferredNodeId = selectedNodeId) {
-    await loadProjects(projectId)
-    await loadTree(projectId, preferredNodeId)
   }
 
   function updateHistoryCounts() {
@@ -719,8 +801,23 @@ function App() {
   const selectedTreeNode = selectedNodeId ? findNode(tree?.root, selectedNodeId) : null
   const blockedParentIds = collectDescendantIds(selectedTreeNode)
   const parentOptions = collectParentOptions(tree?.root, blockedParentIds)
-  const layout = useMemo(() => buildLayout(tree?.root, projectSettings), [tree, projectSettings])
+  const focusPathIds = useMemo(
+    () => (focusPathMode ? buildFocusPathSet(tree?.nodes, selectedNodeId) : null),
+    [focusPathMode, selectedNodeId, tree?.nodes],
+  )
+  const visibleRoot = useMemo(
+    () => buildVisibleTree(tree?.root, { focusPathIds }),
+    [focusPathIds, tree?.root],
+  )
+  const layout = useMemo(() => buildLayout(visibleRoot, projectSettings), [projectSettings, visibleRoot])
   const contextMenuNode = tree?.nodes.find((node) => node.id === contextMenu?.nodeId) || null
+
+  function markImageLoaded(url) {
+    if (!url) {
+      return
+    }
+    setLoadedImages((current) => (current[url] ? current : { ...current, [url]: true }))
+  }
 
   useEffect(() => {
     async function initialize() {
@@ -804,6 +901,11 @@ function App() {
         return
       }
 
+      if (pendingLocalEventsRef.current > 0) {
+        pendingLocalEventsRef.current -= 1
+        return
+      }
+
       loadTree(selectedProjectId, selectedNodeId).catch((loadError) => {
         setError(loadError.message)
       })
@@ -824,36 +926,101 @@ function App() {
         return current
       }
 
-      return {
-        ...current,
-        nodes: current.nodes.map((node) => (node.id === updatedNode.id ? { ...node, ...updatedNode } : node)),
-        root: patchTreeNode(current.root, updatedNode),
-      }
+      const nextNodes = current.nodes.map((node) => (node.id === updatedNode.id ? { ...node, ...updatedNode } : node))
+      return buildClientTree(current.project, nextNodes)
     })
   }, [])
 
-  async function patchNodeRequest(nodeId, payload) {
-    const updatedNode = await api(`/api/nodes/${nodeId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+  function appendNodesToTree(newNodes) {
+    setTree((current) => {
+      if (!current) {
+        return current
+      }
+      return buildClientTree(current.project, [...current.nodes, ...newNodes])
     })
-    applyNodeUpdate(updatedNode)
-    return updatedNode
+  }
+
+  function removeNodesFromTree(nodeIds) {
+    const removeSet = new Set(nodeIds)
+    setTree((current) => {
+      if (!current) {
+        return current
+      }
+      return buildClientTree(
+        current.project,
+        current.nodes.filter((node) => !removeSet.has(node.id)),
+      )
+    })
+  }
+
+  function updateProjectListNodeCount(delta) {
+    if (!selectedProjectId || delta === 0) {
+      return
+    }
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === selectedProjectId
+          ? { ...project, node_count: Math.max(0, Number(project.node_count || 0) + delta) }
+          : project,
+      ),
+    )
+  }
+
+  function beginLocalEventExpectation() {
+    pendingLocalEventsRef.current += 1
+    return () => {
+      pendingLocalEventsRef.current = Math.max(0, pendingLocalEventsRef.current - 1)
+    }
+  }
+
+  async function patchNodeRequest(nodeId, payload) {
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const updatedNode = await api(`/api/nodes/${nodeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      applyNodeUpdate(updatedNode)
+      return updatedNode
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
   }
 
   async function patchProjectSettingsRequest(projectId, nextSettings) {
-    const updatedProject = await api(`/api/projects/${projectId}/settings`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(nextSettings),
-    })
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const updatedProject = await api(`/api/projects/${projectId}/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextSettings),
+      })
 
-    setTree((current) => (current ? { ...current, project: updatedProject } : current))
-    setProjects((current) =>
-      current.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
-    )
-    return updatedProject
+      setTree((current) => (current ? { ...current, project: updatedProject } : current))
+      setProjects((current) =>
+        current.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
+      )
+      return updatedProject
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+  }
+
+  async function setProjectCollapsedStateRequest(projectId, collapsed) {
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      return await api(`/api/projects/${projectId}/collapse-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collapsed }),
+      })
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
   }
 
   async function createFolderRequest(projectId, parentId, payload = {}) {
@@ -995,6 +1162,64 @@ function App() {
     })
   }
 
+  async function setAllNodesCollapsed(collapsed) {
+    if (!selectedProjectId || !tree?.nodes?.length) {
+      return
+    }
+
+    const collapsibleIds = tree.nodes
+      .filter((node) => !node.isVariant && (node.children?.length || node.collapsed))
+      .map((node) => node.id)
+
+    if (collapsibleIds.length === 0) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      const previousById = new Map(
+        tree.nodes.filter((node) => collapsibleIds.includes(node.id)).map((node) => [node.id, Boolean(node.collapsed)]),
+      )
+
+      setTree((current) =>
+        current
+          ? buildClientTree(
+              current.project,
+              current.nodes.map((node) =>
+                collapsibleIds.includes(node.id) ? { ...node, collapsed } : node,
+              ),
+            )
+          : current,
+      )
+
+      try {
+        await setProjectCollapsedStateRequest(selectedProjectId, collapsed)
+      } catch (error) {
+        setTree((current) =>
+          current
+            ? buildClientTree(
+                current.project,
+                current.nodes.map((node) =>
+                  previousById.has(node.id)
+                    ? { ...node, collapsed: previousById.get(node.id) }
+                    : node,
+                ),
+              )
+            : current,
+        )
+        throw error
+      }
+
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+      setOpenMenu(null)
+    }
+  }
+
   const saveNodeDraft = useCallback(
     async (node, draft) => {
       if (!node) {
@@ -1064,17 +1289,40 @@ function App() {
             ? { variantOfId: node.variant_of_id }
             : { parentId: node.parent_id, variantOfId: null }
         const afterPayload = asVariant ? { variantOfId: parentId } : { parentId, variantOfId: null }
-
-        await moveNodeRequest(nodeId, afterPayload)
-        await refresh(selectedProjectId, nodeId)
+        const rollbackLocalEvent = beginLocalEventExpectation()
+        let updatedNode = null
+        try {
+          updatedNode = await moveNodeRequest(nodeId, afterPayload)
+        } catch (error) {
+          rollbackLocalEvent()
+          throw error
+        }
+        applyNodeUpdate(updatedNode)
+        setSelectedNodeId(nodeId)
         pushHistory({
           undo: async () => {
-            await moveNodeRequest(nodeId, beforePayload)
-            await refresh(selectedProjectId, nodeId)
+            const rollbackUndoEvent = beginLocalEventExpectation()
+            let revertedNode = null
+            try {
+              revertedNode = await moveNodeRequest(nodeId, beforePayload)
+            } catch (error) {
+              rollbackUndoEvent()
+              throw error
+            }
+            applyNodeUpdate(revertedNode)
+            setSelectedNodeId(nodeId)
           },
           redo: async () => {
-            await moveNodeRequest(nodeId, afterPayload)
-            await refresh(selectedProjectId, nodeId)
+            const rollbackRedoEvent = beginLocalEventExpectation()
+            let redoneNode = null
+            try {
+              redoneNode = await moveNodeRequest(nodeId, afterPayload)
+            } catch (error) {
+              rollbackRedoEvent()
+              throw error
+            }
+            applyNodeUpdate(redoneNode)
+            setSelectedNodeId(nodeId)
           },
         })
       } catch (submitError) {
@@ -1340,6 +1588,14 @@ function App() {
         return
       }
 
+      if (event.key === ' ' && selectedNode && !isTypingTarget && !focusPathMode) {
+        if (!selectedNode.isVariant && (selectedNode.children?.length || selectedNode.collapsed)) {
+          event.preventDefault()
+          void setCollapsed(selectedNode.id, !selectedNode.collapsed)
+        }
+        return
+      }
+
       if ((event.key === 'Backspace' || event.key === 'Delete') && selectedNode && !isTypingTarget) {
         if (selectedNode.parent_id == null) {
           return
@@ -1353,7 +1609,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedNode])
+  }, [focusPathMode, selectedNode])
 
   useEffect(() => {
     function closeContextMenu(event) {
@@ -1367,6 +1623,21 @@ function App() {
     window.addEventListener('pointerdown', closeContextMenu)
     return () => {
       window.removeEventListener('pointerdown', closeContextMenu)
+    }
+  }, [])
+
+  useEffect(() => {
+    function closeMenus(event) {
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('.menu-wrap')) {
+        return
+      }
+      setOpenMenu(null)
+    }
+
+    window.addEventListener('pointerdown', closeMenus)
+    return () => {
+      window.removeEventListener('pointerdown', closeMenus)
     }
   }, [])
 
@@ -1401,7 +1672,7 @@ function App() {
 
       setProjectName('')
       setShowProjectDialog(null)
-      setFileMenuOpen(false)
+      setOpenMenu(null)
       setTree(created)
       await loadProjects(created.project.id)
       setSelectedNodeId(created.root.id)
@@ -1422,7 +1693,7 @@ function App() {
 
     try {
       await api(`/api/projects/${tree.project.id}`, { method: 'DELETE' })
-      setFileMenuOpen(false)
+      setOpenMenu(null)
       setShowProjectDialog(null)
       setDeleteProjectText('')
       await loadProjects()
@@ -1449,14 +1720,22 @@ function App() {
         ),
       )
 
-      await patchProjectSettingsRequest(selectedProjectId, nextSettings)
+      try {
+        await patchProjectSettingsRequest(selectedProjectId, nextSettings)
+      } catch (error) {
+        setTree((current) =>
+          current ? { ...current, project: { ...current.project, settings: previousSettings } } : current,
+        )
+        setProjects((current) =>
+          current.map((project) =>
+            project.id === selectedProjectId ? { ...project, settings: previousSettings } : project,
+          ),
+        )
+        throw error
+      }
       pushHistory({
-        undo: async () => {
-          await patchProjectSettingsRequest(selectedProjectId, previousSettings)
-        },
-        redo: async () => {
-          await patchProjectSettingsRequest(selectedProjectId, nextSettings)
-        },
+        undo: async () => patchProjectSettingsRequest(selectedProjectId, previousSettings),
+        redo: async () => patchProjectSettingsRequest(selectedProjectId, nextSettings),
       })
     } catch (submitError) {
       setError(submitError.message)
@@ -1511,7 +1790,7 @@ function App() {
       URL.revokeObjectURL(url)
       setTransferProgress(100)
       setShowProjectDialog(null)
-      setFileMenuOpen(false)
+      setOpenMenu(null)
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1541,7 +1820,7 @@ function App() {
       setSelectedNodeId(importedTree.root?.id ?? null)
       setImportArchiveFile(null)
       setImportProjectName('')
-      setFileMenuOpen(false)
+      setOpenMenu(null)
       setShowProjectDialog(null)
       setTransferProgress(100)
       await loadProjects(importedTree.project.id)
@@ -1567,9 +1846,18 @@ function App() {
     try {
       let folderId = null
       const createFolder = async () => {
-        const created = await createFolderRequest(selectedProjectId, parentId)
+        const rollbackLocalEvent = beginLocalEventExpectation()
+        let created = null
+        try {
+          created = await createFolderRequest(selectedProjectId, parentId)
+        } catch (error) {
+          rollbackLocalEvent()
+          throw error
+        }
         folderId = created.id
-        await refresh(selectedProjectId, parentId)
+        appendNodesToTree([created])
+        updateProjectListNodeCount(1)
+        setSelectedNodeId(parentId)
         return created
       }
 
@@ -1577,8 +1865,16 @@ function App() {
       pushHistory({
         undo: async () => {
           if (folderId != null) {
-            await deleteNodeRequest(folderId)
-            await refresh(selectedProjectId, parentId)
+            const rollbackUndoEvent = beginLocalEventExpectation()
+            try {
+              await deleteNodeRequest(folderId)
+            } catch (error) {
+              rollbackUndoEvent()
+              throw error
+            }
+            removeNodesFromTree([folderId])
+            updateProjectListNodeCount(-1)
+            setSelectedNodeId(parentId)
           }
         },
         redo: async () => {
@@ -1603,18 +1899,35 @@ function App() {
     try {
       let createdNodeIds = []
       const performUpload = async () => {
-        const createdNodes = await uploadPhotoFilesRequest(selectedProjectId, files, targetNodeId, mode)
+        const rollbackLocalEvent = beginLocalEventExpectation()
+        let createdNodes = []
+        try {
+          createdNodes = await uploadPhotoFilesRequest(selectedProjectId, files, targetNodeId, mode)
+        } catch (error) {
+          rollbackLocalEvent()
+          throw error
+        }
         createdNodeIds = createdNodes.map((node) => node.id)
-        await refresh(selectedProjectId, selectedNodeId)
+        appendNodesToTree(createdNodes)
+        updateProjectListNodeCount(createdNodes.length)
+        setSelectedNodeId(selectedNodeId)
       }
 
       await performUpload()
       pushHistory({
         undo: async () => {
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          try {
           for (const nodeId of [...createdNodeIds].reverse()) {
             await deleteNodeRequest(nodeId)
           }
-          await refresh(selectedProjectId, selectedNodeId)
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          removeNodesFromTree(createdNodeIds)
+          updateProjectListNodeCount(-createdNodeIds.length)
+          setSelectedNodeId(selectedNodeId)
         },
         redo: async () => {
           await performUpload()
@@ -1638,16 +1951,37 @@ function App() {
 
     try {
       const previousValue = Boolean(tree?.nodes.find((node) => node.id === nodeId)?.collapsed)
-      await setCollapsedRequest(nodeId, collapsed)
-      await refresh(selectedProjectId, nodeId)
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      let updatedNode = null
+      try {
+        updatedNode = await setCollapsedRequest(nodeId, collapsed)
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+      applyNodeUpdate(updatedNode)
       pushHistory({
         undo: async () => {
-          await setCollapsedRequest(nodeId, previousValue)
-          await refresh(selectedProjectId, nodeId)
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          let revertedNode = null
+          try {
+            revertedNode = await setCollapsedRequest(nodeId, previousValue)
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          applyNodeUpdate(revertedNode)
         },
         redo: async () => {
-          await setCollapsedRequest(nodeId, collapsed)
-          await refresh(selectedProjectId, nodeId)
+          const rollbackRedoEvent = beginLocalEventExpectation()
+          let redoneNode = null
+          try {
+            redoneNode = await setCollapsedRequest(nodeId, collapsed)
+          } catch (error) {
+            rollbackRedoEvent()
+            throw error
+          }
+          applyNodeUpdate(redoneNode)
         },
       })
     } catch (submitError) {
@@ -1672,16 +2006,37 @@ function App() {
           : { parentId: Number(node.parent_id), variantOfId: null }
       const nextPayload = { variantOfId: Number(anchorId) }
 
-      await moveNodeRequest(node.id, nextPayload)
-      await refresh(selectedProjectId, node.id)
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      let updatedNode = null
+      try {
+        updatedNode = await moveNodeRequest(node.id, nextPayload)
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+      applyNodeUpdate(updatedNode)
       pushHistory({
         undo: async () => {
-          await moveNodeRequest(node.id, previousPayload)
-          await refresh(selectedProjectId, node.id)
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          let revertedNode = null
+          try {
+            revertedNode = await moveNodeRequest(node.id, previousPayload)
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          applyNodeUpdate(revertedNode)
         },
         redo: async () => {
-          await moveNodeRequest(node.id, nextPayload)
-          await refresh(selectedProjectId, node.id)
+          const rollbackRedoEvent = beginLocalEventExpectation()
+          let redoneNode = null
+          try {
+            redoneNode = await moveNodeRequest(node.id, nextPayload)
+          } catch (error) {
+            rollbackRedoEvent()
+            throw error
+          }
+          applyNodeUpdate(redoneNode)
         },
       })
     } catch (submitError) {
@@ -1703,16 +2058,37 @@ function App() {
       const previousPayload = { variantOfId: Number(node.variant_of_id) }
       const nextPayload = { parentId: Number(node.variant_of_id), variantOfId: null }
 
-      await moveNodeRequest(node.id, nextPayload)
-      await refresh(selectedProjectId, node.id)
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      let updatedNode = null
+      try {
+        updatedNode = await moveNodeRequest(node.id, nextPayload)
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+      applyNodeUpdate(updatedNode)
       pushHistory({
         undo: async () => {
-          await moveNodeRequest(node.id, previousPayload)
-          await refresh(selectedProjectId, node.id)
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          let revertedNode = null
+          try {
+            revertedNode = await moveNodeRequest(node.id, previousPayload)
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          applyNodeUpdate(revertedNode)
         },
         redo: async () => {
-          await moveNodeRequest(node.id, nextPayload)
-          await refresh(selectedProjectId, node.id)
+          const rollbackRedoEvent = beginLocalEventExpectation()
+          let redoneNode = null
+          try {
+            redoneNode = await moveNodeRequest(node.id, nextPayload)
+          } catch (error) {
+            rollbackRedoEvent()
+            throw error
+          }
+          applyNodeUpdate(redoneNode)
         },
       })
     } catch (submitError) {
@@ -1737,16 +2113,37 @@ function App() {
           : { parentId: Number(selectedNode.parent_id), variantOfId: null }
       const nextPayload = { parentId: Number(parentId), variantOfId: null }
 
-      await moveNodeRequest(selectedNode.id, nextPayload)
-      await refresh(selectedProjectId, selectedNode.id)
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      let updatedNode = null
+      try {
+        updatedNode = await moveNodeRequest(selectedNode.id, nextPayload)
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+      applyNodeUpdate(updatedNode)
       pushHistory({
         undo: async () => {
-          await moveNodeRequest(selectedNode.id, previousPayload)
-          await refresh(selectedProjectId, selectedNode.id)
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          let revertedNode = null
+          try {
+            revertedNode = await moveNodeRequest(selectedNode.id, previousPayload)
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          applyNodeUpdate(revertedNode)
         },
         redo: async () => {
-          await moveNodeRequest(selectedNode.id, nextPayload)
-          await refresh(selectedProjectId, selectedNode.id)
+          const rollbackRedoEvent = beginLocalEventExpectation()
+          let redoneNode = null
+          try {
+            redoneNode = await moveNodeRequest(selectedNode.id, nextPayload)
+          } catch (error) {
+            rollbackRedoEvent()
+            throw error
+          }
+          applyNodeUpdate(redoneNode)
         },
       })
     } catch (submitError) {
@@ -1770,19 +2167,56 @@ function App() {
       const snapshot = subtreeNode ? await createDeleteSnapshot(subtreeNode) : null
       let currentRootId = selectedNode.id
 
-      await deleteNodeRequest(currentRootId)
+      const subtreeIds = Array.from(collectDescendantIds(subtreeNode || { id: currentRootId, children: [], variants: [] }))
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      try {
+        await deleteNodeRequest(currentRootId)
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
       setDeleteNodeOpen(false)
-      await refresh(selectedProjectId, fallbackId)
+      removeNodesFromTree(subtreeIds)
+      updateProjectListNodeCount(-subtreeIds.length)
+      setSelectedNodeId(fallbackId)
       if (snapshot) {
         pushHistory({
           undo: async () => {
-            const restoredRoot = await restoreDeletedSubtree(selectedProjectId, snapshot)
+            const rollbackUndoEvent = beginLocalEventExpectation()
+            let restoredRoot = null
+            try {
+              restoredRoot = await restoreDeletedSubtree(selectedProjectId, snapshot)
+            } catch (error) {
+              rollbackUndoEvent()
+              throw error
+            }
+            if (!restoredRoot) {
+              rollbackUndoEvent()
+              return
+            }
+
+            const restoredNodes = flattenSubtreeNodes(restoredRoot)
             currentRootId = restoredRoot.id
-            await refresh(selectedProjectId, restoredRoot.id)
+            appendNodesToTree(restoredNodes)
+            updateProjectListNodeCount(restoredNodes.length)
+            setSelectedNodeId(restoredRoot.id)
           },
           redo: async () => {
-            await deleteNodeRequest(currentRootId)
-            await refresh(selectedProjectId, fallbackId)
+            const rollbackRedoEvent = beginLocalEventExpectation()
+            const currentTree = treeRef.current
+            const currentSubtreeNode = findNode(currentTree?.root, currentRootId)
+            const currentSubtreeIds = Array.from(
+              collectDescendantIds(currentSubtreeNode || { id: currentRootId, children: [], variants: [] }),
+            )
+            try {
+              await deleteNodeRequest(currentRootId)
+            } catch (error) {
+              rollbackRedoEvent()
+              throw error
+            }
+            removeNodesFromTree(currentSubtreeIds)
+            updateProjectListNodeCount(-currentSubtreeIds.length)
+            setSelectedNodeId(fallbackId)
           },
         })
       }
@@ -1847,7 +2281,7 @@ function App() {
     const factor = event.deltaY < 0 ? 1.08 : 0.92
 
     setTransform((current) => {
-      const nextScale = Math.max(0.35, current.scale * factor)
+      const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))
       const ratio = nextScale / current.scale
 
       return {
@@ -1911,7 +2345,7 @@ function App() {
       const factor = event.deltaY < 0 ? 1.08 : 0.92
 
       setPreviewTransform((current) => {
-        const nextScale = Math.max(0.4, current.scale * factor)
+        const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))
         const ratio = nextScale / current.scale
 
         return {
@@ -2165,20 +2599,20 @@ function App() {
       <header className="topbar">
         <div className="topbar__left">
           <div className="menu-wrap">
-            <IconButton
-              aria-label="Open project menu"
-              onClick={() => setFileMenuOpen((open) => !open)}
-              tooltip="Project Menu"
+            <button
+              className={`menu-trigger ${openMenu === 'file' ? 'active' : ''}`}
+              onClick={() => setOpenMenu((current) => (current === 'file' ? null : 'file'))}
+              type="button"
             >
-              <HamburgerIcon />
-            </IconButton>
-            {fileMenuOpen ? (
+              File
+            </button>
+            {openMenu === 'file' ? (
               <div className="menu-panel">
                 <button
                   className="menu-item"
                   onClick={() => {
                     setShowProjectDialog('create')
-                    setFileMenuOpen(false)
+                    setOpenMenu(null)
                   }}
                   type="button"
                 >
@@ -2188,7 +2622,7 @@ function App() {
                   className="menu-item"
                   onClick={() => {
                     setShowProjectDialog('open')
-                    setFileMenuOpen(false)
+                    setOpenMenu(null)
                   }}
                   type="button"
                 >
@@ -2196,33 +2630,11 @@ function App() {
                 </button>
                 <button
                   className="menu-item"
-                  disabled={historyState.undo === 0 || busy}
-                  onClick={() => {
-                    setFileMenuOpen(false)
-                    void undo()
-                  }}
-                  type="button"
-                >
-                  Undo
-                </button>
-                <button
-                  className="menu-item"
-                  disabled={historyState.redo === 0 || busy}
-                  onClick={() => {
-                    setFileMenuOpen(false)
-                    void redo()
-                  }}
-                  type="button"
-                >
-                  Redo
-                </button>
-                <button
-                  className="menu-item"
                   disabled={!selectedProjectId || busy}
                   onClick={() => {
                     setExportFileName(tree?.project?.name || 'project')
                     setShowProjectDialog('export')
-                    setFileMenuOpen(false)
+                    setOpenMenu(null)
                   }}
                   type="button"
                 >
@@ -2235,7 +2647,7 @@ function App() {
                     setImportProjectName('')
                     setImportArchiveFile(null)
                     setShowProjectDialog('import')
-                    setFileMenuOpen(false)
+                    setOpenMenu(null)
                   }}
                   type="button"
                 >
@@ -2247,7 +2659,7 @@ function App() {
                   onClick={() => {
                     setDeleteProjectText('')
                     setShowProjectDialog('delete')
-                    setFileMenuOpen(false)
+                    setOpenMenu(null)
                   }}
                   type="button"
                 >
@@ -2256,6 +2668,143 @@ function App() {
               </div>
             ) : null}
           </div>
+          <div className="menu-wrap">
+            <button
+              className={`menu-trigger ${openMenu === 'edit' ? 'active' : ''}`}
+              onClick={() => setOpenMenu((current) => (current === 'edit' ? null : 'edit'))}
+              type="button"
+            >
+              Edit
+            </button>
+            {openMenu === 'edit' ? (
+              <div className="menu-panel">
+                <button
+                  className="menu-item"
+                  disabled={historyState.undo === 0 || busy}
+                  onClick={() => {
+                    setOpenMenu(null)
+                    void undo()
+                  }}
+                  type="button"
+                >
+                  Undo
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={historyState.redo === 0 || busy}
+                  onClick={() => {
+                    setOpenMenu(null)
+                    void redo()
+                  }}
+                  type="button"
+                >
+                  Redo
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={!selectedNode || selectedNode.parent_id == null || busy}
+                  onClick={() => {
+                    setOpenMenu(null)
+                    setDeleteNodeOpen(true)
+                  }}
+                  type="button"
+                >
+                  Delete Node
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="menu-wrap">
+            <button
+              className={`menu-trigger ${openMenu === 'view' ? 'active' : ''}`}
+              onClick={() => setOpenMenu((current) => (current === 'view' ? null : 'view'))}
+              type="button"
+            >
+              View
+            </button>
+            {openMenu === 'view' ? (
+              <div className="menu-panel">
+                <button
+                  className="menu-item"
+                  disabled={!tree?.nodes?.length || busy || focusPathMode}
+                  onClick={() => void setAllNodesCollapsed(true)}
+                  type="button"
+                >
+                  Collapse All
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={!tree?.nodes?.length || busy || focusPathMode}
+                  onClick={() => void setAllNodesCollapsed(false)}
+                  type="button"
+                >
+                  Expand All
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setFocusPathMode((enabled) => !enabled)
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {focusPathMode ? 'Disable Focus Path' : 'Enable Focus Path'}
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={!tree?.nodes?.length}
+                  onClick={() => {
+                    fitCanvasToView()
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  Fit View
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setPreviewOpen((open) => !open)
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {previewOpen ? 'Hide Preview' : 'Show Preview'}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setCameraOpen((open) => !open)
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {cameraOpen ? 'Hide Camera' : 'Show Camera'}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setInspectorOpen((open) => !open)
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {inspectorOpen ? 'Hide Inspector' : 'Show Inspector'}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setSettingsOpen((open) => !open)
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {settingsOpen ? 'Hide Settings' : 'Show Settings'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <span className="topbar__separator">|</span>
           <div className="project-chip">{tree?.project?.name || 'No project'}</div>
           <input
             ref={fileInputRef}
@@ -2645,7 +3194,23 @@ function App() {
                       )}
                     </div>
                   ) : item.node.previewUrl || item.node.imageUrl ? (
-                    <img src={item.node.previewUrl || item.node.imageUrl} alt={item.node.name} draggable="false" />
+                    <>
+                      {!loadedImages[item.node.previewUrl || item.node.imageUrl] ? (
+                        <div className="graph-node__spinner" aria-hidden="true" />
+                      ) : null}
+                      <img
+                        className={
+                          loadedImages[item.node.previewUrl || item.node.imageUrl]
+                            ? 'graph-node__image'
+                            : 'graph-node__image graph-node__image--loading'
+                        }
+                        src={item.node.previewUrl || item.node.imageUrl}
+                        alt={item.node.name}
+                        draggable="false"
+                        onError={() => markImageLoaded(item.node.previewUrl || item.node.imageUrl)}
+                        onLoad={() => markImageLoaded(item.node.previewUrl || item.node.imageUrl)}
+                      />
+                    </>
                   ) : (
                     <div className="graph-node__placeholder">
                       <FolderIcon />
@@ -2671,7 +3236,7 @@ function App() {
           <div className="canvas-caption">
             {tree?.project?.name || 'No project'} |{' '}
             {selectedNode ? selectedNode.name : 'No node selected'} | {desktopClientName} |{' '}
-            {Math.round(transform.scale * 100)}%
+            {tree?.nodes?.length ?? 0} nodes | {Math.round(transform.scale * 100)}%
           </div>
           {contextMenu ? (
             <div
@@ -2729,7 +3294,8 @@ function App() {
               >
                 Add Variant Photo
               </button>
-              {!contextMenuNode?.isVariant &&
+              {!focusPathMode &&
+              !contextMenuNode?.isVariant &&
               (contextMenuNode?.children?.length || contextMenuNode?.collapsed) ? (
                 <button
                   onPointerDown={(event) => {
