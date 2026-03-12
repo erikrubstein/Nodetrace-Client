@@ -327,6 +327,11 @@ function parseTags(input) {
     .filter(Boolean)
 }
 
+function sanitizeUploadName(filename, fallback = 'file.jpg') {
+  const safeName = path.basename(String(filename || fallback)).replace(/[^a-zA-Z0-9._ -]/g, '_')
+  return safeName || fallback
+}
+
 function createUntitledName(projectId) {
   const names = new Set(listNodeNamesByProject.all(projectId).map((row) => row.name))
   let index = 1
@@ -495,6 +500,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage })
 const importUpload = multer({ dest: path.join(tempDir, 'imports') })
+const restoreUpload = multer({ storage: multer.memoryStorage() })
 
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(tempDir, `${prefix}-`))
@@ -721,6 +727,107 @@ function restoreProjectFromArchive(projectId, archivePath) {
   } finally {
     fs.rmSync(extractDir, { recursive: true, force: true })
   }
+}
+
+function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
+  assertProject(projectId)
+
+  const rows = Array.isArray(manifest?.nodes) ? manifest.nodes : []
+  const rootRow = rows.find((row) => row.id === manifest.root_id)
+  if (!rootRow) {
+    const error = new Error('Invalid subtree payload: root node missing')
+    error.status = 400
+    throw error
+  }
+
+  const fileMap = new Map(uploadedFiles.map((file) => [file.fieldname, file]))
+  const oldToNew = new Map()
+
+  const pendingRows = [...rows]
+  while (pendingRows.length > 0) {
+    let importedCount = 0
+
+    for (let index = pendingRows.length - 1; index >= 0; index -= 1) {
+      const row = pendingRows[index]
+      const isRoot = row.id === manifest.root_id
+      const parentId = isRoot
+        ? manifest.root_parent_id
+        : row.parent_old_id != null
+          ? oldToNew.get(row.parent_old_id)
+          : null
+      const variantOfId = isRoot
+        ? manifest.root_variant_of_id
+        : row.variant_of_old_id != null
+          ? oldToNew.get(row.variant_of_old_id)
+          : null
+
+      if (!isRoot && row.parent_old_id != null && !parentId) {
+        continue
+      }
+      if (!isRoot && row.variant_of_old_id != null && !variantOfId) {
+        continue
+      }
+
+      const imageFile = row.image_file_key ? fileMap.get(row.image_file_key) : null
+      const previewFile = row.preview_file_key ? fileMap.get(row.preview_file_key) : null
+      const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const safeImageName = imageFile ? sanitizeUploadName(imageFile.originalname, 'image.jpg') : null
+      const safePreviewName = previewFile ? sanitizeUploadName(previewFile.originalname, 'preview.jpg') : null
+      const relativeImagePath = imageFile
+        ? path.join(String(projectId), `${uniqueToken}-${safeImageName}`)
+        : null
+      const relativePreviewPath = previewFile
+        ? path.join(String(projectId), `${uniqueToken}-${safePreviewName}`)
+        : null
+
+      if (imageFile?.buffer) {
+        const absoluteImagePath = path.join(uploadsDir, relativeImagePath)
+        fs.mkdirSync(path.dirname(absoluteImagePath), { recursive: true })
+        fs.writeFileSync(absoluteImagePath, imageFile.buffer)
+      }
+      if (previewFile?.buffer) {
+        const absolutePreviewPath = path.join(uploadsDir, relativePreviewPath)
+        fs.mkdirSync(path.dirname(absolutePreviewPath), { recursive: true })
+        fs.writeFileSync(absolutePreviewPath, previewFile.buffer)
+      }
+
+      const nodeId = createNode({
+        project_id: projectId,
+        parent_id: parentId,
+        variant_of_id: variantOfId,
+        type: row.type === 'photo' ? 'photo' : 'folder',
+        name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
+        notes: row.notes || '',
+        tags: Array.isArray(row.tags) ? row.tags : [],
+        image_path: relativeImagePath,
+        preview_path: relativePreviewPath,
+        original_filename: row.original_filename || null,
+      })
+
+      if (row.collapsed) {
+        updateNode({
+          id: nodeId,
+          project_id: projectId,
+          name: row.name || '',
+          notes: row.notes || '',
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          collapsed: 1,
+        })
+      }
+
+      oldToNew.set(row.id, nodeId)
+      pendingRows.splice(index, 1)
+      importedCount += 1
+    }
+
+    if (importedCount === 0) {
+      const error = new Error('Invalid subtree payload: unable to resolve hierarchy')
+      error.status = 400
+      throw error
+    }
+  }
+
+  return serializeNode(assertNode(oldToNew.get(manifest.root_id)))
 }
 
 function importProjectArchive(archivePath, projectNameOverride = '') {
@@ -1273,6 +1380,19 @@ app.post('/api/projects/:id/photos', upload.fields([{ name: 'file', maxCount: 1 
 
     broadcastProjectEvent(projectId)
     res.status(201).json(serializeNode(assertNode(nodeId)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/projects/:id/subtree-restore', restoreUpload.any(), (req, res, next) => {
+  try {
+    const projectId = Number(req.params.id)
+    assertProject(projectId)
+    const manifest = JSON.parse(String(req.body.manifest || '{}'))
+    const restoredRoot = restoreSubtreeFromPayload(projectId, manifest, req.files || [])
+    broadcastProjectEvent(projectId)
+    res.status(201).json(restoredRoot)
   } catch (error) {
     next(error)
   }

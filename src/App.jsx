@@ -524,6 +524,18 @@ function collectParentOptions(root, blockedIds) {
   return options
 }
 
+async function blobFromUrl(url) {
+  if (!url) {
+    return null
+  }
+
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error('Unable to load image data for undo.')
+  }
+  return response.blob()
+}
+
 function App() {
   const desktopClientId =
     localStorage.getItem('photomap-desktop-client-id') ||
@@ -579,7 +591,7 @@ function App() {
   const [selectedCameraId, setSelectedCameraId] = useState('')
   const [cameraNotice, setCameraNotice] = useState('')
   const [cameraSelection, setCameraSelection] = useState(null)
-  const [historyState] = useState({ undo: 0, redo: 0 })
+  const [historyState, setHistoryState] = useState({ undo: 0, redo: 0 })
   const fileInputRef = useRef(null)
   const importInputRef = useRef(null)
   const nameInputRef = useRef(null)
@@ -596,6 +608,7 @@ function App() {
   const cameraSelectionRef = useRef(null)
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
+  const replayingHistoryRef = useRef(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -642,16 +655,62 @@ function App() {
     await loadTree(projectId, preferredNodeId)
   }
 
-  async function runWithHistory(_projectId, action, _preferredNodeId = selectedNodeId) {
-    await action()
+  function updateHistoryCounts() {
+    setHistoryState({
+      undo: undoStackRef.current.length,
+      redo: redoStackRef.current.length,
+    })
+  }
+
+  function pushHistory(entry) {
+    if (replayingHistoryRef.current) {
+      return
+    }
+
+    undoStackRef.current.push(entry)
+    if (undoStackRef.current.length > 40) {
+      undoStackRef.current.shift()
+    }
+    redoStackRef.current = []
+    updateHistoryCounts()
+  }
+
+  async function runHistoryEntry(direction) {
+    const sourceStack = direction === 'undo' ? undoStackRef.current : redoStackRef.current
+    const targetStack = direction === 'undo' ? redoStackRef.current : undoStackRef.current
+    const entry = sourceStack.pop()
+    if (!entry || busy) {
+      updateHistoryCounts()
+      return
+    }
+
+    setBusy(true)
+    setError('')
+    replayingHistoryRef.current = true
+    try {
+      if (direction === 'undo') {
+        await entry.undo()
+      } else {
+        await entry.redo()
+      }
+      targetStack.push(entry)
+      updateHistoryCounts()
+    } catch (submitError) {
+      sourceStack.push(entry)
+      updateHistoryCounts()
+      setError(submitError.message)
+    } finally {
+      replayingHistoryRef.current = false
+      setBusy(false)
+    }
   }
 
   async function undo() {
-    setError('Undo is temporarily disabled while this is being reworked.')
+    await runHistoryEntry('undo')
   }
 
   async function redo() {
-    setError('Redo is temporarily disabled while this is being reworked.')
+    await runHistoryEntry('redo')
   }
 
   const selectedNode = tree?.nodes.find((node) => node.id === selectedNodeId) || null
@@ -683,6 +742,7 @@ function App() {
   useEffect(() => {
     undoStackRef.current = []
     redoStackRef.current = []
+    updateHistoryCounts()
   }, [selectedProjectId])
 
   useEffect(() => {
@@ -772,6 +832,169 @@ function App() {
     })
   }, [])
 
+  async function patchNodeRequest(nodeId, payload) {
+    const updatedNode = await api(`/api/nodes/${nodeId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    applyNodeUpdate(updatedNode)
+    return updatedNode
+  }
+
+  async function patchProjectSettingsRequest(projectId, nextSettings) {
+    const updatedProject = await api(`/api/projects/${projectId}/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(nextSettings),
+    })
+
+    setTree((current) => (current ? { ...current, project: updatedProject } : current))
+    setProjects((current) =>
+      current.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
+    )
+    return updatedProject
+  }
+
+  async function createFolderRequest(projectId, parentId, payload = {}) {
+    return api(`/api/projects/${projectId}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parentId,
+        name: payload.name ?? 'New Folder',
+        notes: payload.notes ?? '',
+        tags: payload.tags ?? '',
+      }),
+    })
+  }
+
+  async function moveNodeRequest(nodeId, payload) {
+    return api(`/api/nodes/${nodeId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async function setCollapsedRequest(nodeId, collapsed) {
+    return api(`/api/nodes/${nodeId}/collapse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collapsed }),
+    })
+  }
+
+  async function deleteNodeRequest(nodeId) {
+    return api(`/api/nodes/${nodeId}`, { method: 'DELETE' })
+  }
+
+  async function uploadPhotoFilesRequest(projectId, files, targetNodeId, mode = 'child') {
+    const createdNodes = []
+
+    for (const file of files) {
+      const previewFile = await createPreviewFile(file)
+      const formData = new FormData()
+      if (mode === 'variant') {
+        formData.append('variantOfId', targetNodeId)
+        formData.append('variant', 'true')
+      } else {
+        formData.append('parentId', targetNodeId)
+      }
+      formData.append('name', '<untitled>')
+      formData.append('notes', '')
+      formData.append('tags', '')
+      formData.append('file', file)
+      if (previewFile) {
+        formData.append('preview', previewFile)
+      }
+
+      const createdNode = await api(`/api/projects/${projectId}/photos`, {
+        method: 'POST',
+        body: formData,
+      })
+      createdNodes.push(createdNode)
+    }
+
+    return createdNodes
+  }
+
+  async function createDeleteSnapshot(node) {
+    const nodes = []
+    const files = []
+    let fileIndex = 0
+
+    async function walk(current) {
+      const imageFileKey = current.imageUrl ? `image-${fileIndex++}` : null
+      const previewFileKey = current.previewUrl ? `preview-${fileIndex++}` : null
+
+      if (imageFileKey) {
+        const imageBlob = await blobFromUrl(current.imageUrl)
+        files.push({
+          key: imageFileKey,
+          file: new File([imageBlob], current.original_filename || `${current.name}.jpg`, {
+            type: imageBlob.type || 'image/jpeg',
+          }),
+        })
+      }
+
+      if (previewFileKey) {
+        const previewBlob = await blobFromUrl(current.previewUrl)
+        files.push({
+          key: previewFileKey,
+          file: new File([previewBlob], `${current.name}-preview.jpg`, {
+            type: previewBlob.type || 'image/jpeg',
+          }),
+        })
+      }
+
+      nodes.push({
+        id: current.id,
+        parent_old_id: current.childrenParentOverride ?? current.parent_id,
+        variant_of_old_id: current.variant_of_id,
+        type: current.type,
+        name: current.name,
+        notes: current.notes || '',
+        tags: current.tags || [],
+        collapsed: Boolean(current.collapsed),
+        original_filename: current.original_filename || null,
+        image_file_key: imageFileKey,
+        preview_file_key: previewFileKey,
+      })
+
+      for (const child of current.children || []) {
+        await walk(child)
+      }
+      for (const variant of current.variants || []) {
+        await walk(variant)
+      }
+    }
+
+    await walk(node)
+    return {
+      manifest: {
+        root_id: node.id,
+        root_parent_id: node.parent_id,
+        root_variant_of_id: node.variant_of_id,
+        nodes,
+      },
+      files,
+    }
+  }
+
+  async function restoreDeletedSubtree(projectId, snapshot) {
+    const formData = new FormData()
+    formData.append('manifest', JSON.stringify(snapshot.manifest))
+    for (const item of snapshot.files) {
+      formData.append(item.key, item.file)
+    }
+
+    return api(`/api/projects/${projectId}/subtree-restore`, {
+      method: 'POST',
+      body: formData,
+    })
+  }
+
   const saveNodeDraft = useCallback(
     async (node, draft) => {
       if (!node) {
@@ -796,19 +1019,28 @@ function App() {
       }
 
       try {
-        await runWithHistory(node.project_id, async () => {
-          const updatedNode = await api(`/api/nodes/${node.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: normalizedName,
-              notes: draft.notes,
-              tags: draft.tags,
-            }),
-          })
+        const before = {
+          name: node.name,
+          notes: node.notes || '',
+          tags: (node.tags || []).join(', '),
+        }
+        const after = {
+          name: normalizedName,
+          notes: draft.notes,
+          tags: draft.tags,
+        }
 
-          applyNodeUpdate(updatedNode)
-        }, node.id)
+        await patchNodeRequest(node.id, after)
+        pushHistory({
+          undo: async () => {
+            await patchNodeRequest(node.id, before)
+            setSelectedNodeId(node.id)
+          },
+          redo: async () => {
+            await patchNodeRequest(node.id, after)
+            setSelectedNodeId(node.id)
+          },
+        })
       } catch (submitError) {
         setError(submitError.message)
       }
@@ -822,15 +1054,29 @@ function App() {
       setError('')
 
       try {
-        await runWithHistory(selectedProjectId, async () => {
-          await api(`/api/nodes/${nodeId}/move`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(asVariant ? { variantOfId: parentId } : { parentId, variantOfId: null }),
-          })
+        const node = tree?.nodes.find((item) => item.id === nodeId)
+        if (!node) {
+          return
+        }
 
-          await refresh(selectedProjectId, nodeId)
-        }, nodeId)
+        const beforePayload =
+          node.variant_of_id != null
+            ? { variantOfId: node.variant_of_id }
+            : { parentId: node.parent_id, variantOfId: null }
+        const afterPayload = asVariant ? { variantOfId: parentId } : { parentId, variantOfId: null }
+
+        await moveNodeRequest(nodeId, afterPayload)
+        await refresh(selectedProjectId, nodeId)
+        pushHistory({
+          undo: async () => {
+            await moveNodeRequest(nodeId, beforePayload)
+            await refresh(selectedProjectId, nodeId)
+          },
+          redo: async () => {
+            await moveNodeRequest(nodeId, afterPayload)
+            await refresh(selectedProjectId, nodeId)
+          },
+        })
       } catch (submitError) {
         setError(submitError.message)
       } finally {
@@ -1193,27 +1439,25 @@ function App() {
     }
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        setTree((current) =>
-          current ? { ...current, project: { ...current.project, settings: nextSettings } } : current,
-        )
-        setProjects((current) =>
-          current.map((project) =>
-            project.id === selectedProjectId ? { ...project, settings: nextSettings } : project,
-          ),
-        )
+      const previousSettings = { ...(tree?.project?.settings || defaultProjectSettings) }
+      setTree((current) =>
+        current ? { ...current, project: { ...current.project, settings: nextSettings } } : current,
+      )
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === selectedProjectId ? { ...project, settings: nextSettings } : project,
+        ),
+      )
 
-        const updatedProject = await api(`/api/projects/${selectedProjectId}/settings`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nextSettings),
-        })
-
-        setTree((current) => (current ? { ...current, project: updatedProject } : current))
-        setProjects((current) =>
-          current.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
-        )
-      }, selectedNodeId)
+      await patchProjectSettingsRequest(selectedProjectId, nextSettings)
+      pushHistory({
+        undo: async () => {
+          await patchProjectSettingsRequest(selectedProjectId, previousSettings)
+        },
+        redo: async () => {
+          await patchProjectSettingsRequest(selectedProjectId, nextSettings)
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     }
@@ -1321,20 +1565,26 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/projects/${selectedProjectId}/folders`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            parentId,
-            name: 'New Folder',
-            notes: '',
-            tags: '',
-          }),
-        })
-
+      let folderId = null
+      const createFolder = async () => {
+        const created = await createFolderRequest(selectedProjectId, parentId)
+        folderId = created.id
         await refresh(selectedProjectId, parentId)
-      }, parentId)
+        return created
+      }
+
+      await createFolder()
+      pushHistory({
+        undo: async () => {
+          if (folderId != null) {
+            await deleteNodeRequest(folderId)
+            await refresh(selectedProjectId, parentId)
+          }
+        },
+        redo: async () => {
+          await createFolder()
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1351,32 +1601,25 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        for (const file of files) {
-          const previewFile = await createPreviewFile(file)
-          const formData = new FormData()
-          if (mode === 'variant') {
-            formData.append('variantOfId', targetNodeId)
-            formData.append('variant', 'true')
-          } else {
-            formData.append('parentId', targetNodeId)
-          }
-          formData.append('name', '<untitled>')
-          formData.append('notes', '')
-          formData.append('tags', '')
-          formData.append('file', file)
-          if (previewFile) {
-            formData.append('preview', previewFile)
-          }
-
-          await api(`/api/projects/${selectedProjectId}/photos`, {
-            method: 'POST',
-            body: formData,
-          })
-        }
-
+      let createdNodeIds = []
+      const performUpload = async () => {
+        const createdNodes = await uploadPhotoFilesRequest(selectedProjectId, files, targetNodeId, mode)
+        createdNodeIds = createdNodes.map((node) => node.id)
         await refresh(selectedProjectId, selectedNodeId)
-      }, targetNodeId)
+      }
+
+      await performUpload()
+      pushHistory({
+        undo: async () => {
+          for (const nodeId of [...createdNodeIds].reverse()) {
+            await deleteNodeRequest(nodeId)
+          }
+          await refresh(selectedProjectId, selectedNodeId)
+        },
+        redo: async () => {
+          await performUpload()
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1394,15 +1637,19 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/nodes/${nodeId}/collapse`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collapsed }),
-        })
-
-        await refresh(selectedProjectId, nodeId)
-      }, nodeId)
+      const previousValue = Boolean(tree?.nodes.find((node) => node.id === nodeId)?.collapsed)
+      await setCollapsedRequest(nodeId, collapsed)
+      await refresh(selectedProjectId, nodeId)
+      pushHistory({
+        undo: async () => {
+          await setCollapsedRequest(nodeId, previousValue)
+          await refresh(selectedProjectId, nodeId)
+        },
+        redo: async () => {
+          await setCollapsedRequest(nodeId, collapsed)
+          await refresh(selectedProjectId, nodeId)
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1419,15 +1666,24 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/nodes/${node.id}/move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ variantOfId: Number(anchorId) }),
-        })
+      const previousPayload =
+        node.variant_of_id != null
+          ? { variantOfId: Number(node.variant_of_id) }
+          : { parentId: Number(node.parent_id), variantOfId: null }
+      const nextPayload = { variantOfId: Number(anchorId) }
 
-        await refresh(selectedProjectId, node.id)
-      }, node.id)
+      await moveNodeRequest(node.id, nextPayload)
+      await refresh(selectedProjectId, node.id)
+      pushHistory({
+        undo: async () => {
+          await moveNodeRequest(node.id, previousPayload)
+          await refresh(selectedProjectId, node.id)
+        },
+        redo: async () => {
+          await moveNodeRequest(node.id, nextPayload)
+          await refresh(selectedProjectId, node.id)
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1444,15 +1700,21 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/nodes/${node.id}/move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parentId: Number(node.variant_of_id), variantOfId: null }),
-        })
+      const previousPayload = { variantOfId: Number(node.variant_of_id) }
+      const nextPayload = { parentId: Number(node.variant_of_id), variantOfId: null }
 
-        await refresh(selectedProjectId, node.id)
-      }, node.id)
+      await moveNodeRequest(node.id, nextPayload)
+      await refresh(selectedProjectId, node.id)
+      pushHistory({
+        undo: async () => {
+          await moveNodeRequest(node.id, previousPayload)
+          await refresh(selectedProjectId, node.id)
+        },
+        redo: async () => {
+          await moveNodeRequest(node.id, nextPayload)
+          await refresh(selectedProjectId, node.id)
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1469,15 +1731,24 @@ function App() {
     setError('')
 
     try {
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/nodes/${selectedNode.id}/move`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parentId: Number(parentId), variantOfId: null }),
-        })
+      const previousPayload =
+        selectedNode.variant_of_id != null
+          ? { variantOfId: Number(selectedNode.variant_of_id) }
+          : { parentId: Number(selectedNode.parent_id), variantOfId: null }
+      const nextPayload = { parentId: Number(parentId), variantOfId: null }
 
-        await refresh(selectedProjectId, selectedNode.id)
-      }, selectedNode.id)
+      await moveNodeRequest(selectedNode.id, nextPayload)
+      await refresh(selectedProjectId, selectedNode.id)
+      pushHistory({
+        undo: async () => {
+          await moveNodeRequest(selectedNode.id, previousPayload)
+          await refresh(selectedProjectId, selectedNode.id)
+        },
+        redo: async () => {
+          await moveNodeRequest(selectedNode.id, nextPayload)
+          await refresh(selectedProjectId, selectedNode.id)
+        },
+      })
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1495,11 +1766,26 @@ function App() {
 
     try {
       const fallbackId = selectedNode.parent_id
-      await runWithHistory(selectedProjectId, async () => {
-        await api(`/api/nodes/${selectedNode.id}`, { method: 'DELETE' })
-        setDeleteNodeOpen(false)
-        await refresh(selectedProjectId, fallbackId)
-      }, fallbackId)
+      const subtreeNode = selectedTreeNode || findNode(tree?.root, selectedNode.id)
+      const snapshot = subtreeNode ? await createDeleteSnapshot(subtreeNode) : null
+      let currentRootId = selectedNode.id
+
+      await deleteNodeRequest(currentRootId)
+      setDeleteNodeOpen(false)
+      await refresh(selectedProjectId, fallbackId)
+      if (snapshot) {
+        pushHistory({
+          undo: async () => {
+            const restoredRoot = await restoreDeletedSubtree(selectedProjectId, snapshot)
+            currentRootId = restoredRoot.id
+            await refresh(selectedProjectId, restoredRoot.id)
+          },
+          redo: async () => {
+            await deleteNodeRequest(currentRootId)
+            await refresh(selectedProjectId, fallbackId)
+          },
+        })
+      }
     } catch (submitError) {
       setError(submitError.message)
     } finally {
