@@ -39,13 +39,21 @@ function getUrlState() {
   const params = new URLSearchParams(window.location.search)
   const projectId = String(params.get('project') || '').trim() || null
   const nodeId = String(params.get('node') || '').trim() || null
+  const x = Number(params.get('x'))
+  const y = Number(params.get('y'))
+  const scale = Number(params.get('z'))
   return {
     projectId,
     nodeId,
+    transform: {
+      x: Number.isFinite(x) ? x : 80,
+      y: Number.isFinite(y) ? y : 80,
+      scale: Number.isFinite(scale) ? Math.max(0.1, Math.min(10, scale)) : 1,
+    },
   }
 }
 
-function updateUrlState(projectId, nodeId) {
+function updateUrlState(projectId, nodeId, transform) {
   const url = new URL(window.location.href)
   if (projectId) {
     url.searchParams.set('project', String(projectId))
@@ -56,6 +64,15 @@ function updateUrlState(projectId, nodeId) {
     url.searchParams.set('node', String(nodeId))
   } else if (!projectId) {
     url.searchParams.delete('node')
+  }
+  if (transform) {
+    url.searchParams.set('x', String(Math.round(transform.x)))
+    url.searchParams.set('y', String(Math.round(transform.y)))
+    url.searchParams.set('z', transform.scale.toFixed(3))
+  } else {
+    url.searchParams.delete('x')
+    url.searchParams.delete('y')
+    url.searchParams.delete('z')
   }
   window.history.replaceState({}, '', url)
 }
@@ -759,6 +776,7 @@ function buildClientTree(project, rows) {
 }
 
 function App() {
+  const initialUrlState = useMemo(() => getUrlState(), [])
   const desktopClientId = getOrCreateSessionId()
   const [projects, setProjects] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState(null)
@@ -787,7 +805,7 @@ function App() {
   const [editTargetId, setEditTargetId] = useState(null)
   const [editForm, setEditForm] = useState({ name: '', notes: '', tags: '' })
   const [moveParentId, setMoveParentId] = useState('')
-  const [transform, setTransform] = useState({ x: 80, y: 80, scale: 1 })
+  const [transform, setTransform] = useState(initialUrlState.transform)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [previewOpen, setPreviewOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(true)
@@ -1038,8 +1056,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId)
-  }, [selectedNodeId, selectedProjectId])
+    updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId, transform)
+  }, [selectedNodeId, selectedProjectId, transform])
 
   useEffect(() => {
     undoStackRef.current = []
@@ -2036,6 +2054,17 @@ function App() {
   }
 
   async function exportProject() {
+    await downloadProjectExport(`/api/projects/${selectedProjectId}/export`, exportFileName.trim() || tree?.project?.name || 'project')
+  }
+
+  async function exportMediaTree() {
+    await downloadProjectExport(
+      `/api/projects/${selectedProjectId}/export-media`,
+      exportFileName.trim() || `${tree?.project?.name || 'project'}-media`,
+    )
+  }
+
+  async function downloadProjectExport(url, downloadName) {
     if (!selectedProjectId) {
       return
     }
@@ -2045,7 +2074,7 @@ function App() {
     setTransferProgress(0)
 
     try {
-      const response = await fetch(`/api/projects/${selectedProjectId}/export`)
+      const response = await fetch(url)
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.error || 'Export failed')
@@ -2069,14 +2098,14 @@ function App() {
       }
 
       const blob = new Blob(chunks, { type: 'application/zip' })
-      const url = URL.createObjectURL(blob)
+      const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = url
-      link.download = (exportFileName.trim() || tree?.project?.name || 'project') + '.zip'
+      link.href = blobUrl
+      link.download = `${downloadName}.zip`
       document.body.append(link)
       link.click()
       link.remove()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(blobUrl)
       setTransferProgress(100)
       setShowProjectDialog(null)
       setOpenMenu(null)
@@ -2995,6 +3024,18 @@ function App() {
                   type="button"
                 >
                   Export Project
+                </button>
+                <button
+                  className="menu-item"
+                  disabled={!selectedProjectId || busy}
+                  onClick={() => {
+                    setExportFileName(`${tree?.project?.name || 'project'}-media`)
+                    setShowProjectDialog('export-media')
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  Export Media Tree
                 </button>
                 <button
                   className="menu-item"
@@ -4074,6 +4115,42 @@ function App() {
                 className="primary-button"
                 disabled={busy || !selectedProjectId}
                 onClick={exportProject}
+                type="button"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showProjectDialog === 'export-media' ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setShowProjectDialog(null)} role="presentation">
+          <div
+            className="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleDialogEnter(event, exportMediaTree, Boolean(selectedProjectId) && !busy)}
+            role="dialog"
+          >
+            <div className="dialog__title">Export Media Tree</div>
+            <input
+              autoFocus
+              placeholder="Archive filename"
+              value={exportFileName}
+              onChange={(event) => setExportFileName(event.target.value.replace(/\.zip$/i, ''))}
+            />
+            <div className="inspector__notice">
+              Exports normal folders and full-resolution photos as {`${exportFileName || `${tree?.project?.name || 'project'}-media`}.zip`}
+            </div>
+            <progress className="transfer-progress" max="100" value={transferProgress ?? undefined} />
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setShowProjectDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy || !selectedProjectId}
+                onClick={exportMediaTree}
                 type="button"
               >
                 Export

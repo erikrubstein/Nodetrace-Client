@@ -564,6 +564,19 @@ function sanitizeUploadName(filename, fallback = 'file.jpg') {
   return safeName || fallback
 }
 
+function sanitizeFilesystemName(name, fallback = 'item') {
+  const safeName = Array.from(String(name || fallback).trim())
+    .map((character) => {
+      if ('<>:"/\\|?*'.includes(character)) {
+        return '_'
+      }
+      const code = character.charCodeAt(0)
+      return code >= 0 && code <= 31 ? '_' : character
+    })
+    .join('')
+  return safeName || fallback
+}
+
 function createUntitledName(projectId) {
   const names = new Set(listNodeNamesByProject.all(projectId).map((row) => row.name))
   let index = 1
@@ -787,6 +800,99 @@ function exportProjectArchive(projectId) {
   const workDir = makeTempDir(`export-${projectId}`)
   writeProjectManifest(project, rows, workDir)
   const archivePath = path.join(tempDir, `photomap-project-${projectId}-${Date.now()}.zip`)
+  zipDirectory(workDir, archivePath)
+  fs.rmSync(workDir, { recursive: true, force: true })
+  return archivePath
+}
+
+function ensureUniquePath(targetPath, suffix = '') {
+  const parsed = path.parse(targetPath)
+  let candidate = targetPath
+  let index = 2
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(parsed.dir, `${parsed.name} (${index})${suffix || parsed.ext}`)
+    index += 1
+  }
+  return candidate
+}
+
+function exportProjectMediaArchive(projectId) {
+  const project = assertProject(projectId)
+  const rows = getProjectNodes.all(projectId)
+  const tree = buildTree(project, rows)
+  const rowById = new Map(rows.map((row) => [row.id, row]))
+  const workDir = makeTempDir(`export-media-${projectId}`)
+  const rootDir = path.join(workDir, sanitizeFilesystemName(project.name || `project-${projectId}`))
+  fs.mkdirSync(rootDir, { recursive: true })
+
+  function copyImageFile(row, destinationDir, requestedName) {
+    if (!row?.image_path) {
+      return
+    }
+    const sourcePath = path.join(uploadsDir, row.image_path)
+    if (!fs.existsSync(sourcePath)) {
+      return
+    }
+
+    const ext =
+      path.extname(row.original_filename || '') ||
+      path.extname(row.image_path || '') ||
+      '.jpg'
+    const baseName = sanitizeFilesystemName(requestedName || row.name || 'photo')
+    const initialPath = path.join(destinationDir, `${baseName}${ext}`)
+    const destinationPath = ensureUniquePath(initialPath)
+    fs.copyFileSync(sourcePath, destinationPath)
+  }
+
+  function exportVariants(anchorNode, destinationDir) {
+    if (!anchorNode?.variants?.length) {
+      return
+    }
+
+    const variantsDir = path.join(destinationDir, '_variants')
+    fs.mkdirSync(variantsDir, { recursive: true })
+    for (const variant of anchorNode.variants) {
+      exportNode(variant, variantsDir)
+    }
+  }
+
+  function exportChildren(node, destinationDir) {
+    for (const child of node.children || []) {
+      exportNode(child, destinationDir)
+    }
+  }
+
+  function exportNode(node, destinationDir) {
+    const row = rowById.get(node.id)
+    const hasNestedContent = (node.children?.length || 0) > 0 || (node.variants?.length || 0) > 0
+    const safeNodeName = sanitizeFilesystemName(node.name || node.type || 'node')
+
+    if (node.type === 'folder') {
+      const folderDir = ensureUniquePath(path.join(destinationDir, safeNodeName), '')
+      fs.mkdirSync(folderDir, { recursive: true })
+      exportChildren(node, folderDir)
+      exportVariants(node, folderDir)
+      return
+    }
+
+    if (!hasNestedContent) {
+      copyImageFile(row, destinationDir, safeNodeName)
+      return
+    }
+
+    const photoDir = ensureUniquePath(path.join(destinationDir, safeNodeName), '')
+    fs.mkdirSync(photoDir, { recursive: true })
+    copyImageFile(row, photoDir, '_photo')
+    exportChildren(node, photoDir)
+    exportVariants(node, photoDir)
+  }
+
+  if (tree.root) {
+    exportChildren(tree.root, rootDir)
+    exportVariants(tree.root, rootDir)
+  }
+
+  const archivePath = path.join(tempDir, `photomap-media-${projectId}-${Date.now()}.zip`)
   zipDirectory(workDir, archivePath)
   fs.rmSync(workDir, { recursive: true, force: true })
   return archivePath
@@ -1581,6 +1687,30 @@ app.get('/api/projects/:id/export', (req, res, next) => {
     archivePath = exportProjectArchive(projectId)
     const safeName = project.name.replace(/[^a-zA-Z0-9._-]/g, '_') || `project-${projectId}`
     res.download(archivePath, `${safeName}.zip`, (downloadError) => {
+      if (archivePath && fs.existsSync(archivePath)) {
+        fs.unlinkSync(archivePath)
+      }
+      if (downloadError && downloadError.code !== 'ECONNABORTED') {
+        next(downloadError)
+      }
+    })
+  } catch (error) {
+    if (archivePath && fs.existsSync(archivePath)) {
+      fs.unlinkSync(archivePath)
+    }
+    next(error)
+  }
+})
+
+app.get('/api/projects/:id/export-media', (req, res, next) => {
+  let archivePath = null
+
+  try {
+    const project = assertProject(req.params.id)
+    const projectId = project.id
+    archivePath = exportProjectMediaArchive(projectId)
+    const safeName = project.name.replace(/[^a-zA-Z0-9._-]/g, '_') || `project-${projectId}`
+    res.download(archivePath, `${safeName}-media.zip`, (downloadError) => {
       if (archivePath && fs.existsSync(archivePath)) {
         fs.unlinkSync(archivePath)
       }
