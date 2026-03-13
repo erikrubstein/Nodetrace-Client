@@ -3383,8 +3383,14 @@ function App() {
                     y: event.clientY - (rect?.top || 0),
                   })
                 }}
-                onClick={() => {
+                onClick={(event) => {
                   if (item.node.type === 'collapsed-group') {
+                    return
+                  }
+                  if (event.shiftKey) {
+                    if (!focusPathMode && !item.node.isVariant) {
+                      void setCollapsed(item.id, !item.node.collapsed)
+                    }
                     return
                   }
                   void saveNodeDraft(editTargetNode, editForm)
