@@ -137,6 +137,13 @@ select {
   user-select: none;
 }
 
+.topbar__toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--grid-dot);
+  margin: 0 2px;
+}
+
 .canvas-viewport {
   position: relative;
   min-width: 0;
@@ -865,6 +872,21 @@ button:disabled {
   border-radius: 0;
   padding: 8px 10px;
   white-space: nowrap;
+}
+
+.menu-submenu-wrap {
+  position: relative;
+}
+
+.menu-panel--submenu {
+  top: 0;
+  left: calc(100% + 4px);
+  display: none;
+}
+
+.menu-submenu-wrap:hover .menu-panel--submenu,
+.menu-submenu-wrap:focus-within .menu-panel--submenu {
+  display: flex;
 }
 
 .segmented {

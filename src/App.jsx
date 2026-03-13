@@ -36,6 +36,19 @@ function getOrCreateSessionId() {
   return generated
 }
 
+function readStoredBoolean(key, fallback) {
+  const value = localStorage.getItem(key)
+  if (value == null) {
+    return fallback
+  }
+  return value === 'true'
+}
+
+function readStoredNumber(key, fallback) {
+  const value = Number(localStorage.getItem(key))
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 function getUrlState() {
   const params = new URLSearchParams(window.location.search)
   const projectId = String(params.get('project') || '').trim() || null
@@ -927,15 +940,15 @@ function App() {
   const [moveParentId, setMoveParentId] = useState('')
   const [transform, setTransform] = useState(initialUrlState.transform)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [cameraOpen, setCameraOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(() => readStoredBoolean('photomap-preview-open', false))
+  const [inspectorOpen, setInspectorOpen] = useState(() => readStoredBoolean('photomap-inspector-open', true))
+  const [settingsOpen, setSettingsOpen] = useState(() => readStoredBoolean('photomap-settings-open', false))
+  const [cameraOpen, setCameraOpen] = useState(() => readStoredBoolean('photomap-camera-open', false))
   const [focusPathMode, setFocusPathMode] = useState(false)
-  const [previewWidth, setPreviewWidth] = useState(340)
-  const [inspectorWidth, setInspectorWidth] = useState(320)
-  const [settingsWidth, setSettingsWidth] = useState(280)
-  const [cameraWidth, setCameraWidth] = useState(360)
+  const [previewWidth, setPreviewWidth] = useState(() => readStoredNumber('photomap-preview-width', 340))
+  const [inspectorWidth, setInspectorWidth] = useState(() => readStoredNumber('photomap-inspector-width', 320))
+  const [settingsWidth, setSettingsWidth] = useState(() => readStoredNumber('photomap-settings-width', 280))
+  const [cameraWidth, setCameraWidth] = useState(() => readStoredNumber('photomap-camera-width', 360))
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
   const [pendingUploadMode, setPendingUploadMode] = useState('child')
   const [cameraDevices, setCameraDevices] = useState([])
@@ -972,6 +985,38 @@ function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('photomap-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-preview-open', String(previewOpen))
+  }, [previewOpen])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-inspector-open', String(inspectorOpen))
+  }, [inspectorOpen])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-settings-open', String(settingsOpen))
+  }, [settingsOpen])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-camera-open', String(cameraOpen))
+  }, [cameraOpen])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-preview-width', String(previewWidth))
+  }, [previewWidth])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-inspector-width', String(inspectorWidth))
+  }, [inspectorWidth])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-settings-width', String(settingsWidth))
+  }, [settingsWidth])
+
+  useEffect(() => {
+    localStorage.setItem('photomap-camera-width', String(cameraWidth))
+  }, [cameraWidth])
 
   useEffect(() => {
     treeRef.current = tree
@@ -3133,30 +3178,25 @@ function App() {
                 >
                   Open Project
                 </button>
-                <button
-                  className="menu-item"
-                  disabled={!selectedProjectId || busy}
-                  onClick={() => {
-                    setExportFileName(tree?.project?.name || 'project')
-                    setShowProjectDialog('export')
-                    setOpenMenu(null)
-                  }}
-                  type="button"
-                >
-                  Export Project
-                </button>
-                <button
-                  className="menu-item"
-                  disabled={!selectedProjectId || busy}
-                  onClick={() => {
-                    setExportFileName(`${tree?.project?.name || 'project'}-media`)
-                    setShowProjectDialog('export-media')
-                    setOpenMenu(null)
-                  }}
-                  type="button"
-                >
-                  Export Media Tree
-                </button>
+                <div className="menu-submenu-wrap">
+                  <button className="menu-item" disabled={!selectedProjectId || busy} type="button">
+                    Export
+                  </button>
+                  <div className="menu-panel menu-panel--submenu">
+                    <button
+                      className="menu-item"
+                      disabled={!selectedProjectId || busy}
+                      onClick={() => {
+                        setExportFileName(`${tree?.project?.name || 'project'}-media`)
+                        setShowProjectDialog('export-media')
+                        setOpenMenu(null)
+                      }}
+                      type="button"
+                    >
+                      Export Media Tree
+                    </button>
+                  </div>
+                </div>
                 <button
                   className="menu-item"
                   disabled={busy}
@@ -3278,6 +3318,19 @@ function App() {
                 >
                   Fit View
                 </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="menu-wrap">
+            <button
+              className={`menu-trigger ${openMenu === 'window' ? 'active' : ''}`}
+              onClick={() => setOpenMenu((current) => (current === 'window' ? null : 'window'))}
+              type="button"
+            >
+              Window
+            </button>
+            {openMenu === 'window' ? (
+              <div className="menu-panel">
                 <button
                   className="menu-item"
                   onClick={() => {
@@ -3381,6 +3434,7 @@ function App() {
           >
             <GearIcon />
           </IconButton>
+          <span aria-hidden="true" className="topbar__toolbar-divider" />
           <IconButton
             aria-label="Show mobile capture session"
             className={mobileConnectionCount > 0 ? 'icon-button--connected' : ''}
