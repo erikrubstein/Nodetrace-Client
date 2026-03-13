@@ -114,7 +114,6 @@ export function renderMobileCapturePage() {
         background: var(--surface);
         color: var(--text);
         border-radius: 12px;
-        min-height: 56px;
       }
 
       .status {
@@ -165,6 +164,21 @@ export function renderMobileCapturePage() {
       const search = new URLSearchParams(window.location.search)
       let pollHandle = null
       let uploadMode = 'child'
+
+      function updateUrlParams() {
+        const url = new URL(window.location.href)
+        if (projectSelect.value) {
+          url.searchParams.set('project', projectSelect.value)
+        } else {
+          url.searchParams.delete('project')
+        }
+        if (clientSelect.value) {
+          url.searchParams.set('clientId', clientSelect.value)
+        } else {
+          url.searchParams.delete('clientId')
+        }
+        window.history.replaceState({}, '', url)
+      }
 
       function setStatus(message, isError = false) {
         statusEl.textContent = message
@@ -233,6 +247,7 @@ export function renderMobileCapturePage() {
           projectSelect.value = requestedProjectId
         }
 
+        updateUrlParams()
         await loadClients()
       }
 
@@ -267,6 +282,8 @@ export function renderMobileCapturePage() {
         } else if (previousClientId && clients.some((client) => client.id === previousClientId)) {
           clientSelect.value = previousClientId
         }
+
+        updateUrlParams()
       }
 
       async function uploadSelectedFiles(files) {
@@ -312,7 +329,12 @@ export function renderMobileCapturePage() {
       }
 
       projectSelect.addEventListener('change', () => {
+        updateUrlParams()
         loadClients().catch((error) => setStatus(error.message, true))
+      })
+
+      clientSelect.addEventListener('change', () => {
+        updateUrlParams()
       })
 
       captureInput.addEventListener('change', () => {

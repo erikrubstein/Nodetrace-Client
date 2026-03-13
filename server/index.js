@@ -256,6 +256,34 @@ const setProjectCollapsedState = db.transaction(({ projectId, collapsed }) => {
   return nodeIds
 })
 
+const setNodeCollapsedStateRecursive = db.transaction(({ nodeId, projectId, collapsed }) => {
+  const now = new Date().toISOString()
+  const stack = [nodeId]
+  const updatedIds = []
+
+  while (stack.length > 0) {
+    const currentId = stack.pop()
+    updatedIds.push(currentId)
+    updateNodeCollapsedStmt.run({
+      id: currentId,
+      collapsed,
+      updated_at: now,
+    })
+
+    if (!collapsed) {
+      continue
+    }
+
+    const children = getNodeChildren.all(currentId, currentId)
+    for (const child of children) {
+      stack.push(child.id)
+    }
+  }
+
+  updateProjectTimestamp.run(now, projectId)
+  return updatedIds
+})
+
 const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
   const stack = [{ id: nodeId, visited: false }]
   while (stack.length > 0) {
@@ -1463,18 +1491,15 @@ app.post('/api/nodes/:id/collapse', (req, res, next) => {
   try {
     const nodeId = Number(req.params.id)
     const node = assertNode(nodeId)
-
-    updateNode({
-      id: nodeId,
-      project_id: node.project_id,
-      name: node.name,
-      notes: node.notes || '',
-      tags: JSON.parse(node.tags_json || '[]'),
-      collapsed: req.body.collapsed ? 1 : 0,
+    const collapsed = req.body.collapsed ? 1 : 0
+    const updatedIds = setNodeCollapsedStateRecursive({
+      nodeId,
+      projectId: node.project_id,
+      collapsed,
     })
 
     broadcastProjectEvent(node.project_id)
-    res.json(serializeNode(assertNode(nodeId)))
+    res.json({ node: serializeNode(assertNode(nodeId)), updatedIds })
   } catch (error) {
     next(error)
   }

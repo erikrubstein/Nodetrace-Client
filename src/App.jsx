@@ -13,18 +13,27 @@ const defaultProjectSettings = {
   imageMode: 'square',
 }
 
-function getProjectIdFromUrl() {
+function getUrlState() {
   const params = new URLSearchParams(window.location.search)
   const projectId = Number(params.get('project'))
-  return Number.isFinite(projectId) && projectId > 0 ? projectId : null
+  const nodeId = Number(params.get('node'))
+  return {
+    projectId: Number.isFinite(projectId) && projectId > 0 ? projectId : null,
+    nodeId: Number.isFinite(nodeId) && nodeId > 0 ? nodeId : null,
+  }
 }
 
-function updateProjectIdInUrl(projectId) {
+function updateUrlState(projectId, nodeId) {
   const url = new URL(window.location.href)
   if (projectId) {
     url.searchParams.set('project', String(projectId))
   } else {
     url.searchParams.delete('project')
+  }
+  if (nodeId) {
+    url.searchParams.set('node', String(nodeId))
+  } else if (!projectId) {
+    url.searchParams.delete('node')
   }
   window.history.replaceState({}, '', url)
 }
@@ -236,22 +245,56 @@ function countDescendants(node) {
   return childCount + variantCount
 }
 
-function buildFocusPathSet(nodes, selectedNodeId) {
+function buildFocusPathContext(nodes, selectedNodeId) {
   if (!selectedNodeId || !nodes?.length) {
-    return null
+    return { pathIds: null, nextById: null }
   }
 
   const byId = new Map(nodes.map((node) => [node.id, node]))
   const pathIds = new Set()
+  const nextById = new Map()
   let currentId = selectedNodeId
+  let previousId = null
 
   while (currentId != null && byId.has(currentId) && !pathIds.has(currentId)) {
     pathIds.add(currentId)
+    if (previousId != null) {
+      nextById.set(currentId, previousId)
+    }
     const current = byId.get(currentId)
-    currentId = current?.parent_id ?? current?.variant_of_id ?? null
+    previousId = currentId
+    currentId = current?.variant_of_id ?? current?.parent_id ?? null
   }
 
-  return pathIds
+  return { pathIds, nextById }
+}
+
+function countBranchItems(children = [], variants = []) {
+  const childItems = children.reduce((total, child) => total + 1 + countDescendants(child), 0)
+  return childItems + variants.length
+}
+
+function buildCollapsedPreviewNode(node) {
+  return {
+    ...node,
+    children:
+      (node.children?.length || 0) > 0
+        ? [
+            {
+              id: `collapsed-${node.id}`,
+              parent_id: node.id,
+              type: 'collapsed-group',
+              name: `${countDescendants(node)} Items`,
+              collapsedGroupOf: node.id,
+              totalItems: countDescendants(node),
+              previewItems: collectCollapsedPreviewItems(node),
+              children: [],
+              variants: [],
+            },
+          ]
+        : (node.children || []).map((child) => buildCollapsedPreviewNode(child)),
+    variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
+  }
 }
 
 function buildVisibleTree(node, options = {}) {
@@ -260,13 +303,60 @@ function buildVisibleTree(node, options = {}) {
   }
 
   const focusPathIds = options.focusPathIds || null
+  const focusNextById = options.focusNextById || null
+  const selectedNodeId = options.selectedNodeId ?? null
   const inFocusPath = focusPathIds ? focusPathIds.has(node.id) : false
   const collapsibleChildCount = node.children?.length || 0
-  const showCollapsedGroup = collapsibleChildCount > 1
-    ? focusPathIds
-      ? !inFocusPath
-      : node.collapsed
-    : false
+  const focusFilteringActive = Boolean(focusPathIds)
+
+  if (focusFilteringActive && node.id === selectedNodeId) {
+    return {
+      ...node,
+      children: (node.children || []).map((child) => buildCollapsedPreviewNode(child)),
+      variants: (node.variants || []).map((variant) => ({
+        ...variant,
+        children: [],
+        variants: [],
+      })),
+    }
+  }
+
+  if (focusFilteringActive && inFocusPath) {
+    const nextFocusId = focusNextById?.get(node.id) ?? null
+    const focusedChildren = (node.children || []).filter((child) => child.id === nextFocusId)
+    const focusedVariants = (node.variants || []).filter((variant) => variant.id === nextFocusId)
+    const hiddenChildren = (node.children || []).filter((child) => child.id !== nextFocusId)
+    const hiddenVariants = (node.variants || []).filter((variant) => variant.id !== nextFocusId)
+    const hiddenItemCount = countBranchItems(hiddenChildren, hiddenVariants)
+
+    const visibleChildren = focusedChildren.map((child) => {
+      const visibleChild = buildVisibleTree(child, options)
+      return hiddenItemCount > 0
+        ? {
+            ...visibleChild,
+            hiddenSiblingCount: (visibleChild.hiddenSiblingCount || 0) + hiddenItemCount,
+          }
+        : visibleChild
+    })
+
+    const visibleVariants = focusedVariants.map((variant) => {
+      const visibleVariant = buildVisibleTree(variant, options)
+      return hiddenItemCount > 0
+        ? {
+            ...visibleVariant,
+            hiddenSiblingCount: (visibleVariant.hiddenSiblingCount || 0) + hiddenItemCount,
+          }
+        : visibleVariant
+    })
+
+    return {
+      ...node,
+      children: visibleChildren,
+      variants: visibleVariants,
+    }
+  }
+
+  const showCollapsedGroup = collapsibleChildCount > 0 ? node.collapsed : false
 
   if (showCollapsedGroup) {
     return {
@@ -621,6 +711,8 @@ function App() {
   const [openMenu, setOpenMenu] = useState(null)
   const [showProjectDialog, setShowProjectDialog] = useState(null)
   const [projectName, setProjectName] = useState('')
+  const [newFolderDialog, setNewFolderDialog] = useState(null)
+  const [newFolderName, setNewFolderName] = useState('New Folder')
   const [exportFileName, setExportFileName] = useState('')
   const [importProjectName, setImportProjectName] = useState('')
   const [importArchiveFile, setImportArchiveFile] = useState(null)
@@ -801,13 +893,21 @@ function App() {
   const selectedTreeNode = selectedNodeId ? findNode(tree?.root, selectedNodeId) : null
   const blockedParentIds = collectDescendantIds(selectedTreeNode)
   const parentOptions = collectParentOptions(tree?.root, blockedParentIds)
-  const focusPathIds = useMemo(
-    () => (focusPathMode ? buildFocusPathSet(tree?.nodes, selectedNodeId) : null),
+  const focusPathContext = useMemo(
+    () =>
+      focusPathMode
+        ? buildFocusPathContext(tree?.nodes, selectedNodeId)
+        : { pathIds: null, nextById: null },
     [focusPathMode, selectedNodeId, tree?.nodes],
   )
   const visibleRoot = useMemo(
-    () => buildVisibleTree(tree?.root, { focusPathIds }),
-    [focusPathIds, tree?.root],
+    () =>
+      buildVisibleTree(tree?.root, {
+        focusPathIds: focusPathContext.pathIds,
+        focusNextById: focusPathContext.nextById,
+        selectedNodeId,
+      }),
+    [focusPathContext.nextById, focusPathContext.pathIds, selectedNodeId, tree?.root],
   )
   const layout = useMemo(() => buildLayout(visibleRoot, projectSettings), [projectSettings, visibleRoot])
   const contextMenuNode = tree?.nodes.find((node) => node.id === contextMenu?.nodeId) || null
@@ -822,7 +922,7 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
-        await loadProjects(getProjectIdFromUrl())
+        await loadProjects(getUrlState().projectId)
       } catch (loadError) {
         setError(loadError.message)
         setStatus('Unable to load projects.')
@@ -833,8 +933,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    updateProjectIdInUrl(selectedProjectId)
-  }, [selectedProjectId])
+    updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId)
+  }, [selectedNodeId, selectedProjectId])
 
   useEffect(() => {
     undoStackRef.current = []
@@ -847,7 +947,11 @@ function App() {
       return
     }
 
-    loadTree(selectedProjectId).catch((loadError) => {
+    const urlState = getUrlState()
+    const preferredNodeId =
+      selectedProjectId === urlState.projectId ? urlState.nodeId : null
+
+    loadTree(selectedProjectId, preferredNodeId).catch((loadError) => {
       setError(loadError.message)
     })
   }, [selectedProjectId])
@@ -1049,6 +1153,27 @@ function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ collapsed }),
+    })
+  }
+
+  function applyCollapsedState(updatedNode, updatedIds, collapsed) {
+    const updatedIdSet = new Set(updatedIds || [updatedNode.id])
+    setTree((current) => {
+      if (!current) {
+        return current
+      }
+
+      const nextNodes = current.nodes.map((node) => {
+        if (node.id === updatedNode.id) {
+          return { ...node, ...updatedNode }
+        }
+        if (updatedIdSet.has(node.id)) {
+          return { ...node, collapsed }
+        }
+        return node
+      })
+
+      return buildClientTree(current.project, nextNodes)
     })
   }
 
@@ -1849,7 +1974,7 @@ function App() {
         const rollbackLocalEvent = beginLocalEventExpectation()
         let created = null
         try {
-          created = await createFolderRequest(selectedProjectId, parentId)
+          created = await createFolderRequest(selectedProjectId, parentId, { name: newFolderName.trim() || 'New Folder' })
         } catch (error) {
           rollbackLocalEvent()
           throw error
@@ -1886,6 +2011,25 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function openNewFolderDialog(parentId = selectedNode?.id) {
+    if (!parentId || !selectedProjectId) {
+      return
+    }
+
+    setNewFolderName('New Folder')
+    setNewFolderDialog({ parentId })
+  }
+
+  async function submitNewFolder() {
+    if (!newFolderDialog?.parentId) {
+      return
+    }
+
+    await addFolder(newFolderDialog.parentId)
+    setNewFolderDialog(null)
+    setNewFolderName('New Folder')
   }
 
   async function uploadFiles(files, targetNodeId = selectedNode?.id, mode = 'child') {
@@ -1952,36 +2096,36 @@ function App() {
     try {
       const previousValue = Boolean(tree?.nodes.find((node) => node.id === nodeId)?.collapsed)
       const rollbackLocalEvent = beginLocalEventExpectation()
-      let updatedNode = null
+      let payload = null
       try {
-        updatedNode = await setCollapsedRequest(nodeId, collapsed)
+        payload = await setCollapsedRequest(nodeId, collapsed)
       } catch (error) {
         rollbackLocalEvent()
         throw error
       }
-      applyNodeUpdate(updatedNode)
+      applyCollapsedState(payload.node, payload.updatedIds, collapsed)
       pushHistory({
         undo: async () => {
           const rollbackUndoEvent = beginLocalEventExpectation()
-          let revertedNode = null
+          let revertedPayload = null
           try {
-            revertedNode = await setCollapsedRequest(nodeId, previousValue)
+            revertedPayload = await setCollapsedRequest(nodeId, previousValue)
           } catch (error) {
             rollbackUndoEvent()
             throw error
           }
-          applyNodeUpdate(revertedNode)
+          applyCollapsedState(revertedPayload.node, revertedPayload.updatedIds, previousValue)
         },
         redo: async () => {
           const rollbackRedoEvent = beginLocalEventExpectation()
-          let redoneNode = null
+          let redonePayload = null
           try {
-            redoneNode = await setCollapsedRequest(nodeId, collapsed)
+            redonePayload = await setCollapsedRequest(nodeId, collapsed)
           } catch (error) {
             rollbackRedoEvent()
             throw error
           }
-          applyNodeUpdate(redoneNode)
+          applyCollapsedState(redonePayload.node, redonePayload.updatedIds, collapsed)
         },
       })
     } catch (submitError) {
@@ -2368,7 +2512,6 @@ function App() {
     }
 
     event.stopPropagation()
-    setSelectedNodeId(nodeId)
     nodeDragRef.current = {
       nodeId,
       startX: event.clientX,
@@ -3078,7 +3221,7 @@ function App() {
               aria-label="Add folder"
               className="canvas-tool-button"
               disabled={!selectedNode || selectedNode.isVariant || busy}
-              onClick={() => addFolder()}
+              onClick={() => openNewFolderDialog()}
               tooltip="Add Folder"
             >
               <AddFolderIcon />
@@ -3149,7 +3292,6 @@ function App() {
                   event.preventDefault()
                   event.stopPropagation()
                   const rect = viewportRef.current?.getBoundingClientRect()
-                  setSelectedNodeId(item.id)
                   setContextMenu({
                     nodeId: item.id,
                     x: event.clientX - (rect?.left || 0),
@@ -3175,6 +3317,11 @@ function App() {
                 type="button"
               >
                 <div className="graph-node__visual">
+                  {item.node.hiddenSiblingCount ? (
+                    <div className="graph-node__sibling-indicator">
+                      +{item.node.hiddenSiblingCount}
+                    </div>
+                  ) : null}
                   {item.node.type === 'collapsed-group' ? (
                     <div className="graph-node__collapsed-grid">
                       {item.node.previewItems.map((preview) =>
@@ -3255,7 +3402,7 @@ function App() {
                   }}
                   onClick={() => {
                     setContextMenu(null)
-                    void addFolder(contextMenu.nodeId)
+                    openNewFolderDialog(contextMenu.nodeId)
                   }}
                   type="button"
                 >
@@ -3601,6 +3748,33 @@ function App() {
                   <small>{project.node_count} nodes</small>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {newFolderDialog ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setNewFolderDialog(null)} role="presentation">
+          <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="dialog__title">New Folder</div>
+            <input
+              autoFocus
+              placeholder="Folder name"
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+            />
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setNewFolderDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy || !newFolderName.trim()}
+                onClick={submitNewFolder}
+                type="button"
+              >
+                Create
+              </button>
             </div>
           </div>
         </div>
