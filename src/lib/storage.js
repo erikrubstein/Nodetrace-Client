@@ -10,14 +10,13 @@ export function generateShortId() {
 }
 
 export function getOrCreateSessionId() {
-  const storedValue = String(localStorage.getItem('photomap-desktop-client-id') || '').trim().toLowerCase()
+  const storedValue = String(localStorage.getItem('desktop-session-id') || '').trim().toLowerCase()
   if (/^[a-z][a-z0-9]{4}$/.test(storedValue)) {
     return storedValue
   }
 
   const generated = generateShortId()
-  localStorage.setItem('photomap-desktop-client-id', generated)
-  localStorage.removeItem('photomap-desktop-client-name')
+  localStorage.setItem('desktop-session-id', generated)
   return generated
 }
 
@@ -33,4 +32,3 @@ export function readStoredNumber(key, fallback) {
   const value = Number(localStorage.getItem(key))
   return Number.isFinite(value) && value > 0 ? value : fallback
 }
-

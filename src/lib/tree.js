@@ -268,6 +268,8 @@ export function buildLayout(root, settings) {
         nodes.push({ id: variant.id, node: variant, x, y: variantY, variantOf: node.id })
         links.push({
           key: `${node.id}-${variant.id}-variant`,
+          sourceId: node.id,
+          targetId: variant.id,
           x1: x + NODE_WIDTH / 2,
           y1: y + NODE_HEIGHT,
           x2: x + NODE_WIDTH / 2,
@@ -293,6 +295,8 @@ export function buildLayout(root, settings) {
 
       links.push({
         key: `${parent.id}-${item.id}`,
+        sourceId: parent.id,
+        targetId: item.id,
         x1: parent.x + NODE_WIDTH,
         y1: parent.y + NODE_HEIGHT / 2,
         x2: item.x,
@@ -392,6 +396,8 @@ export function buildLayout(root, settings) {
       nodes.push({ id: variant.id, node: variant, x: 0, y: variantY, variantOf: node.id })
       links.push({
         key: `${node.id}-${variant.id}-variant`,
+        sourceId: node.id,
+        targetId: variant.id,
         x1: NODE_WIDTH / 2,
         y1: rootY + NODE_HEIGHT,
         x2: NODE_WIDTH / 2,
@@ -420,6 +426,8 @@ export function buildLayout(root, settings) {
       }
       links.push({
         key: `${node.id}-${placement.layout.rootId}`,
+        sourceId: node.id,
+        targetId: placement.layout.rootId,
         x1: NODE_WIDTH,
         y1: rootY + NODE_HEIGHT / 2,
         x2: placement.layout.rootX + spanX,
@@ -620,4 +628,3 @@ export function buildClientTree(project, rows) {
     nodes: Array.from(byId.values()),
   }
 }
-

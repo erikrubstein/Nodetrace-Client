@@ -37,7 +37,7 @@ function App() {
   const [tree, setTree] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState([])
-  const [theme, setTheme] = useState(() => localStorage.getItem('photomap-theme') || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
   const [status, setStatus] = useState('Loading projects...')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -58,15 +58,15 @@ function App() {
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState(initialUrlState.transform)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
-  const [previewOpen, setPreviewOpen] = useState(() => readStoredBoolean('photomap-preview-open', false))
-  const [inspectorOpen, setInspectorOpen] = useState(() => readStoredBoolean('photomap-inspector-open', true))
-  const [settingsOpen, setSettingsOpen] = useState(() => readStoredBoolean('photomap-settings-open', false))
-  const [cameraOpen, setCameraOpen] = useState(() => readStoredBoolean('photomap-camera-open', false))
+  const [previewOpen, setPreviewOpen] = useState(() => readStoredBoolean('preview-open', false))
+  const [inspectorOpen, setInspectorOpen] = useState(() => readStoredBoolean('inspector-open', true))
+  const [settingsOpen, setSettingsOpen] = useState(() => readStoredBoolean('settings-open', false))
+  const [cameraOpen, setCameraOpen] = useState(() => readStoredBoolean('camera-open', false))
   const [focusPathMode, setFocusPathMode] = useState(false)
-  const [previewWidth, setPreviewWidth] = useState(() => readStoredNumber('photomap-preview-width', 340))
-  const [inspectorWidth, setInspectorWidth] = useState(() => readStoredNumber('photomap-inspector-width', 320))
-  const [settingsWidth, setSettingsWidth] = useState(() => readStoredNumber('photomap-settings-width', 280))
-  const [cameraWidth, setCameraWidth] = useState(() => readStoredNumber('photomap-camera-width', 360))
+  const [previewWidth, setPreviewWidth] = useState(() => readStoredNumber('preview-width', 340))
+  const [inspectorWidth, setInspectorWidth] = useState(() => readStoredNumber('inspector-width', 320))
+  const [settingsWidth, setSettingsWidth] = useState(() => readStoredNumber('settings-width', 280))
+  const [cameraWidth, setCameraWidth] = useState(() => readStoredNumber('camera-width', 360))
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
   const [pendingUploadMode, setPendingUploadMode] = useState('child')
   const [cameraDevices, setCameraDevices] = useState([])
@@ -85,39 +85,43 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem('photomap-theme', theme)
+    localStorage.setItem('theme', theme)
   }, [theme])
 
   useEffect(() => {
-    localStorage.setItem('photomap-preview-open', String(previewOpen))
+    document.title = tree?.project?.name ? `Nodetrace | ${tree.project.name}` : 'Nodetrace'
+  }, [tree?.project?.name])
+
+  useEffect(() => {
+    localStorage.setItem('preview-open', String(previewOpen))
   }, [previewOpen])
 
   useEffect(() => {
-    localStorage.setItem('photomap-inspector-open', String(inspectorOpen))
+    localStorage.setItem('inspector-open', String(inspectorOpen))
   }, [inspectorOpen])
 
   useEffect(() => {
-    localStorage.setItem('photomap-settings-open', String(settingsOpen))
+    localStorage.setItem('settings-open', String(settingsOpen))
   }, [settingsOpen])
 
   useEffect(() => {
-    localStorage.setItem('photomap-camera-open', String(cameraOpen))
+    localStorage.setItem('camera-open', String(cameraOpen))
   }, [cameraOpen])
 
   useEffect(() => {
-    localStorage.setItem('photomap-preview-width', String(previewWidth))
+    localStorage.setItem('preview-width', String(previewWidth))
   }, [previewWidth])
 
   useEffect(() => {
-    localStorage.setItem('photomap-inspector-width', String(inspectorWidth))
+    localStorage.setItem('inspector-width', String(inspectorWidth))
   }, [inspectorWidth])
 
   useEffect(() => {
-    localStorage.setItem('photomap-settings-width', String(settingsWidth))
+    localStorage.setItem('settings-width', String(settingsWidth))
   }, [settingsWidth])
 
   useEffect(() => {
-    localStorage.setItem('photomap-camera-width', String(cameraWidth))
+    localStorage.setItem('camera-width', String(cameraWidth))
   }, [cameraWidth])
 
   useEffect(() => {

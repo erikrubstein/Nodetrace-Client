@@ -13,7 +13,7 @@ const baseDir = process.cwd()
 const dataDir = path.join(baseDir, 'data')
 const uploadsDir = path.join(dataDir, 'uploads')
 const tempDir = path.join(dataDir, 'tmp')
-const dbPath = path.join(dataDir, 'photomap.db')
+const dbPath = path.join(dataDir, 'database.db')
 const distDir = path.join(baseDir, 'dist')
 const projectEventClients = new Map()
 const activeDesktopSessions = new Map()
@@ -58,6 +58,26 @@ function generateUniqueId(lookup) {
   }
 
   throw new Error('Unable to generate a unique short id')
+}
+
+function getProjectUploadDir(projectId) {
+  return path.join(uploadsDir, String(projectId))
+}
+
+function rewriteUploadPathProjectFolder(filePath, projectId) {
+  if (!filePath) {
+    return filePath
+  }
+
+  const segments = String(filePath)
+    .split(/[\\/]+/)
+    .filter(Boolean)
+  if (segments.length === 0) {
+    return filePath
+  }
+
+  segments[0] = String(projectId)
+  return path.join(...segments)
 }
 
 function createTextSchema() {
@@ -227,8 +247,8 @@ function ensureTextIdSchema() {
         notes: row.notes || '',
         tags_json: row.tags_json || '[]',
         collapsed: row.collapsed ? 1 : 0,
-        image_path: row.image_path || null,
-        preview_path: row.preview_path || null,
+        image_path: row.image_path ? rewriteUploadPathProjectFolder(row.image_path, projectIdMap.get(row.project_id)) : null,
+        preview_path: row.preview_path ? rewriteUploadPathProjectFolder(row.preview_path, projectIdMap.get(row.project_id)) : null,
         original_filename: row.original_filename || null,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -513,7 +533,7 @@ const deleteProjectRecursive = db.transaction((projectId) => {
   deleteNodesByProjectStmt.run(projectId)
   deleteProjectStmt.run(projectId)
 
-  const projectUploadDir = path.join(uploadsDir, String(projectId))
+  const projectUploadDir = getProjectUploadDir(projectId)
   if (fs.existsSync(projectUploadDir)) {
     fs.rmSync(projectUploadDir, { recursive: true, force: true })
   }
@@ -538,7 +558,7 @@ const clearProjectContents = db.transaction((projectId) => {
 
   deleteNodesByProjectStmt.run(projectId)
 
-  const projectUploadDir = path.join(uploadsDir, String(projectId))
+  const projectUploadDir = getProjectUploadDir(projectId)
   if (fs.existsSync(projectUploadDir)) {
     fs.rmSync(projectUploadDir, { recursive: true, force: true })
   }
@@ -746,8 +766,8 @@ function ensureNoCycle(nodeId, parentId) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const projectId = req.params.id
-    const targetDir = path.join(uploadsDir, projectId)
+    const project = assertProject(req.params.id)
+    const targetDir = getProjectUploadDir(project.id)
     fs.mkdirSync(targetDir, { recursive: true })
     cb(null, targetDir)
   },
@@ -801,7 +821,7 @@ function exportProjectArchive(projectId) {
   const rows = getProjectNodes.all(projectId)
   const workDir = makeTempDir(`export-${projectId}`)
   writeProjectManifest(project, rows, workDir)
-  const archivePath = path.join(tempDir, `photomap-project-${projectId}-${Date.now()}.zip`)
+  const archivePath = path.join(tempDir, `project-${projectId}-${Date.now()}.zip`)
   zipDirectory(workDir, archivePath)
   fs.rmSync(workDir, { recursive: true, force: true })
   return archivePath
@@ -894,7 +914,7 @@ function exportProjectMediaArchive(projectId) {
     exportVariants(tree.root, rootDir)
   }
 
-  const archivePath = path.join(tempDir, `photomap-media-${projectId}-${Date.now()}.zip`)
+  const archivePath = path.join(tempDir, `media-${projectId}-${Date.now()}.zip`)
   zipDirectory(workDir, archivePath)
   fs.rmSync(workDir, { recursive: true, force: true })
   return archivePath
@@ -1241,7 +1261,7 @@ function importProjectArchive(archivePath, projectNameOverride = '') {
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     oldToNew.set(rootManifestId, createdRoot.id)
 
-    const projectUploadDir = path.join(uploadsDir, String(projectId))
+    const projectUploadDir = getProjectUploadDir(projectId)
     fs.mkdirSync(projectUploadDir, { recursive: true })
 
     const pendingRows = importedRows.filter((row) => String(row.id ?? row.old_id) !== rootManifestId)
@@ -2112,5 +2132,5 @@ app.use((error, req, res, _next) => {
 })
 
 app.listen(port, host, () => {
-  console.log(`PhotoMap server listening on http://${host}:${port}`)
+  console.log(`Nodetrace server listening on http://${host}:${port}`)
 })

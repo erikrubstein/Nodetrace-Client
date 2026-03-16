@@ -84,7 +84,10 @@ export default function TopBar({
               </button>
               <div className="menu-submenu-wrap">
                 <button className="menu-item" disabled={!selectedProjectId || busy} type="button">
-                  Export
+                  <span>Export</span>
+                  <span aria-hidden="true" className="menu-submenu-caret">
+                    <i className="fa-solid fa-chevron-right" />
+                  </span>
                 </button>
                 <div className="menu-panel menu-panel--submenu">
                   <button
@@ -101,6 +104,18 @@ export default function TopBar({
                   </button>
                 </div>
               </div>
+              <button
+                className="menu-item"
+                disabled={!selectedProjectId || busy}
+                onClick={() => {
+                  setExportFileName(tree?.project?.name || 'project')
+                  setShowProjectDialog('export')
+                  setOpenMenu(null)
+                }}
+                type="button"
+              >
+                Export Project
+              </button>
               <button
                 className="menu-item"
                 disabled={busy}

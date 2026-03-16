@@ -221,6 +221,10 @@ select {
   stroke-dasharray: 6 5;
 }
 
+.canvas-links .canvas-link--selected {
+  stroke: var(--selected);
+}
+
 .graph-node {
   position: absolute;
   width: 112px;
@@ -447,6 +451,7 @@ select {
   gap: 2px;
   padding: 0 2px;
   font-size: 0.76rem;
+  align-self: center;
 }
 
 .graph-node.variant-node .graph-node__meta {
@@ -459,6 +464,14 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.graph-node__meta span {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--canvas);
 }
 
 .canvas-caption,
@@ -867,6 +880,10 @@ button:disabled {
 }
 
 .menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   text-align: left;
   border: none;
   border-radius: 0;
@@ -876,11 +893,19 @@ button:disabled {
 
 .menu-submenu-wrap {
   position: relative;
+  width: 100%;
+}
+
+.menu-submenu-caret {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .menu-panel--submenu {
   top: 0;
-  left: calc(100% + 4px);
+  left: calc(100% - 4px);
   display: none;
 }
 

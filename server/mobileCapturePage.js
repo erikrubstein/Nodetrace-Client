@@ -4,7 +4,7 @@ export function renderMobileCapturePage() {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>PhotoMap Capture</title>
+    <title>Nodetrace Capture</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -171,7 +171,7 @@ export function renderMobileCapturePage() {
   <body>
     <main id="shell" class="shell connect-only">
       <section id="connectPanel" class="panel">
-        <div class="title">PhotoMap Capture</div>
+        <div class="title">Nodetrace Capture</div>
 
         <label>
           <span>Session</span>
@@ -218,7 +218,7 @@ export function renderMobileCapturePage() {
       let uploadMode = 'child'
       let sessionInfo = null
       let hasConnectedSession = false
-      const connectionStorageKey = 'photomap-capture-connection-id'
+      const connectionStorageKey = 'capture-connection-id'
       const connectionId =
         localStorage.getItem(connectionStorageKey) ||
         (() => {
