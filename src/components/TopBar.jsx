@@ -1,60 +1,46 @@
 import IconButton from './IconButton'
 import {
-  CameraIcon,
-  GearIcon,
   MoonIcon,
   PhoneIcon,
-  PreviewIcon,
   SunIcon,
-  UserIcon,
-  WrenchIcon,
 } from './icons'
 
 export default function TopBar({
   busy,
-  cameraOpen,
   fileInputRef,
+  fitCanvasToView,
   focusPathMode,
   historyState,
   importInputRef,
   importProjectName,
-  inspectorOpen,
   mobileConnectionCount,
   openMenu,
-  accountOpen,
   pendingUploadMode,
   pendingUploadParentId,
-  previewOpen,
   projectName,
   projects,
   redo,
   selectedNode,
   selectedProjectId,
   setAllNodesCollapsed,
-  setCameraOpen,
   setDeleteNodeOpen,
   setDeleteProjectText,
   setExportFileName,
+  setFocusPathMode,
   setImportArchiveFile,
   setImportProjectName,
-  setInspectorOpen,
-  setAccountOpen,
   setOpenMenu,
-  setPreviewOpen,
   setSessionDialogOpen,
-  setSettingsOpen,
   setShowProjectDialog,
-  setFocusPathMode,
-  settingsOpen,
+  setTheme,
   theme,
   tree,
   undo,
   uploadFiles,
-  fitCanvasToView,
-  setTheme,
+  style,
 }) {
   return (
-    <header className="topbar">
+    <header className="topbar" style={style}>
       <div className="topbar__left">
         <div className="menu-wrap">
           <button
@@ -149,6 +135,7 @@ export default function TopBar({
             </div>
           ) : null}
         </div>
+
         <div className="menu-wrap">
           <button
             className={`menu-trigger ${openMenu === 'edit' ? 'active' : ''}`}
@@ -195,6 +182,7 @@ export default function TopBar({
             </div>
           ) : null}
         </div>
+
         <div className="menu-wrap">
           <button
             className={`menu-trigger ${openMenu === 'view' ? 'active' : ''}`}
@@ -245,69 +233,10 @@ export default function TopBar({
             </div>
           ) : null}
         </div>
+
         <div className="menu-wrap">
-          <button
-            className={`menu-trigger ${openMenu === 'window' ? 'active' : ''}`}
-            onClick={() => setOpenMenu((current) => (current === 'window' ? null : 'window'))}
-            type="button"
-          >
-            Window
-          </button>
-          {openMenu === 'window' ? (
-            <div className="menu-panel">
-              <button
-                className="menu-item"
-                onClick={() => {
-                  setPreviewOpen((open) => !open)
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                {previewOpen ? 'Hide Preview' : 'Show Preview'}
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  setCameraOpen((open) => !open)
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                {cameraOpen ? 'Hide Camera' : 'Show Camera'}
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  setInspectorOpen((open) => !open)
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                {inspectorOpen ? 'Hide Inspector' : 'Show Inspector'}
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  setSettingsOpen((open) => !open)
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                {settingsOpen ? 'Hide Settings' : 'Show Settings'}
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  setAccountOpen((open) => !open)
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                {accountOpen ? 'Hide Account' : 'Show Account'}
-              </button>
-            </div>
-          ) : null}
         </div>
+
         <span className="topbar__separator">|</span>
         <div className="project-chip">{projectName || 'No project'}</div>
         <input
@@ -340,42 +269,6 @@ export default function TopBar({
       </div>
 
       <div className="topbar__right">
-        <IconButton
-          aria-label={previewOpen ? 'Close preview' : 'Open preview'}
-          onClick={() => setPreviewOpen((open) => !open)}
-          tooltip="Preview"
-        >
-          <PreviewIcon />
-        </IconButton>
-        <IconButton
-          aria-label={cameraOpen ? 'Close camera' : 'Open camera'}
-          onClick={() => setCameraOpen((open) => !open)}
-          tooltip="Camera"
-        >
-          <CameraIcon />
-        </IconButton>
-        <IconButton
-          aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
-          onClick={() => setInspectorOpen((open) => !open)}
-          tooltip="Inspector"
-        >
-          <WrenchIcon />
-        </IconButton>
-        <IconButton
-          aria-label={accountOpen ? 'Close account' : 'Open account'}
-          onClick={() => setAccountOpen((open) => !open)}
-          tooltip="Account"
-        >
-          <UserIcon />
-        </IconButton>
-        <IconButton
-          aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
-          onClick={() => setSettingsOpen((open) => !open)}
-          tooltip="Settings"
-        >
-          <GearIcon />
-        </IconButton>
-        <span aria-hidden="true" className="topbar__toolbar-divider" />
         <IconButton
           aria-label="Show mobile capture session"
           className={mobileConnectionCount > 0 ? 'icon-button--connected' : ''}

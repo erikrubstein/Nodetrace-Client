@@ -5,8 +5,10 @@ import AppDialogs from './components/AppDialogs'
 import AuthScreen from './components/AuthScreen'
 import CameraPanel from './components/CameraPanel'
 import CanvasWorkspace from './components/CanvasWorkspace'
+import DockedSidebar from './components/DockedSidebar'
 import InspectorPanel from './components/InspectorPanel'
 import PreviewPanel from './components/PreviewPanel'
+import SidebarRail from './components/SidebarRail'
 import SettingsPanel from './components/SettingsPanel'
 import TopBar from './components/TopBar'
 import useNodeEditing from './hooks/useNodeEditing'
@@ -14,7 +16,7 @@ import useProjectSync from './hooks/useProjectSync'
 import useUndoRedo from './hooks/useUndoRedo'
 import useWorkspaceInteractions from './hooks/useWorkspaceInteractions'
 import { ApiError, api, uploadWithProgress } from './lib/api'
-import { defaultProjectSettings, defaultUserProjectUi } from './lib/constants'
+import { defaultProjectSettings, defaultUserProjectUi, panelIds, SIDEBAR_RAIL_WIDTH } from './lib/constants'
 import { blobFromUrl, createPreviewFile } from './lib/image'
 import {
   buildClientTree,
@@ -29,6 +31,13 @@ import {
   getSelectionRootIds,
 } from './lib/tree'
 import { getUrlState, updateUrlState } from './lib/urlState'
+import {
+  CameraIcon,
+  GearIcon,
+  PreviewIcon,
+  UserIcon,
+  WrenchIcon,
+} from './components/icons'
 
 function App() {
   const initialUrlState = useMemo(() => getUrlState(), [])
@@ -60,17 +69,14 @@ function App() {
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState(initialUrlState.transform)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
-  const [previewOpen, setPreviewOpen] = useState(defaultUserProjectUi.previewOpen)
-  const [inspectorOpen, setInspectorOpen] = useState(defaultUserProjectUi.inspectorOpen)
-  const [settingsOpen, setSettingsOpen] = useState(defaultUserProjectUi.settingsOpen)
-  const [cameraOpen, setCameraOpen] = useState(defaultUserProjectUi.cameraOpen)
-  const [accountOpen, setAccountOpen] = useState(defaultUserProjectUi.accountOpen)
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(defaultUserProjectUi.leftSidebarOpen)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(defaultUserProjectUi.rightSidebarOpen)
+  const [leftActivePanel, setLeftActivePanel] = useState(defaultUserProjectUi.leftActivePanel)
+  const [rightActivePanel, setRightActivePanel] = useState(defaultUserProjectUi.rightActivePanel)
+  const [panelDock, setPanelDock] = useState(defaultUserProjectUi.panelDock)
   const [focusPathMode, setFocusPathMode] = useState(false)
-  const [previewWidth, setPreviewWidth] = useState(defaultUserProjectUi.previewWidth)
-  const [inspectorWidth, setInspectorWidth] = useState(defaultUserProjectUi.inspectorWidth)
-  const [settingsWidth, setSettingsWidth] = useState(defaultUserProjectUi.settingsWidth)
-  const [cameraWidth, setCameraWidth] = useState(defaultUserProjectUi.cameraWidth)
-  const [accountWidth, setAccountWidth] = useState(defaultUserProjectUi.accountWidth)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(defaultUserProjectUi.leftSidebarWidth)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(defaultUserProjectUi.rightSidebarWidth)
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
   const [pendingUploadMode, setPendingUploadMode] = useState('child')
   const [cameraDevices, setCameraDevices] = useState([])
@@ -78,6 +84,7 @@ function App() {
   const [cameraNotice, setCameraNotice] = useState('')
   const [cameraSelection, setCameraSelection] = useState(null)
   const [loadedImages, setLoadedImages] = useState({})
+  const [draggingPanelId, setDraggingPanelId] = useState(null)
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
   const [mobileConnectionCount, setMobileConnectionCount] = useState(0)
   const [collaboratorUsername, setCollaboratorUsername] = useState('')
@@ -95,6 +102,7 @@ function App() {
   const treeRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
   const loadedUiSignatureRef = useRef('')
+  const pendingUiSignatureRef = useRef(null)
   const { clearHistory, historyState, pushHistory, undo, redo } = useUndoRedo({ busy, setBusy, setError })
 
   useEffect(() => {
@@ -155,9 +163,94 @@ function App() {
     )
   }
 
+  function toggleSidebarPanel(panelId) {
+    const side = panelDock[panelId]
+    if (side === 'left') {
+      if (leftSidebarOpen && resolvedLeftActivePanel === panelId) {
+        setLeftSidebarOpen(false)
+        return
+      }
+      setLeftActivePanel(panelId)
+      setLeftSidebarOpen(true)
+      return
+    }
+
+    if (rightSidebarOpen && resolvedRightActivePanel === panelId) {
+      setRightSidebarOpen(false)
+      return
+    }
+    setRightActivePanel(panelId)
+    setRightSidebarOpen(true)
+  }
+
+  function movePanelDock(panelId, side) {
+    if (!panelIds.includes(panelId)) {
+      return
+    }
+    setPanelDock((current) => ({
+      ...current,
+      [panelId]: side,
+    }))
+    if (side === 'left') {
+      const nextRightPanel = rightDockedPanelIds.find((id) => id !== panelId) || null
+      setLeftActivePanel(panelId)
+      setLeftSidebarOpen(true)
+      setRightActivePanel((current) => {
+        if (current !== panelId) {
+          return current
+        }
+        return nextRightPanel
+      })
+      if (!nextRightPanel && resolvedRightActivePanel === panelId) {
+        setRightSidebarOpen(false)
+      }
+      return
+    }
+
+    const nextLeftPanel = leftDockedPanelIds.find((id) => id !== panelId) || null
+    setRightActivePanel(panelId)
+    setRightSidebarOpen(true)
+    setLeftActivePanel((current) => {
+      if (current !== panelId) {
+        return current
+      }
+      return nextLeftPanel
+    })
+    if (!nextLeftPanel && resolvedLeftActivePanel === panelId) {
+      setLeftSidebarOpen(false)
+    }
+  }
+
+  function handleDropPanel(panelId, side) {
+    if (!panelId || panelDock[panelId] === side) {
+      setDraggingPanelId(null)
+      return
+    }
+    movePanelDock(panelId, side)
+    setDraggingPanelId(null)
+  }
+
   const selectedNode = tree?.nodes.find((node) => node.id === selectedNodeId) || null
   const projectSettings = tree?.project?.settings || defaultProjectSettings
   const projectUi = tree?.project?.ui || defaultUserProjectUi
+  const leftDockedPanelIds = useMemo(
+    () => panelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'left'),
+    [panelDock],
+  )
+  const rightDockedPanelIds = useMemo(
+    () => panelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'right'),
+    [panelDock],
+  )
+  const resolvedLeftActivePanel = leftDockedPanelIds.includes(leftActivePanel) ? leftActivePanel : leftDockedPanelIds[0] || null
+  const resolvedRightActivePanel = rightDockedPanelIds.includes(rightActivePanel)
+    ? rightActivePanel
+    : rightDockedPanelIds[0] || null
+  const previewVisible =
+    (panelDock.preview === 'left' && leftSidebarOpen && resolvedLeftActivePanel === 'preview') ||
+    (panelDock.preview === 'right' && rightSidebarOpen && resolvedRightActivePanel === 'preview')
+  const cameraVisible =
+    (panelDock.camera === 'left' && leftSidebarOpen && resolvedLeftActivePanel === 'camera') ||
+    (panelDock.camera === 'right' && rightSidebarOpen && resolvedRightActivePanel === 'camera')
   const effectiveSelectedNodeIds = useMemo(
     () => [selectedNodeId, ...multiSelectedNodeIds].filter(Boolean),
     [multiSelectedNodeIds, selectedNodeId],
@@ -201,30 +294,29 @@ function App() {
 
     const nextUi = {
       theme: projectUi.theme,
-      previewOpen: projectUi.previewOpen,
-      inspectorOpen: projectUi.inspectorOpen,
-      settingsOpen: projectUi.settingsOpen,
-      cameraOpen: projectUi.cameraOpen,
-      accountOpen: projectUi.accountOpen,
-      previewWidth: projectUi.previewWidth,
-      inspectorWidth: projectUi.inspectorWidth,
-      settingsWidth: projectUi.settingsWidth,
-      cameraWidth: projectUi.cameraWidth,
-      accountWidth: projectUi.accountWidth,
+      leftSidebarOpen: projectUi.leftSidebarOpen,
+      rightSidebarOpen: projectUi.rightSidebarOpen,
+      leftSidebarWidth: projectUi.leftSidebarWidth,
+      rightSidebarWidth: projectUi.rightSidebarWidth,
+      leftActivePanel: projectUi.leftActivePanel,
+      rightActivePanel: projectUi.rightActivePanel,
+      panelDock: projectUi.panelDock,
     }
-    loadedUiSignatureRef.current = JSON.stringify(nextUi)
+    const incomingSignature = JSON.stringify(nextUi)
+    if (pendingUiSignatureRef.current && incomingSignature !== pendingUiSignatureRef.current) {
+      return
+    }
+    pendingUiSignatureRef.current = null
+    loadedUiSignatureRef.current = incomingSignature
     setTheme(nextUi.theme)
-    setPreviewOpen(nextUi.previewOpen)
-    setInspectorOpen(nextUi.inspectorOpen)
-    setSettingsOpen(nextUi.settingsOpen)
-    setCameraOpen(nextUi.cameraOpen)
-    setAccountOpen(nextUi.accountOpen)
-    setPreviewWidth(nextUi.previewWidth)
-    setInspectorWidth(nextUi.inspectorWidth)
-    setSettingsWidth(nextUi.settingsWidth)
-    setCameraWidth(nextUi.cameraWidth)
-    setAccountWidth(nextUi.accountWidth)
-  }, [projectUi.accountOpen, projectUi.accountWidth, projectUi.cameraOpen, projectUi.cameraWidth, projectUi.inspectorOpen, projectUi.inspectorWidth, projectUi.previewOpen, projectUi.previewWidth, projectUi.settingsOpen, projectUi.settingsWidth, projectUi.theme, selectedProjectId, tree?.project])
+    setLeftSidebarOpen(nextUi.leftSidebarOpen)
+    setRightSidebarOpen(nextUi.rightSidebarOpen)
+    setLeftSidebarWidth(nextUi.leftSidebarWidth)
+    setRightSidebarWidth(nextUi.rightSidebarWidth)
+    setLeftActivePanel(nextUi.leftActivePanel)
+    setRightActivePanel(nextUi.rightActivePanel)
+    setPanelDock(nextUi.panelDock)
+  }, [projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.theme, selectedProjectId, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     setCurrentUser(null)
@@ -297,6 +389,8 @@ function App() {
 
   useEffect(() => {
     setMultiSelectedNodeIds([])
+    pendingUiSignatureRef.current = null
+    loadedUiSignatureRef.current = ''
   }, [selectedProjectId])
 
   useEffect(() => {
@@ -311,6 +405,30 @@ function App() {
       setSessionDialogOpen(false)
     }
   }, [mobileConnectionCount])
+
+  useEffect(() => {
+    if (resolvedLeftActivePanel !== leftActivePanel) {
+      setLeftActivePanel(resolvedLeftActivePanel)
+    }
+  }, [leftActivePanel, resolvedLeftActivePanel])
+
+  useEffect(() => {
+    if (resolvedRightActivePanel !== rightActivePanel) {
+      setRightActivePanel(resolvedRightActivePanel)
+    }
+  }, [resolvedRightActivePanel, rightActivePanel])
+
+  useEffect(() => {
+    if (leftSidebarOpen && !resolvedLeftActivePanel) {
+      setLeftSidebarOpen(false)
+    }
+  }, [leftSidebarOpen, resolvedLeftActivePanel])
+
+  useEffect(() => {
+    if (rightSidebarOpen && !resolvedRightActivePanel) {
+      setRightSidebarOpen(false)
+    }
+  }, [resolvedRightActivePanel, rightSidebarOpen])
 
   const applyNodeUpdate = useCallback((updatedNode) => {
     setTree((current) => {
@@ -430,25 +548,23 @@ function App() {
 
     const nextUi = {
       theme,
-      previewOpen,
-      inspectorOpen,
-      settingsOpen,
-      cameraOpen,
-      accountOpen,
-      previewWidth,
-      inspectorWidth,
-      settingsWidth,
-      cameraWidth,
-      accountWidth,
+      leftSidebarOpen,
+      rightSidebarOpen,
+      leftSidebarWidth,
+      rightSidebarWidth,
+      leftActivePanel: resolvedLeftActivePanel,
+      rightActivePanel: resolvedRightActivePanel,
+      panelDock,
     }
     const signature = JSON.stringify(nextUi)
     if (signature === loadedUiSignatureRef.current) {
       return undefined
     }
-    loadedUiSignatureRef.current = signature
+    pendingUiSignatureRef.current = signature
 
     const handle = window.setTimeout(() => {
       patchProjectPreferencesRequest(selectedProjectId, nextUi).catch((saveError) => {
+        pendingUiSignatureRef.current = null
         setError(saveError.message)
       })
     }, 180)
@@ -457,19 +573,18 @@ function App() {
       window.clearTimeout(handle)
     }
   }, [
-    cameraOpen,
-    cameraWidth,
-    accountOpen,
-    accountWidth,
     currentUser,
-    inspectorOpen,
-    inspectorWidth,
+    leftActivePanel,
+    leftSidebarOpen,
+    leftSidebarWidth,
     patchProjectPreferencesRequest,
-    previewOpen,
-    previewWidth,
+    panelDock,
+    resolvedLeftActivePanel,
+    resolvedRightActivePanel,
+    rightActivePanel,
+    rightSidebarOpen,
+    rightSidebarWidth,
     selectedProjectId,
-    settingsOpen,
-    settingsWidth,
     theme,
     tree?.project,
   ])
@@ -1800,26 +1915,23 @@ function App() {
     stopPreviewPan,
     viewportRef,
   } = useWorkspaceInteractions({
-    cameraOpen,
+    cameraVisible,
     dragHoverNodeId,
     layout,
     moveDraggedNode,
-    previewOpen,
+    previewVisible,
     previewTransform,
     selectedCameraId,
     selectedNode,
     setCameraDevices,
     setCameraNotice,
     setCameraSelection,
-    setCameraWidth,
     setDragHoverNodeId,
     setDragPreview,
-    setAccountWidth,
-    setInspectorWidth,
+    setLeftSidebarWidth,
     setPreviewTransform,
-    setPreviewWidth,
+    setRightSidebarWidth,
     setSelectedCameraId,
-    setSettingsWidth,
     setTransform,
     transform,
     uploadFiles,
@@ -1904,6 +2016,117 @@ function App() {
     }
   }
 
+  const panelDefinitions = {
+      preview: {
+        id: 'preview',
+        title: 'Preview',
+        icon: <PreviewIcon />,
+        content: (
+          <PreviewPanel
+            beginPreviewPan={beginPreviewPan}
+            busy={busy}
+            copySelectedImage={copySelectedImage}
+            downloadSelectedImage={downloadSelectedImage}
+            previewTransform={previewTransform}
+            previewViewportRef={previewViewportRef}
+            selectedNode={selectedNode}
+            setError={setError}
+            stopPreviewPan={stopPreviewPan}
+          />
+        ),
+      },
+      camera: {
+        id: 'camera',
+        title: 'Camera',
+        icon: <CameraIcon />,
+        content: (
+          <CameraPanel
+            beginCameraSelection={beginCameraSelection}
+            busy={busy}
+            cameraDevices={cameraDevices}
+            cameraNotice={cameraNotice}
+            cameraSelection={cameraSelection}
+            cameraVideoRef={cameraVideoRef}
+            cameraViewportRef={cameraViewportRef}
+            captureFullCameraFrame={captureFullCameraFrame}
+            selectedCameraId={selectedCameraId}
+            selectedNode={selectedNode}
+            setSelectedCameraId={setSelectedCameraId}
+          />
+        ),
+      },
+      inspector: {
+        id: 'inspector',
+        title: 'Inspector',
+        icon: <WrenchIcon />,
+        content: (
+          <InspectorPanel
+            busy={busy}
+            bulkSelectionCount={bulkSelectionCount}
+            editForm={editForm}
+            editTargetNode={editTargetNode}
+            error={error}
+            hasBulkSelection={hasBulkSelection}
+            hasLockedSelectionRoot={hasLockedSelectionRoot}
+            moveNodeTo={moveNodeTo}
+            moveParentId={moveParentId}
+            nameInputRef={nameInputRef}
+            parentOptions={parentOptions}
+            saveNodeDraft={saveNodeDraft}
+            selectedNode={selectedNode}
+            setDeleteNodeOpen={setDeleteNodeOpen}
+            setEditForm={setEditForm}
+            setMoveParentId={setMoveParentId}
+            status={status}
+          />
+        ),
+      },
+      settings: {
+        id: 'settings',
+        title: 'Settings',
+        icon: <GearIcon />,
+        content: (
+          <SettingsPanel
+            collaboratorUsername={collaboratorUsername}
+            addCollaborator={addCollaborator}
+            busy={busy}
+            canManageUsers={Boolean(tree?.project?.canManageUsers)}
+            clearError={() => setError('')}
+            collaborators={tree?.project?.collaborators || []}
+            currentUsername={currentUser?.username || ''}
+            error={error}
+            ownerUsername={tree?.project?.ownerUsername || ''}
+            persistProjectSettings={persistProjectSettings}
+            projectId={tree?.project?.id}
+            projectSettings={projectSettings}
+            resetProjectSettings={resetProjectSettings}
+            removeCollaborator={removeCollaborator}
+            setCollaboratorUsername={setCollaboratorUsername}
+          />
+        ),
+      },
+      account: {
+        id: 'account',
+        title: 'Account',
+        icon: <UserIcon />,
+        content: (
+          <AccountPanel
+            currentUser={currentUser}
+            openAccountDialog={(dialog) => {
+              setError('')
+              setAccountStatus('')
+              setAccountDialog(dialog)
+            }}
+            logoutUser={() => void logoutUser()}
+          />
+        ),
+      },
+    }
+  const leftRailPanels = leftDockedPanelIds.map((panelId) => panelDefinitions[panelId]).filter(Boolean)
+  const rightRailPanels = rightDockedPanelIds.map((panelId) => panelDefinitions[panelId]).filter(Boolean)
+  const activeLeftPanel = resolvedLeftActivePanel ? panelDefinitions[resolvedLeftActivePanel] : null
+  const activeRightPanel = resolvedRightActivePanel ? panelDefinitions[resolvedRightActivePanel] : null
+
   if (!authReady) {
     return <div className="app-shell app-shell--loading" data-theme={theme}>Loading...</div>
   }
@@ -1923,104 +2146,85 @@ function App() {
   }
 
   return (
-    <div className="app-shell" data-theme={theme}>
+    <div
+      className="app-shell"
+      data-theme={theme}
+    >
       <TopBar
         busy={busy}
-        accountOpen={accountOpen}
-        cameraOpen={cameraOpen}
         fileInputRef={fileInputRef}
         fitCanvasToView={fitCanvasToView}
         focusPathMode={focusPathMode}
         historyState={historyState}
         importInputRef={importInputRef}
         importProjectName={importProjectName}
-        inspectorOpen={inspectorOpen}
+        leftActivePanel={resolvedLeftActivePanel}
+        leftSidebarOpen={leftSidebarOpen}
         mobileConnectionCount={mobileConnectionCount}
         openMenu={openMenu}
+        panelDock={panelDock}
+        panelTitles={Object.fromEntries(panelIds.map((panelId) => [panelId, panelDefinitions[panelId]?.title || panelId]))}
         pendingUploadMode={pendingUploadMode}
         pendingUploadParentId={pendingUploadParentId}
-        previewOpen={previewOpen}
         projectName={tree?.project?.name}
         projects={projects}
         redo={redo}
+        rightActivePanel={resolvedRightActivePanel}
+        rightSidebarOpen={rightSidebarOpen}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
         setAllNodesCollapsed={setAllNodesCollapsed}
-        setCameraOpen={setCameraOpen}
         setDeleteNodeOpen={setDeleteNodeOpen}
         setDeleteProjectText={setDeleteProjectText}
         setExportFileName={setExportFileName}
         setFocusPathMode={setFocusPathMode}
         setImportArchiveFile={setImportArchiveFile}
         setImportProjectName={setImportProjectName}
-        setAccountOpen={setAccountOpen}
-        setInspectorOpen={setInspectorOpen}
+        movePanelDock={movePanelDock}
         setOpenMenu={setOpenMenu}
-        setPreviewOpen={setPreviewOpen}
         setSessionDialogOpen={setSessionDialogOpen}
-        setSettingsOpen={setSettingsOpen}
         setShowProjectDialog={setShowProjectDialog}
-        settingsOpen={settingsOpen}
         setTheme={setTheme}
         theme={theme}
+        toggleSidebarPanel={toggleSidebarPanel}
         tree={tree}
         undo={undo}
         uploadFiles={uploadFiles}
+        style={{
+          gridColumn: '1 / -1',
+          gridRow: '1 / 2',
+        }}
       />
-
       <main
         className="main-layout"
         style={{
-          gridTemplateColumns: [
-            previewOpen ? `${previewWidth}px 3px` : '',
-            cameraOpen ? `${cameraWidth}px 3px` : '',
-            'minmax(0, 1fr)',
-            inspectorOpen ? `3px ${inspectorWidth}px` : '',
-            settingsOpen ? `3px ${settingsWidth}px` : '',
-            accountOpen ? `3px ${accountWidth}px` : '',
-          ]
-            .filter(Boolean)
-            .join(' '),
+          gridColumn: '1 / -1',
+          gridRow: '2 / 3',
+          gridTemplateColumns: `${SIDEBAR_RAIL_WIDTH}px ${leftSidebarOpen ? `${leftSidebarWidth}px` : '0px'} minmax(0, 1fr) ${rightSidebarOpen ? `${rightSidebarWidth}px` : '0px'} ${SIDEBAR_RAIL_WIDTH}px`,
         }}
       >
-        {previewOpen ? (
-          <PreviewPanel
-            beginPreviewPan={beginPreviewPan}
-            busy={busy}
-            copySelectedImage={copySelectedImage}
-            downloadSelectedImage={downloadSelectedImage}
-            onResizeStart={(event) => {
-              resizeRef.current = { pointerId: event.pointerId, target: 'preview' }
-              document.body.classList.add('is-resizing')
-              event.preventDefault()
-            }}
-            previewTransform={previewTransform}
-            previewViewportRef={previewViewportRef}
-            selectedNode={selectedNode}
-            setError={setError}
-            stopPreviewPan={stopPreviewPan}
-          />
-        ) : null}
-        {cameraOpen ? (
-          <CameraPanel
-            beginCameraSelection={beginCameraSelection}
-            busy={busy}
-            cameraDevices={cameraDevices}
-            cameraNotice={cameraNotice}
-            cameraSelection={cameraSelection}
-            cameraVideoRef={cameraVideoRef}
-            cameraViewportRef={cameraViewportRef}
-            captureFullCameraFrame={captureFullCameraFrame}
-            onResizeStart={(event) => {
-              resizeRef.current = { pointerId: event.pointerId, target: 'camera' }
-              document.body.classList.add('is-resizing')
-              event.preventDefault()
-            }}
-            selectedCameraId={selectedCameraId}
-            selectedNode={selectedNode}
-            setSelectedCameraId={setSelectedCameraId}
-          />
-        ) : null}
+        <SidebarRail
+          activePanelId={resolvedLeftActivePanel}
+          dragOver={draggingPanelId != null && panelDock[draggingPanelId] !== 'left'}
+          onDropPanel={handleDropPanel}
+          onEndDrag={() => setDraggingPanelId(null)}
+          onStartDrag={setDraggingPanelId}
+          open={leftSidebarOpen}
+          panels={leftRailPanels}
+          side="left"
+          togglePanel={toggleSidebarPanel}
+        />
+        <DockedSidebar
+          activePanel={activeLeftPanel}
+          onClose={() => setLeftSidebarOpen(false)}
+          onResizeStart={(event) => {
+            resizeRef.current = { pointerId: event.pointerId, target: 'left' }
+            document.body.classList.add('is-resizing')
+            event.preventDefault()
+          }}
+          side="left"
+          visible={leftSidebarOpen && Boolean(activeLeftPanel)}
+        />
         <CanvasWorkspace
           beginNodeDrag={beginNodeDrag}
           beginPan={beginPan}
@@ -2062,73 +2266,28 @@ function App() {
           uploadFiles={uploadFiles}
           viewportRef={viewportRef}
         />
-
-        {inspectorOpen ? (
-          <InspectorPanel
-            busy={busy}
-            bulkSelectionCount={bulkSelectionCount}
-            editForm={editForm}
-            editTargetNode={editTargetNode}
-            error={error}
-            hasBulkSelection={hasBulkSelection}
-            hasLockedSelectionRoot={hasLockedSelectionRoot}
-            moveNodeTo={moveNodeTo}
-            moveParentId={moveParentId}
-            nameInputRef={nameInputRef}
-            onResizeStart={(event) => {
-              resizeRef.current = { pointerId: event.pointerId, target: 'inspector' }
-              document.body.classList.add('is-resizing')
-              event.preventDefault()
-            }}
-            parentOptions={parentOptions}
-            saveNodeDraft={saveNodeDraft}
-            selectedNode={selectedNode}
-            setDeleteNodeOpen={setDeleteNodeOpen}
-            setEditForm={setEditForm}
-            setMoveParentId={setMoveParentId}
-            status={status}
-          />
-        ) : null}
-        {settingsOpen ? (
-          <SettingsPanel
-            collaboratorUsername={collaboratorUsername}
-            addCollaborator={addCollaborator}
-            busy={busy}
-            canManageUsers={Boolean(tree?.project?.canManageUsers)}
-            clearError={() => setError('')}
-            collaborators={tree?.project?.collaborators || []}
-            currentUsername={currentUser?.username || ''}
-            error={error}
-            onResizeStart={(event) => {
-              resizeRef.current = { pointerId: event.pointerId, target: 'settings' }
-              document.body.classList.add('is-resizing')
-              event.preventDefault()
-            }}
-            ownerUsername={tree?.project?.ownerUsername || ''}
-            persistProjectSettings={persistProjectSettings}
-            projectId={tree?.project?.id}
-            projectSettings={projectSettings}
-            resetProjectSettings={resetProjectSettings}
-            removeCollaborator={removeCollaborator}
-            setCollaboratorUsername={setCollaboratorUsername}
-          />
-        ) : null}
-        {accountOpen ? (
-          <AccountPanel
-            currentUser={currentUser}
-            openAccountDialog={(dialog) => {
-              setError('')
-              setAccountStatus('')
-              setAccountDialog(dialog)
-            }}
-            logoutUser={() => void logoutUser()}
-            onResizeStart={(event) => {
-              resizeRef.current = { pointerId: event.pointerId, target: 'account' }
-              document.body.classList.add('is-resizing')
-              event.preventDefault()
-            }}
-          />
-        ) : null}
+        <DockedSidebar
+          activePanel={activeRightPanel}
+          onClose={() => setRightSidebarOpen(false)}
+          onResizeStart={(event) => {
+            resizeRef.current = { pointerId: event.pointerId, target: 'right' }
+            document.body.classList.add('is-resizing')
+            event.preventDefault()
+          }}
+          side="right"
+          visible={rightSidebarOpen && Boolean(activeRightPanel)}
+        />
+        <SidebarRail
+          activePanelId={resolvedRightActivePanel}
+          dragOver={draggingPanelId != null && panelDock[draggingPanelId] !== 'right'}
+          onDropPanel={handleDropPanel}
+          onEndDrag={() => setDraggingPanelId(null)}
+          onStartDrag={setDraggingPanelId}
+          open={rightSidebarOpen}
+          panels={rightRailPanels}
+          side="right"
+          togglePanel={toggleSidebarPanel}
+        />
       </main>
 
       <AppDialogs

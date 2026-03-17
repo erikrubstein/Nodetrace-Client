@@ -1,31 +1,28 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getContainedRect } from '../lib/image'
-import { MIN_INSPECTOR_WIDTH, NODE_HEIGHT, NODE_WIDTH } from '../lib/constants'
+import { MIN_INSPECTOR_WIDTH, NODE_HEIGHT, NODE_WIDTH, SIDEBAR_RAIL_WIDTH } from '../lib/constants'
 
 export default function useWorkspaceInteractions({
-  cameraOpen,
+  cameraVisible,
   dragHoverNodeId,
   layout,
   moveDraggedNode,
+  previewVisible,
+  previewTransform,
   selectedCameraId,
   selectedNode,
-  setAccountWidth,
   setCameraDevices,
   setCameraNotice,
   setCameraSelection,
-  setCameraWidth,
   setDragHoverNodeId,
   setDragPreview,
-  setInspectorWidth,
+  setLeftSidebarWidth,
   setPreviewTransform,
-  setPreviewWidth,
+  setRightSidebarWidth,
   setSelectedCameraId,
-  setSettingsWidth,
   setTransform,
   transform,
-  previewOpen,
   uploadFiles,
-  previewTransform,
 }) {
   const viewportRef = useRef(null)
   const previewViewportRef = useRef(null)
@@ -143,7 +140,7 @@ export default function useWorkspaceInteractions({
   }
 
   function beginCameraSelection(event) {
-    if (event.button !== 0 || !cameraOpen || !cameraViewportRef.current || !cameraVideoRef.current) {
+    if (event.button !== 0 || !cameraVisible || !cameraViewportRef.current || !cameraVideoRef.current) {
       return
     }
 
@@ -341,26 +338,14 @@ export default function useWorkspaceInteractions({
         return
       }
 
-      if (resizeRef.current.target === 'preview') {
-        const nextWidth = Math.max(MIN_INSPECTOR_WIDTH, event.clientX)
-        setPreviewWidth(nextWidth)
+      if (resizeRef.current.target === 'left') {
+        const nextWidth = Math.max(MIN_INSPECTOR_WIDTH, event.clientX - SIDEBAR_RAIL_WIDTH)
+        setLeftSidebarWidth(nextWidth)
         return
       }
 
-      if (resizeRef.current.target === 'camera') {
-        const nextWidth = Math.max(MIN_INSPECTOR_WIDTH, event.clientX)
-        setCameraWidth(nextWidth)
-        return
-      }
-
-      const nextWidth = Math.max(MIN_INSPECTOR_WIDTH, window.innerWidth - event.clientX)
-      if (resizeRef.current.target === 'settings') {
-        setSettingsWidth(nextWidth)
-      } else if (resizeRef.current.target === 'account') {
-        setAccountWidth(nextWidth)
-      } else {
-        setInspectorWidth(nextWidth)
-      }
+      const nextWidth = Math.max(MIN_INSPECTOR_WIDTH, window.innerWidth - event.clientX - SIDEBAR_RAIL_WIDTH)
+      setRightSidebarWidth(nextWidth)
     }
 
     function handlePointerUp(event) {
@@ -397,14 +382,11 @@ export default function useWorkspaceInteractions({
     layout.nodes,
     moveDraggedNode,
     setCameraSelection,
-    setCameraWidth,
     setDragHoverNodeId,
     setDragPreview,
-    setAccountWidth,
-    setInspectorWidth,
+    setLeftSidebarWidth,
     setPreviewTransform,
-    setPreviewWidth,
-    setSettingsWidth,
+    setRightSidebarWidth,
     transform.scale,
     transform.x,
     transform.y,
@@ -447,13 +429,17 @@ export default function useWorkspaceInteractions({
 
   useEffect(() => {
     const element = previewViewportRef.current
-    if (!element) {
+    if (!element || !previewVisible) {
       return undefined
     }
 
     const wheelListener = (event) => {
       event.preventDefault()
-      const rect = element.getBoundingClientRect()
+      const rect = previewViewportRef.current?.getBoundingClientRect()
+      if (!rect) {
+        return
+      }
+
       const cursorX = event.clientX - rect.left
       const cursorY = event.clientY - rect.top
       const factor = event.deltaY < 0 ? 1.08 : 0.92
@@ -474,13 +460,13 @@ export default function useWorkspaceInteractions({
     return () => {
       element.removeEventListener('wheel', wheelListener)
     }
-  }, [previewOpen, selectedNode?.imageUrl, setPreviewTransform])
+  }, [previewVisible, selectedNode?.imageUrl, setPreviewTransform])
 
   useEffect(() => {
     let cancelled = false
 
     async function startCamera() {
-      if (!cameraOpen) {
+      if (!cameraVisible) {
         setCameraSelection(null)
         setCameraNotice('')
         return
@@ -543,7 +529,7 @@ export default function useWorkspaceInteractions({
         cameraStreamRef.current = null
       }
     }
-  }, [cameraOpen, selectedCameraId, setCameraDevices, setCameraNotice, setCameraSelection, setSelectedCameraId])
+  }, [cameraVisible, selectedCameraId, setCameraDevices, setCameraNotice, setCameraSelection, setSelectedCameraId])
 
   return {
     beginCameraSelection,

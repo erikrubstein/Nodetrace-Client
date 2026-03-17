@@ -1,8 +1,18 @@
 export const NODE_WIDTH = 112
 export const NODE_HEIGHT = 112
 export const MIN_INSPECTOR_WIDTH = 240
+export const SIDEBAR_RAIL_WIDTH = 38
 export const VARIANT_VISUAL_SIZE = 78
 export const VARIANT_VISUAL_OFFSET = Math.round((NODE_WIDTH - VARIANT_VISUAL_SIZE) / 2)
+
+export const panelIds = ['preview', 'camera', 'inspector', 'settings', 'account']
+export const defaultPanelDock = {
+  preview: 'left',
+  camera: 'left',
+  inspector: 'right',
+  settings: 'right',
+  account: 'right',
+}
 
 export const defaultProjectSettings = {
   orientation: 'horizontal',
@@ -14,15 +24,12 @@ export const defaultProjectSettings = {
 
 export const defaultUserProjectUi = {
   theme: 'dark',
-  previewOpen: false,
-  inspectorOpen: true,
-  settingsOpen: false,
-  cameraOpen: false,
-  accountOpen: false,
-  previewWidth: 340,
-  inspectorWidth: 320,
-  settingsWidth: 280,
-  cameraWidth: 360,
-  accountWidth: 300,
+  leftSidebarOpen: false,
+  rightSidebarOpen: true,
+  leftSidebarWidth: 340,
+  rightSidebarWidth: 320,
+  leftActivePanel: 'preview',
+  rightActivePanel: 'inspector',
+  panelDock: defaultPanelDock,
 }
 

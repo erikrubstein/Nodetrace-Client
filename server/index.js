@@ -43,16 +43,19 @@ const defaultProjectSettings = {
 
 const defaultUserProjectUi = {
   theme: 'dark',
-  previewOpen: false,
-  inspectorOpen: true,
-  settingsOpen: false,
-  cameraOpen: false,
-  accountOpen: false,
-  previewWidth: 340,
-  inspectorWidth: 320,
-  settingsWidth: 280,
-  cameraWidth: 360,
-  accountWidth: 300,
+  leftSidebarOpen: false,
+  rightSidebarOpen: true,
+  leftSidebarWidth: 340,
+  rightSidebarWidth: 320,
+  leftActivePanel: 'preview',
+  rightActivePanel: 'inspector',
+  panelDock: {
+    preview: 'left',
+    camera: 'left',
+    inspector: 'right',
+    settings: 'right',
+    account: 'right',
+  },
 }
 
 function generateShortId() {
@@ -967,16 +970,51 @@ function normalizeUserProjectUi(uiInput) {
   }
 
   ui.theme = ui.theme === 'light' ? 'light' : 'dark'
-  ui.previewOpen = Boolean(ui.previewOpen)
-  ui.inspectorOpen = Boolean(ui.inspectorOpen)
-  ui.settingsOpen = Boolean(ui.settingsOpen)
-  ui.cameraOpen = Boolean(ui.cameraOpen)
-  ui.accountOpen = Boolean(ui.accountOpen)
-  ui.previewWidth = Math.max(220, Math.min(720, Number(ui.previewWidth) || defaultUserProjectUi.previewWidth))
-  ui.inspectorWidth = Math.max(220, Math.min(720, Number(ui.inspectorWidth) || defaultUserProjectUi.inspectorWidth))
-  ui.settingsWidth = Math.max(220, Math.min(720, Number(ui.settingsWidth) || defaultUserProjectUi.settingsWidth))
-  ui.cameraWidth = Math.max(220, Math.min(720, Number(ui.cameraWidth) || defaultUserProjectUi.cameraWidth))
-  ui.accountWidth = Math.max(220, Math.min(720, Number(ui.accountWidth) || defaultUserProjectUi.accountWidth))
+  const panelDock = {
+    ...defaultUserProjectUi.panelDock,
+    ...(ui.panelDock || {}),
+  }
+  for (const panelId of Object.keys(defaultUserProjectUi.panelDock)) {
+    panelDock[panelId] = panelDock[panelId] === 'right' ? 'right' : 'left'
+  }
+  ui.panelDock = panelDock
+
+  if ('previewOpen' in ui || 'cameraOpen' in ui || 'inspectorOpen' in ui || 'settingsOpen' in ui || 'accountOpen' in ui) {
+    const oldLeftPanels = ['camera', 'preview'].filter((panelId) => Boolean(ui[`${panelId}Open`]))
+    const oldRightPanels = ['account', 'settings', 'inspector'].filter((panelId) => Boolean(ui[`${panelId}Open`]))
+    ui.leftSidebarOpen = oldLeftPanels.length > 0
+    ui.rightSidebarOpen = oldRightPanels.length > 0
+    ui.leftActivePanel = oldLeftPanels[0] || defaultUserProjectUi.leftActivePanel
+    ui.rightActivePanel = oldRightPanels[0] || defaultUserProjectUi.rightActivePanel
+    ui.leftSidebarWidth = Math.max(
+      220,
+      Math.min(
+        720,
+        Number(ui.previewWidth || ui.cameraWidth || ui.leftSidebarWidth) || defaultUserProjectUi.leftSidebarWidth,
+      ),
+    )
+    ui.rightSidebarWidth = Math.max(
+      220,
+      Math.min(
+        720,
+        Number(ui.inspectorWidth || ui.settingsWidth || ui.accountWidth || ui.rightSidebarWidth) ||
+          defaultUserProjectUi.rightSidebarWidth,
+      ),
+    )
+  }
+
+  ui.leftSidebarOpen = Boolean(ui.leftSidebarOpen)
+  ui.rightSidebarOpen = Boolean(ui.rightSidebarOpen)
+  ui.leftSidebarWidth = Math.max(220, Math.min(720, Number(ui.leftSidebarWidth) || defaultUserProjectUi.leftSidebarWidth))
+  ui.rightSidebarWidth = Math.max(
+    220,
+    Math.min(720, Number(ui.rightSidebarWidth) || defaultUserProjectUi.rightSidebarWidth),
+  )
+
+  const leftPanels = Object.keys(panelDock).filter((panelId) => panelDock[panelId] === 'left')
+  const rightPanels = Object.keys(panelDock).filter((panelId) => panelDock[panelId] === 'right')
+  ui.leftActivePanel = leftPanels.includes(ui.leftActivePanel) ? ui.leftActivePanel : leftPanels[0] || null
+  ui.rightActivePanel = rightPanels.includes(ui.rightActivePanel) ? ui.rightActivePanel : rightPanels[0] || null
 
   return ui
 }
