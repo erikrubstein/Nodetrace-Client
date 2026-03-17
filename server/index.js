@@ -183,7 +183,6 @@ function createTextSchema() {
       name TEXT NOT NULL,
       notes TEXT DEFAULT '',
       tags_json TEXT DEFAULT '[]',
-      collapsed INTEGER DEFAULT 0,
       image_path TEXT,
       preview_path TEXT,
       original_filename TEXT,
@@ -230,9 +229,6 @@ function ensureTextIdSchema() {
   }
   if (!nodeColumns.some((column) => column.name === 'preview_path')) {
     db.exec(`ALTER TABLE nodes ADD COLUMN preview_path TEXT`)
-  }
-  if (!nodeColumns.some((column) => column.name === 'collapsed')) {
-    db.exec(`ALTER TABLE nodes ADD COLUMN collapsed INTEGER DEFAULT 0`)
   }
   if (!nodeColumns.some((column) => column.name === 'variant_of_id')) {
     db.exec(`ALTER TABLE nodes ADD COLUMN variant_of_id INTEGER`)
@@ -282,7 +278,6 @@ function ensureTextIdSchema() {
         name TEXT NOT NULL,
         notes TEXT DEFAULT '',
         tags_json TEXT DEFAULT '[]',
-        collapsed INTEGER DEFAULT 0,
         image_path TEXT,
         preview_path TEXT,
         original_filename TEXT,
@@ -300,10 +295,10 @@ function ensureTextIdSchema() {
     `)
     const insertNodeRow = db.prepare(`
       INSERT INTO nodes_new (
-        id, project_id, parent_id, variant_of_id, type, name, notes, tags_json, collapsed,
+        id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
         image_path, preview_path, original_filename, created_at, updated_at
       ) VALUES (
-        @id, @project_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json, @collapsed,
+        @id, @project_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json,
         @image_path, @preview_path, @original_filename, @created_at, @updated_at
       )
     `)
@@ -329,7 +324,6 @@ function ensureTextIdSchema() {
         name: row.name,
         notes: row.notes || '',
         tags_json: row.tags_json || '[]',
-        collapsed: row.collapsed ? 1 : 0,
         image_path: row.image_path ? rewriteUploadPathProjectFolder(row.image_path, projectIdMap.get(row.project_id)) : null,
         preview_path: row.preview_path ? rewriteUploadPathProjectFolder(row.preview_path, projectIdMap.get(row.project_id)) : null,
         original_filename: row.original_filename || null,
@@ -355,6 +349,57 @@ function ensureTextIdSchema() {
 }
 
 ensureTextIdSchema()
+
+function ensureCollapseSchemaCleanup() {
+  const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  if (!nodeColumns.some((column) => column.name === 'collapsed')) {
+    return
+  }
+
+  const migrate = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE nodes_clean (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        parent_id TEXT,
+        variant_of_id TEXT,
+        type TEXT NOT NULL CHECK(type IN ('folder', 'photo')),
+        name TEXT NOT NULL,
+        notes TEXT DEFAULT '',
+        tags_json TEXT DEFAULT '[]',
+        image_path TEXT,
+        preview_path TEXT,
+        original_filename TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id),
+        FOREIGN KEY(parent_id) REFERENCES nodes_clean(id),
+        FOREIGN KEY(variant_of_id) REFERENCES nodes_clean(id)
+      );
+
+      INSERT INTO nodes_clean (
+        id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
+        image_path, preview_path, original_filename, created_at, updated_at
+      )
+      SELECT
+        id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
+        image_path, preview_path, original_filename, created_at, updated_at
+      FROM nodes;
+
+      DROP TABLE nodes;
+      ALTER TABLE nodes_clean RENAME TO nodes;
+    `)
+  })
+
+  db.exec(`PRAGMA foreign_keys = OFF`)
+  try {
+    migrate()
+  } finally {
+    db.exec(`PRAGMA foreign_keys = ON`)
+  }
+}
+
+ensureCollapseSchemaCleanup()
 
 function ensureAuthSchema() {
   const projectColumns = db.prepare(`PRAGMA table_info(projects)`).all()
@@ -401,6 +446,19 @@ function ensureAuthSchema() {
       PRIMARY KEY (user_id, project_id),
       FOREIGN KEY(user_id) REFERENCES users(id),
       FOREIGN KEY(project_id) REFERENCES projects(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_node_collapse_preferences (
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      collapsed INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, node_id),
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(project_id) REFERENCES projects(id),
+      FOREIGN KEY(node_id) REFERENCES nodes(id)
     );
   `)
 }
@@ -553,6 +611,37 @@ const upsertUserProjectPreference = db.prepare(`
     ui_json = excluded.ui_json,
     updated_at = excluded.updated_at
 `)
+const listUserNodeCollapsePrefsByProject = db.prepare(`
+  SELECT node_id, collapsed
+  FROM user_node_collapse_preferences
+  WHERE user_id = ?
+    AND project_id = ?
+`)
+const getUserNodeCollapsePreference = db.prepare(`
+  SELECT collapsed
+  FROM user_node_collapse_preferences
+  WHERE user_id = ?
+    AND node_id = ?
+`)
+const upsertUserNodeCollapsePreference = db.prepare(`
+  INSERT INTO user_node_collapse_preferences (user_id, project_id, node_id, collapsed, created_at, updated_at)
+  VALUES (@user_id, @project_id, @node_id, @collapsed, @created_at, @updated_at)
+  ON CONFLICT(user_id, node_id) DO UPDATE SET
+    collapsed = excluded.collapsed,
+    updated_at = excluded.updated_at
+`)
+const deleteNodeCollapsePrefsByNodeStmt = db.prepare(`
+  DELETE FROM user_node_collapse_preferences
+  WHERE node_id = ?
+`)
+const deleteNodeCollapsePrefsByProjectStmt = db.prepare(`
+  DELETE FROM user_node_collapse_preferences
+  WHERE project_id = ?
+`)
+const deleteNodeCollapsePrefsByUserStmt = db.prepare(`
+  DELETE FROM user_node_collapse_preferences
+  WHERE user_id = ?
+`)
 const getProjectNodes = db.prepare(`
   SELECT *
   FROM nodes
@@ -564,6 +653,12 @@ const deleteNodesByProjectStmt = db.prepare(`DELETE FROM nodes WHERE project_id 
 const getNode = db.prepare(`SELECT * FROM nodes WHERE id = ?`)
 const getNodesByProject = db.prepare(`SELECT * FROM nodes WHERE project_id = ?`)
 const listNodeNamesByProject = db.prepare(`SELECT name FROM nodes WHERE project_id = ?`)
+const hasChildNodeStmt = db.prepare(`
+  SELECT 1
+  FROM nodes
+  WHERE parent_id = ?
+  LIMIT 1
+`)
 const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ? OR variant_of_id = ?`)
 const listCollapsibleNodeIdsByProject = db.prepare(`
   SELECT DISTINCT parent.id
@@ -596,7 +691,6 @@ const updateNodeStmt = db.prepare(`
   SET name = @name,
       notes = @notes,
       tags_json = @tags_json,
-      collapsed = COALESCE(@collapsed, collapsed),
       updated_at = @updated_at
   WHERE id = @id
 `)
@@ -604,12 +698,6 @@ const updateNodeParentStmt = db.prepare(`
   UPDATE nodes
   SET parent_id = @parent_id,
       variant_of_id = @variant_of_id,
-      updated_at = @updated_at
-  WHERE id = @id
-`)
-const updateNodeCollapsedStmt = db.prepare(`
-  UPDATE nodes
-  SET collapsed = @collapsed,
       updated_at = @updated_at
   WHERE id = @id
 `)
@@ -672,14 +760,13 @@ const createNode = db.transaction((payload) => {
   return nodeId
 })
 
-const updateNode = db.transaction(({ id, project_id, name, notes, tags, collapsed }) => {
+const updateNode = db.transaction(({ id, project_id, name, notes, tags }) => {
   const now = new Date().toISOString()
   updateNodeStmt.run({
     id,
     name,
     notes,
     tags_json: JSON.stringify(tags),
-    collapsed,
     updated_at: now,
   })
   updateProjectTimestamp.run(now, project_id)
@@ -696,21 +783,23 @@ const moveNode = db.transaction(({ id, project_id, parent_id, variant_of_id }) =
   updateProjectTimestamp.run(now, project_id)
 })
 
-const setProjectCollapsedState = db.transaction(({ projectId, collapsed }) => {
+const setProjectCollapsedState = db.transaction(({ userId, projectId, collapsed }) => {
   const now = new Date().toISOString()
   const nodeIds = listCollapsibleNodeIdsByProject.all(projectId).map((row) => row.id)
   for (const nodeId of nodeIds) {
-    updateNodeCollapsedStmt.run({
-      id: nodeId,
+    upsertUserNodeCollapsePreference.run({
+      user_id: userId,
+      project_id: projectId,
+      node_id: nodeId,
       collapsed,
+      created_at: now,
       updated_at: now,
     })
   }
-  updateProjectTimestamp.run(now, projectId)
   return nodeIds
 })
 
-const setNodeCollapsedStateRecursive = db.transaction(({ nodeId, projectId, collapsed }) => {
+const setNodeCollapsedStateRecursive = db.transaction(({ userId, nodeId, projectId, collapsed }) => {
   const now = new Date().toISOString()
   const stack = [nodeId]
   const updatedIds = []
@@ -718,9 +807,12 @@ const setNodeCollapsedStateRecursive = db.transaction(({ nodeId, projectId, coll
   while (stack.length > 0) {
     const currentId = stack.pop()
     updatedIds.push(currentId)
-    updateNodeCollapsedStmt.run({
-      id: currentId,
+    upsertUserNodeCollapsePreference.run({
+      user_id: userId,
+      project_id: projectId,
+      node_id: currentId,
       collapsed,
+      created_at: now,
       updated_at: now,
     })
 
@@ -734,7 +826,6 @@ const setNodeCollapsedStateRecursive = db.transaction(({ nodeId, projectId, coll
     }
   }
 
-  updateProjectTimestamp.run(now, projectId)
   return updatedIds
 })
 
@@ -763,6 +854,7 @@ const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
       }
     }
 
+    deleteNodeCollapsePrefsByNodeStmt.run(current.id)
     deleteNodeStmt.run(current.id)
   }
 
@@ -787,6 +879,7 @@ const deleteProjectRecursive = db.transaction((projectId) => {
   }
 
   deleteNodesByProjectStmt.run(projectId)
+  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
   deleteProjectCollaboratorsStmt.run(projectId)
   deleteProjectStmt.run(projectId)
 
@@ -814,6 +907,7 @@ const clearProjectContents = db.transaction((projectId) => {
   }
 
   deleteNodesByProjectStmt.run(projectId)
+  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
 
   const projectUploadDir = getProjectUploadDir(projectId)
   if (fs.existsSync(projectUploadDir)) {
@@ -951,7 +1045,7 @@ function serializeProject(row, userId) {
   }
 }
 
-function serializeNode(row) {
+function serializeNode(row, _collapsedMap = null) {
   return {
     id: row.id,
     parent_id: row.parent_id,
@@ -963,7 +1057,7 @@ function serializeNode(row) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: JSON.parse(row.tags_json || '[]'),
-    collapsed: Boolean(row.collapsed),
+    collapsed: false,
     isVariant: row.variant_of_id != null,
     hasImage: row.type === 'photo' && Boolean(row.image_path),
     imageUrl: row.image_path ? `/uploads/${row.image_path.replaceAll('\\', '/')}` : null,
@@ -971,8 +1065,28 @@ function serializeNode(row) {
   }
 }
 
+function serializeNodeForUser(row, userId) {
+  if (!row) {
+    return null
+  }
+  const node = serializeNode(row)
+  if (row.variant_of_id != null || !hasChildNodeStmt.get(row.id)) {
+    return node
+  }
+  const preference = userId ? getUserNodeCollapsePreference.get(userId, row.id) : null
+  node.collapsed = preference == null ? true : Boolean(preference.collapsed)
+  return node
+}
+
 function buildTree(project, rows, userId = null) {
-  const nodes = rows.map((row) => serializeNode(row))
+  const collapsedMap = userId
+    ? new Map(
+        listUserNodeCollapsePrefsByProject
+          .all(userId, project.id)
+          .map((row) => [row.node_id, Boolean(row.collapsed)]),
+      )
+    : null
+  const nodes = rows.map((row) => serializeNode(row, collapsedMap))
   const byId = new Map(nodes.map((node) => [node.id, { ...node, children: [], variants: [] }]))
   let root = null
 
@@ -994,6 +1108,15 @@ function buildTree(project, rows, userId = null) {
     if (parent) {
       parent.children.push(node)
     }
+  }
+
+  for (const node of byId.values()) {
+    if (node.variant_of_id != null || (node.children?.length || 0) === 0) {
+      node.collapsed = false
+      continue
+    }
+    const collapsePreference = collapsedMap?.get(node.id)
+    node.collapsed = collapsePreference == null ? true : Boolean(collapsePreference)
   }
 
   return {
@@ -1323,7 +1446,7 @@ function writeProjectManifest(project, rows, workDir) {
   fs.mkdirSync(filesDir, { recursive: true })
 
   const manifest = {
-    version: 1,
+    version: 2,
     exported_at: new Date().toISOString(),
     project: {
       name: project.name,
@@ -1353,7 +1476,6 @@ function writeProjectManifest(project, rows, workDir) {
         name: row.name,
         notes: row.notes || '',
         tags: JSON.parse(row.tags_json || '[]'),
-        collapsed: Boolean(row.collapsed),
         original_filename: row.original_filename,
         image_file: imageFile,
         preview_file: previewFile,
@@ -1413,17 +1535,6 @@ function restoreProjectFromArchive(projectId, archivePath) {
       updated_at: now,
     })
 
-    if (rootRow.collapsed) {
-      updateNode({
-        id: rootId,
-        project_id: projectId,
-        name: rootRow.name || 'Root',
-        notes: rootRow.notes || '',
-        tags: Array.isArray(rootRow.tags) ? rootRow.tags : [],
-        collapsed: 1,
-      })
-    }
-
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     const oldToNew = new Map([[rootManifestId, rootId]])
     const pendingRows = importedRows.filter((row) => String(row.id ?? row.old_id) !== rootManifestId)
@@ -1474,17 +1585,6 @@ function restoreProjectFromArchive(projectId, archivePath) {
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
         })
-
-        if (row.collapsed) {
-          updateNode({
-            id: nodeId,
-            project_id: projectId,
-            name: row.name || '',
-            notes: row.notes || '',
-            tags: Array.isArray(row.tags) ? row.tags : [],
-            collapsed: 1,
-          })
-        }
 
         oldToNew.set(rowId, nodeId)
         pendingRows.splice(index, 1)
@@ -1582,17 +1682,6 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
         original_filename: row.original_filename || null,
       })
 
-      if (row.collapsed) {
-        updateNode({
-          id: nodeId,
-          project_id: projectId,
-          name: row.name || '',
-          notes: row.notes || '',
-          tags: Array.isArray(row.tags) ? row.tags : [],
-          collapsed: 1,
-        })
-      }
-
       oldToNew.set(rowId, nodeId)
       pendingRows.splice(index, 1)
       importedCount += 1
@@ -1605,7 +1694,7 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
     }
   }
 
-  return serializeNode(assertNode(oldToNew.get(manifestRootId)))
+  return serializeNodeForUser(assertNode(oldToNew.get(manifestRootId)), null)
 }
 
 function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId = null) {
@@ -1655,7 +1744,6 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
       name: rootRow.name || createdRoot.name,
       notes: rootRow.notes || '',
       tags: Array.isArray(rootRow.tags) ? rootRow.tags : [],
-      collapsed: rootRow.collapsed ? 1 : 0,
     })
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     oldToNew.set(rootManifestId, createdRoot.id)
@@ -1711,17 +1799,6 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
         })
-
-        if (row.collapsed) {
-          updateNode({
-            id: nodeId,
-            project_id: projectId,
-            name: row.name || '',
-            notes: row.notes || '',
-            tags: Array.isArray(row.tags) ? row.tags : [],
-            collapsed: 1,
-          })
-        }
 
         oldToNew.set(String(row.id ?? row.old_id), nodeId)
         pendingRows.splice(index, 1)
@@ -1996,6 +2073,7 @@ app.delete('/api/account', requireAuth, (req, res, next) => {
     const deleteAccountTx = db.transaction(() => {
       const sessions = listSessionsByUserStmt.all(req.user.id)
       deletePreferencesByUserStmt.run(req.user.id)
+      deleteNodeCollapsePrefsByUserStmt.run(req.user.id)
       deleteCollaboratorsByUserStmt.run(req.user.id, req.user.id)
       deleteSessionsByUserStmt.run(req.user.id)
       deleteUserStmt.run(req.user.id)
@@ -2369,7 +2447,7 @@ app.post('/api/projects/:id/collapse-all', requireAuth, (req, res, next) => {
     const project = assertProjectAccess(req.params.id, req.user.id)
     const projectId = project.id
     const collapsed = Boolean(req.body?.collapsed)
-    const updatedIds = setProjectCollapsedState({ projectId, collapsed: collapsed ? 1 : 0 })
+    const updatedIds = setProjectCollapsedState({ userId: req.user.id, projectId, collapsed: collapsed ? 1 : 0 })
     broadcastProjectEvent(projectId)
     res.json({ updatedIds, collapsed })
   } catch (error) {
@@ -2565,7 +2643,7 @@ app.post('/api/projects/:id/folders', requireAuth, (req, res, next) => {
     })
 
     broadcastProjectEvent(projectId)
-    res.status(201).json(serializeNode(assertNode(nodeId)))
+    res.status(201).json(serializeNodeForUser(assertNode(nodeId), req.user.id))
   } catch (error) {
     next(error)
   }
@@ -2638,7 +2716,7 @@ app.post('/api/projects/:id/photos', requireAuth, upload.fields([{ name: 'file',
     })
 
     broadcastProjectEvent(projectId)
-    res.status(201).json(serializeNode(assertNode(nodeId)))
+    res.status(201).json(serializeNodeForUser(assertNode(nodeId), req.user.id))
   } catch (error) {
     next(error)
   }
@@ -2697,7 +2775,7 @@ app.post('/api/sessions/:sessionId/photos', upload.fields([{ name: 'file', maxCo
     })
 
     broadcastProjectEvent(projectId)
-    res.status(201).json(serializeNode(assertNode(nodeId)))
+    res.status(201).json(serializeNodeForUser(assertNode(nodeId), null))
   } catch (error) {
     next(error)
   }
@@ -2726,11 +2804,10 @@ app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
       name: String(req.body.name || '').trim() || node.name,
       notes: String(req.body.notes || '').trim(),
       tags: parseTags(req.body.tags),
-      collapsed: typeof req.body.collapsed === 'boolean' ? (req.body.collapsed ? 1 : 0) : null,
     })
 
     broadcastProjectEvent(node.project_id)
-    res.json(serializeNode(assertNode(node.id)))
+    res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
   } catch (error) {
     next(error)
   }
@@ -2741,13 +2818,14 @@ app.post('/api/nodes/:id/collapse', requireAuth, (req, res, next) => {
     const node = assertNodeAccess(req.params.id, req.user.id)
     const collapsed = req.body.collapsed ? 1 : 0
     const updatedIds = setNodeCollapsedStateRecursive({
+      userId: req.user.id,
       nodeId: node.id,
       projectId: node.project_id,
       collapsed,
     })
 
     broadcastProjectEvent(node.project_id)
-    res.json({ node: serializeNode(assertNode(node.id)), updatedIds })
+    res.json({ node: serializeNodeForUser(assertNode(node.id), req.user.id), updatedIds })
   } catch (error) {
     next(error)
   }
@@ -2793,7 +2871,7 @@ app.post('/api/nodes/:id/move', requireAuth, (req, res, next) => {
     }
 
     broadcastProjectEvent(node.project_id)
-    res.json(serializeNode(assertNode(node.id)))
+    res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
   } catch (error) {
     next(error)
   }

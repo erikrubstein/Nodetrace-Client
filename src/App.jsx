@@ -609,7 +609,6 @@ function App() {
         name: current.name,
         notes: current.notes || '',
         tags: current.tags || [],
-        collapsed: Boolean(current.collapsed),
         original_filename: current.original_filename || null,
         image_file_key: imageFileKey,
         preview_file_key: previewFileKey,
