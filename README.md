@@ -1,5 +1,9 @@
 # Nodetrace
 
+<p align="center">
+  <img src="./public/nodetrace.svg" alt="Nodetrace logo" width="120" />
+</p>
+
 Nodetrace is a visual documentation tool for hierarchical photo capture workflows.
 
 It is designed for jobs where you need to document complex physical systems in layers: cabinet -> subassembly -> box -> board -> component, with enough structure that the images remain usable later for inspection, teardown review, export, and downstream HBOM work.
@@ -52,10 +56,9 @@ Nodetrace solves a specific problem: once you take hundreds of inspection photos
 
 The UI is built around a canvas-first workflow:
 
-- top app menu for file, edit, view, and window actions
-- top-center canvas actions for adding folders, photos, and variants
-- right-side utility panels for inspector, settings, camera, and preview
-- optional left-side preview/capture behavior where appropriate
+- top app menu for file, edit, and view actions
+- top-edge canvas actions for adding folders, photos, variants, fit view, and grid toggle
+- dockable left and right sidebars for inspector, settings, account, preview, and camera panels
 
 The canvas is the primary workspace. Nodes can be selected, moved, collapsed, expanded, and inspected without switching to a separate tree-management view.
 
