@@ -48,7 +48,10 @@ export default function AuthScreen({ busy, clearError, error, onLogin, onRegiste
   return (
     <div className="auth-screen">
       <div className="auth-shell">
-        <div className="auth-title">Nodetrace</div>
+        <div className="auth-brand">
+          <img alt="Nodetrace" className="auth-brand__logo" src="/nodetrace.svg" />
+          <div className="auth-title">Nodetrace</div>
+        </div>
         <div className="auth-card">
         {mode === 'login' ? (
           <div className="auth-column" onKeyDown={onLoginKeyDown}>

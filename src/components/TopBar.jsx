@@ -42,6 +42,7 @@ export default function TopBar({
   return (
     <header className="topbar" style={style}>
       <div className="topbar__left">
+        <img alt="Nodetrace" className="topbar__logo" src="/nodetrace.svg" />
         <div className="menu-wrap">
           <button
             className={`menu-trigger ${openMenu === 'file' ? 'active' : ''}`}
