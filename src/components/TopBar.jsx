@@ -14,6 +14,7 @@ export default function TopBar({
   importInputRef,
   importProjectName,
   mobileConnectionCount,
+  openNewFolderDialog,
   openMenu,
   pendingUploadMode,
   pendingUploadParentId,
@@ -33,6 +34,8 @@ export default function TopBar({
   setSessionDialogOpen,
   setShowProjectDialog,
   theme,
+  triggerAddPhoto,
+  triggerAddVariantPhoto,
   toggleTheme,
   tree,
   undo,
@@ -168,6 +171,39 @@ export default function TopBar({
                 type="button"
               >
                 Redo
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectedNode || selectedNode.isVariant || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  openNewFolderDialog()
+                }}
+                type="button"
+              >
+                Add Folder
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectedNode || selectedNode.isVariant || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  triggerAddPhoto()
+                }}
+                type="button"
+              >
+                Add Photo
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectedNode || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  triggerAddVariantPhoto()
+                }}
+                type="button"
+              >
+                Add Variant Photo
               </button>
               <button
                 className="menu-item"

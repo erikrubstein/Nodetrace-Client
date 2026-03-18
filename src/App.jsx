@@ -1594,6 +1594,24 @@ function App() {
     setNewFolderName('New Folder')
   }
 
+  function triggerAddPhoto() {
+    if (!selectedNode || selectedNode.isVariant || busy) {
+      return
+    }
+    setPendingUploadParentId(selectedNode.id)
+    setPendingUploadMode('child')
+    fileInputRef.current?.click()
+  }
+
+  function triggerAddVariantPhoto() {
+    if (!selectedNode || busy) {
+      return
+    }
+    setPendingUploadParentId(selectedNode.id)
+    setPendingUploadMode('variant')
+    fileInputRef.current?.click()
+  }
+
   async function uploadFiles(files, targetNodeId = selectedNode?.id, mode = 'child') {
     if (!targetNodeId || files.length === 0) {
       return
@@ -2240,6 +2258,7 @@ function App() {
         rightSidebarOpen={rightSidebarOpen}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
+        openNewFolderDialog={openNewFolderDialog}
         setAllNodesCollapsed={setAllNodesCollapsed}
         setDeleteNodeOpen={setDeleteNodeOpen}
         setDeleteProjectText={setDeleteProjectText}
@@ -2251,8 +2270,10 @@ function App() {
           setOpenMenu={setOpenMenu}
           setSessionDialogOpen={setSessionDialogOpen}
           setShowProjectDialog={setShowProjectDialog}
-          toggleTheme={toggleThemePreference}
-          theme={theme}
+        toggleTheme={toggleThemePreference}
+        theme={theme}
+        triggerAddPhoto={triggerAddPhoto}
+        triggerAddVariantPhoto={triggerAddVariantPhoto}
         toggleSidebarPanel={toggleSidebarPanel}
         tree={tree}
         undo={undo}

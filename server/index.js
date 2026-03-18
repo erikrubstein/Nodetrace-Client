@@ -656,7 +656,6 @@ const deleteProjectStmt = db.prepare(`DELETE FROM projects WHERE id = ?`)
 const deleteNodesByProjectStmt = db.prepare(`DELETE FROM nodes WHERE project_id = ?`)
 const getNode = db.prepare(`SELECT * FROM nodes WHERE id = ?`)
 const getNodesByProject = db.prepare(`SELECT * FROM nodes WHERE project_id = ?`)
-const listNodeNamesByProject = db.prepare(`SELECT name FROM nodes WHERE project_id = ?`)
 const hasChildNodeStmt = db.prepare(`
   SELECT 1
   FROM nodes
@@ -985,7 +984,7 @@ function sanitizeFilesystemName(name, fallback = 'item') {
   return safeName || fallback
 }
 
-function createUntitledName(projectId) {
+function createUntitledName() {
   return 'Node'
 }
 
