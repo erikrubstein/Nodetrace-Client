@@ -598,6 +598,49 @@ export function collectParentOptions(root, blockedIds) {
   return options
 }
 
+export function buildNodePath(nodes, selectedNodeId) {
+  if (!selectedNodeId || !nodes?.length) {
+    return []
+  }
+
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const path = []
+  const seen = new Set()
+  let currentId = selectedNodeId
+
+  while (currentId != null && byId.has(currentId) && !seen.has(currentId)) {
+    seen.add(currentId)
+    const current = byId.get(currentId)
+    path.push(current.name)
+    currentId = current.variant_of_id ?? current.parent_id ?? null
+  }
+
+  return path.reverse()
+}
+
+export function compactNodePath(path, options = {}) {
+  const maxChars = options.maxChars ?? 72
+  if (!Array.isArray(path) || path.length === 0) {
+    return ''
+  }
+
+  const separator = ' > '
+  const selected = path[path.length - 1]
+  let visible = [selected]
+  let current = selected
+
+  for (let index = path.length - 2; index >= 0; index -= 1) {
+    const candidate = `${path[index]}${separator}${current}`
+    if (candidate.length > maxChars) {
+      break
+    }
+    visible.unshift(path[index])
+    current = candidate
+  }
+
+  return visible.length < path.length ? `...${separator}${visible.join(separator)}` : visible.join(separator)
+}
+
 export function buildClientTree(project, rows) {
   const byId = new Map(rows.map((node) => [node.id, { ...node, children: [], variants: [] }]))
   let root = null

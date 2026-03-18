@@ -49,3 +49,7 @@ export function PhoneIcon() {
 export function UserIcon() {
   return <i aria-hidden="true" className="fa-solid fa-user" />
 }
+
+export function GridIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-border-all" />
+}

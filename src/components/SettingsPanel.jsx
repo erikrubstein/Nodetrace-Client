@@ -8,6 +8,7 @@ export default function SettingsPanel({
   currentUsername,
   error,
   ownerUsername,
+  openRenameProjectDialog,
   persistProjectSettings,
   projectId,
   projectSettings,
@@ -108,6 +109,13 @@ export default function SettingsPanel({
 
         <button className="ghost-button settings-panel__reset" disabled={busy} onClick={resetProjectSettings} type="button">
           Reset
+        </button>
+      </section>
+
+      <section className="inspector__section settings-panel__section">
+        <div className="inspector__title">Project</div>
+        <button className="ghost-button settings-panel__reset" disabled={busy} onClick={openRenameProjectDialog} type="button">
+          Rename Project
         </button>
       </section>
 

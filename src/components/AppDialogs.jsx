@@ -27,6 +27,7 @@ export default function AppDialogs({
   newFolderDialog,
   newFolderName,
   projects,
+  renameProject,
   selectedNode,
   selectedProjectId,
   sessionDialogOpen,
@@ -208,6 +209,39 @@ export default function AppDialogs({
                 type="button"
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showProjectDialog === 'rename' ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setShowProjectDialog(null)} role="presentation">
+          <div
+            className="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleDialogEnter(event, renameProject, Boolean(projectName.trim()) && !busy)}
+            role="dialog"
+          >
+            <div className="dialog__title">Rename Project</div>
+            <input
+              autoFocus
+              placeholder="Project name"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+            />
+            {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setShowProjectDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy || !projectName.trim()}
+                onClick={renameProject}
+                type="button"
+              >
+                Save
               </button>
             </div>
           </div>

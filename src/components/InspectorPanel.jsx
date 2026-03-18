@@ -6,17 +6,15 @@ export default function InspectorPanel({
   error,
   hasBulkSelection,
   hasLockedSelectionRoot,
-  moveNodeTo,
-  moveParentId,
   nameInputRef,
-  parentOptions,
   saveNodeDraft,
   selectedNode,
   setDeleteNodeOpen,
   setEditForm,
-  setMoveParentId,
   status,
 }) {
+  const isRootNode = Boolean(selectedNode && selectedNode.parent_id == null && !selectedNode.isVariant)
+
   return (
     <>
       <div className="inspector__section">
@@ -44,12 +42,14 @@ export default function InspectorPanel({
             <label>
               <span>Name</span>
               <input
+                disabled={isRootNode}
                 ref={nameInputRef}
                 value={editForm.name}
                 onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
                 onBlur={() => void saveNodeDraft(editTargetNode, editForm)}
               />
             </label>
+            {isRootNode ? <div className="inspector__notice">Root name follows the project name.</div> : null}
             <label>
               <span>Tags</span>
               <input
@@ -76,28 +76,6 @@ export default function InspectorPanel({
                 {bulkSelectionCount} nodes selected for bulk actions. Preview and editing still follow {selectedNode.name}.
               </div>
             ) : null}
-            <label>
-              <span>Parent</span>
-              <select
-                disabled={hasLockedSelectionRoot || busy}
-                value={moveParentId}
-                onChange={async (event) => {
-                  const nextParentId = event.target.value
-                  setMoveParentId(nextParentId)
-                  if (!nextParentId || String(selectedNode.parent_id ?? '') === nextParentId) {
-                    return
-                  }
-                  await moveNodeTo(nextParentId)
-                }}
-              >
-                <option value="">Choose node</option>
-                {parentOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
             <button
               className="danger-button wide"
               disabled={hasLockedSelectionRoot || busy}

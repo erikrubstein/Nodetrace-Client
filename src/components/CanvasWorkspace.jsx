@@ -1,5 +1,5 @@
 import IconButton from './IconButton'
-import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, FitViewIcon, FolderIcon } from './icons'
+import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, FitViewIcon, FolderIcon, GridIcon } from './icons'
 
 export default function CanvasWorkspace({
   beginNodeDrag,
@@ -24,6 +24,7 @@ export default function CanvasWorkspace({
   multiSelectedNodeIds,
   openNewFolderDialog,
   projectSettings,
+  selectedNodePath,
   saveNodeDraft,
   selectedNode,
   selectedNodeId,
@@ -35,17 +36,25 @@ export default function CanvasWorkspace({
   setPendingUploadMode,
   setPendingUploadParentId,
   setSelectedNodeId,
+  showGrid,
   stopPanning,
+  toggleGrid,
   toggleMultiSelection,
   transform,
   tree,
   uploadFiles,
   viewportRef,
 }) {
+  const selectedPathSeparatorIndex = selectedNodePath.lastIndexOf(' > ')
+  const selectedPathPrefix =
+    selectedPathSeparatorIndex >= 0 ? `${selectedNodePath.slice(0, selectedPathSeparatorIndex)} > ` : ''
+  const selectedPathLeaf =
+    selectedPathSeparatorIndex >= 0 ? selectedNodePath.slice(selectedPathSeparatorIndex + 3) : selectedNodePath
+
   return (
     <section
       ref={viewportRef}
-      className={`canvas-viewport ${dragActive ? 'drag-active' : ''}`}
+      className={`canvas-viewport ${dragActive ? 'drag-active' : ''} ${showGrid ? '' : 'canvas-viewport--no-grid'}`.trim()}
       onContextMenu={(event) => {
         if (!event.target.closest('.graph-node')) {
           event.preventDefault()
@@ -123,6 +132,16 @@ export default function CanvasWorkspace({
           tooltip="Add Variant Photo"
         >
           <AddVariantIcon />
+        </IconButton>
+      </div>
+      <div className="canvas-tools canvas-tools--right">
+        <IconButton
+          aria-label={showGrid ? 'Hide dot grid' : 'Show dot grid'}
+          className="canvas-tool-button"
+          onClick={toggleGrid}
+          tooltip={showGrid ? 'Hide Grid' : 'Show Grid'}
+        >
+          <GridIcon />
         </IconButton>
       </div>
       <div
@@ -262,9 +281,18 @@ export default function CanvasWorkspace({
           {tree?.nodes.find((node) => node.id === dragPreview.nodeId)?.name || 'Moving'}
         </div>
       ) : null}
-      <div className="canvas-caption">
-        {selectedNode ? selectedNode.name : 'No node selected'} | {tree?.nodes?.length ?? 0} nodes |{' '}
-        {Math.round(transform.scale * 100)}%
+      <div className="canvas-caption canvas-caption--left">
+        {selectedNodePath ? (
+          <>
+            {selectedPathPrefix ? <span>{selectedPathPrefix}</span> : null}
+            <span className="canvas-caption__selected">{selectedPathLeaf}</span>
+          </>
+        ) : (
+          'No node selected'
+        )}
+      </div>
+      <div className="canvas-caption canvas-caption--right">
+        {Math.round(transform.scale * 100)}% | {tree?.nodes?.length ?? 0} nodes
       </div>
       {contextMenu ? (
         <div

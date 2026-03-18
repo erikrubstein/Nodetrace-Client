@@ -2,6 +2,7 @@ export default function SidebarRail({
   activePanelId,
   dragOver,
   open,
+  onOpenContextMenu,
   panels,
   side,
   togglePanel,
@@ -12,6 +13,11 @@ export default function SidebarRail({
   return (
     <div
       className={`sidebar-rail sidebar-rail--${side} ${dragOver ? 'sidebar-rail--drag-over' : ''}`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onOpenContextMenu?.(event)
+      }}
       onDragOver={(event) => {
         event.preventDefault()
         event.dataTransfer.dropEffect = 'move'

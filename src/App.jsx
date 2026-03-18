@@ -20,12 +20,12 @@ import { defaultProjectSettings, defaultUserProjectUi, panelIds, SIDEBAR_RAIL_WI
 import { blobFromUrl, createPreviewFile } from './lib/image'
 import {
   buildClientTree,
+  buildNodePath,
+  compactNodePath,
   buildFocusPathContext,
   buildLayout,
   buildVisibleTree,
-  collectBlockedIdsForSelection,
   collectDescendantIds,
-  collectParentOptions,
   findNode,
   flattenSubtreeNodes,
   getSelectionRootIds,
@@ -34,6 +34,7 @@ import { getUrlState, updateUrlState } from './lib/urlState'
 import {
   CameraIcon,
   GearIcon,
+  GridIcon,
   PreviewIcon,
   UserIcon,
   WrenchIcon,
@@ -49,6 +50,7 @@ function App() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState([])
   const [theme, setTheme] = useState(defaultUserProjectUi.theme)
+  const [showGrid, setShowGrid] = useState(defaultUserProjectUi.showGrid)
   const [status, setStatus] = useState('Loading projects...')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -64,6 +66,7 @@ function App() {
   const [deleteProjectText, setDeleteProjectText] = useState('')
   const [deleteNodeOpen, setDeleteNodeOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
+  const [sidebarContextMenu, setSidebarContextMenu] = useState(null)
   const [dragActive, setDragActive] = useState(false)
   const [dragHoverNodeId, setDragHoverNodeId] = useState(null)
   const [dragPreview, setDragPreview] = useState(null)
@@ -103,6 +106,7 @@ function App() {
   const selectedNodeIdRef = useRef(null)
   const loadedUiSignatureRef = useRef('')
   const pendingUiSignatureRef = useRef(null)
+  const uiRequestSequenceRef = useRef(0)
   const { clearHistory, historyState, pushHistory, undo, redo } = useUndoRedo({ busy, setBusy, setError })
 
   useEffect(() => {
@@ -181,6 +185,69 @@ function App() {
     }
     setRightActivePanel(panelId)
     setRightSidebarOpen(true)
+  }
+
+  function openSidebarContextMenu(event) {
+    setContextMenu(null)
+    const estimatedMenuWidth = 220
+    const estimatedMenuHeight = 56
+    const padding = 12
+    setSidebarContextMenu({
+      x: Math.max(padding, Math.min(event.clientX, window.innerWidth - estimatedMenuWidth - padding)),
+      y: Math.max(padding, Math.min(event.clientY, window.innerHeight - estimatedMenuHeight - padding)),
+    })
+  }
+
+  function markPendingUiSignature(overrides = {}) {
+    const nextUi = {
+      theme: overrides.theme ?? theme,
+      showGrid: overrides.showGrid ?? showGrid,
+      leftSidebarOpen: overrides.leftSidebarOpen ?? leftSidebarOpen,
+      rightSidebarOpen: overrides.rightSidebarOpen ?? rightSidebarOpen,
+      leftSidebarWidth: overrides.leftSidebarWidth ?? leftSidebarWidth,
+      rightSidebarWidth: overrides.rightSidebarWidth ?? rightSidebarWidth,
+      leftActivePanel: overrides.leftActivePanel ?? resolvedLeftActivePanel,
+      rightActivePanel: overrides.rightActivePanel ?? resolvedRightActivePanel,
+      panelDock: overrides.panelDock ?? panelDock,
+    }
+    pendingUiSignatureRef.current = JSON.stringify(nextUi)
+  }
+
+  function toggleThemePreference() {
+    setTheme((current) => {
+      const nextTheme = current === 'dark' ? 'light' : 'dark'
+      markPendingUiSignature({ theme: nextTheme })
+      return nextTheme
+    })
+  }
+
+  function toggleGridPreference() {
+    setShowGrid((current) => {
+      const nextValue = !current
+      markPendingUiSignature({ showGrid: nextValue })
+      return nextValue
+    })
+  }
+
+  function resetPanelLayout() {
+    const nextPanelDock = { ...defaultUserProjectUi.panelDock }
+    markPendingUiSignature({
+      leftSidebarOpen: defaultUserProjectUi.leftSidebarOpen,
+      rightSidebarOpen: defaultUserProjectUi.rightSidebarOpen,
+      leftSidebarWidth: defaultUserProjectUi.leftSidebarWidth,
+      rightSidebarWidth: defaultUserProjectUi.rightSidebarWidth,
+      leftActivePanel: defaultUserProjectUi.leftActivePanel,
+      rightActivePanel: defaultUserProjectUi.rightActivePanel,
+      panelDock: nextPanelDock,
+    })
+    setLeftSidebarOpen(defaultUserProjectUi.leftSidebarOpen)
+    setRightSidebarOpen(defaultUserProjectUi.rightSidebarOpen)
+    setLeftSidebarWidth(defaultUserProjectUi.leftSidebarWidth)
+    setRightSidebarWidth(defaultUserProjectUi.rightSidebarWidth)
+    setLeftActivePanel(defaultUserProjectUi.leftActivePanel)
+    setRightActivePanel(defaultUserProjectUi.rightActivePanel)
+    setPanelDock(nextPanelDock)
+    setSidebarContextMenu(null)
   }
 
   function movePanelDock(panelId, side) {
@@ -266,8 +333,6 @@ function App() {
   const bulkSelectionCount = effectiveSelectedNodes.length
   const hasBulkSelection = bulkSelectionCount > 1
   const hasLockedSelectionRoot = effectiveSelectedNodes.some((node) => node.parent_id == null && !node.isVariant)
-  const blockedParentIds = collectBlockedIdsForSelection(tree?.root, effectiveSelectedRootIds)
-  const parentOptions = collectParentOptions(tree?.root, blockedParentIds)
   const focusPathContext = useMemo(
     () =>
       focusPathMode
@@ -286,6 +351,10 @@ function App() {
   )
   const layout = useMemo(() => buildLayout(visibleRoot, projectSettings), [projectSettings, visibleRoot])
   const contextMenuNode = tree?.nodes.find((node) => node.id === contextMenu?.nodeId) || null
+  const selectedNodePath = useMemo(
+    () => compactNodePath(buildNodePath(tree?.nodes, selectedNodeId)),
+    [selectedNodeId, tree?.nodes],
+  )
 
   useEffect(() => {
     if (!selectedProjectId || !tree?.project) {
@@ -294,6 +363,7 @@ function App() {
 
     const nextUi = {
       theme: projectUi.theme,
+      showGrid: projectUi.showGrid,
       leftSidebarOpen: projectUi.leftSidebarOpen,
       rightSidebarOpen: projectUi.rightSidebarOpen,
       leftSidebarWidth: projectUi.leftSidebarWidth,
@@ -309,6 +379,7 @@ function App() {
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = incomingSignature
     setTheme(nextUi.theme)
+    setShowGrid(nextUi.showGrid)
     setLeftSidebarOpen(nextUi.leftSidebarOpen)
     setRightSidebarOpen(nextUi.rightSidebarOpen)
     setLeftSidebarWidth(nextUi.leftSidebarWidth)
@@ -316,7 +387,7 @@ function App() {
     setLeftActivePanel(nextUi.leftActivePanel)
     setRightActivePanel(nextUi.rightActivePanel)
     setPanelDock(nextUi.panelDock)
-  }, [projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.theme, selectedProjectId, tree?.project])
+  }, [projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.showGrid, projectUi.theme, selectedProjectId, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     setCurrentUser(null)
@@ -384,8 +455,17 @@ function App() {
   }
 
   useEffect(() => {
+    if (!authReady) {
+      return
+    }
+    if (currentUser && !selectedProjectId && !tree) {
+      return
+    }
+    if (currentUser && selectedProjectId && !tree) {
+      return
+    }
     updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId, transform)
-  }, [selectedNodeId, selectedProjectId, transform])
+  }, [authReady, currentUser, selectedNodeId, selectedProjectId, transform, tree])
 
   useEffect(() => {
     setMultiSelectedNodeIds([])
@@ -523,12 +603,22 @@ function App() {
 
   const patchProjectPreferencesRequest = useCallback(async (projectId, nextPreferences) => {
     const rollbackLocalEvent = beginLocalEventExpectation()
+    const requestSignature = JSON.stringify(nextPreferences)
+    const requestSequence = ++uiRequestSequenceRef.current
     try {
       const updatedProject = await api(`/api/projects/${projectId}/preferences`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nextPreferences),
       })
+
+      if (requestSequence !== uiRequestSequenceRef.current) {
+        return updatedProject
+      }
+
+      if (pendingUiSignatureRef.current && pendingUiSignatureRef.current !== requestSignature) {
+        return updatedProject
+      }
 
       setTree((current) => (current ? { ...current, project: updatedProject } : current))
       setProjects((current) =>
@@ -548,6 +638,7 @@ function App() {
 
     const nextUi = {
       theme,
+      showGrid,
       leftSidebarOpen,
       rightSidebarOpen,
       leftSidebarWidth,
@@ -585,6 +676,7 @@ function App() {
     rightSidebarOpen,
     rightSidebarWidth,
     selectedProjectId,
+    showGrid,
     theme,
     tree?.project,
   ])
@@ -885,12 +977,10 @@ function App() {
     editForm,
     editTargetId,
     editTargetNode,
-    moveParentId,
     nameInputRef,
     saveNodeDraft,
     setEditForm,
     setEditTargetId,
-    setMoveParentId,
   } = useNodeEditing({
     applyNodeUpdate,
     patchNodeRequest,
@@ -909,13 +999,11 @@ function App() {
     if (!selectedNode) {
       setEditTargetId(null)
       setEditForm({ name: '', notes: '', tags: '' })
-      setMoveParentId('')
       setPreviewTransform({ x: 0, y: 0, scale: 1 })
       return
     }
 
     if (selectedNode.id === editTargetId) {
-      setMoveParentId(selectedNode.parent_id ?? '')
       return
     }
 
@@ -925,17 +1013,17 @@ function App() {
       notes: selectedNode.notes || '',
       tags: (selectedNode.tags || []).join(', '),
     })
-    setMoveParentId(selectedNode.parent_id ?? '')
     setPreviewTransform({ x: 0, y: 0, scale: 1 })
-  }, [editTargetId, selectedNode, setEditForm, setEditTargetId, setMoveParentId])
+  }, [editTargetId, selectedNode, setEditForm, setEditTargetId])
 
   useEffect(() => {
     function closeContextMenu(event) {
       const target = event.target instanceof Element ? event.target : null
-      if (target?.closest('.node-context-menu')) {
+      if (target?.closest('.node-context-menu, .sidebar-context-menu')) {
         return
       }
       setContextMenu(null)
+      setSidebarContextMenu(null)
     }
 
     window.addEventListener('pointerdown', closeContextMenu)
@@ -1049,6 +1137,35 @@ function App() {
       setTree(created)
       await loadProjects(created.project.id)
       setSelectedNodeId(created.root.id)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameProject() {
+    if (!selectedProjectId || !projectName.trim()) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+
+    try {
+      const updatedTree = await patchProjectNameRequest(selectedProjectId, projectName.trim())
+      if (selectedNodeId && updatedTree?.nodes) {
+        const refreshedSelectedNode = updatedTree.nodes.find((node) => node.id === selectedNodeId)
+        if (refreshedSelectedNode) {
+          setEditForm({
+            name: refreshedSelectedNode.name,
+            notes: refreshedSelectedNode.notes || '',
+            tags: (refreshedSelectedNode.tags || []).join(', '),
+          })
+        }
+      }
+      setShowProjectDialog(null)
+      setProjectName('')
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -1249,6 +1366,26 @@ function App() {
     } finally {
       setBusy(false)
       window.setTimeout(() => setTransferProgress(null), 400)
+    }
+  }
+
+  async function patchProjectNameRequest(projectId, name) {
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const updatedTree = await api(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+
+      setTree(updatedTree)
+      setProjects((current) =>
+        current.map((project) => (project.id === updatedTree.project.id ? updatedTree.project : project)),
+      )
+      return updatedTree
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
     }
   }
 
@@ -1721,77 +1858,6 @@ function App() {
     }
   }
 
-  async function moveNodeTo(parentId) {
-    if (!parentId || effectiveSelectedNodes.length === 0) {
-      return
-    }
-
-    const movableNodes = effectiveSelectedNodes.filter((node) => node.parent_id != null || node.isVariant)
-    if (movableNodes.length === 0) {
-      return
-    }
-
-    setBusy(true)
-    setError('')
-
-    try {
-      const moveEntries = movableNodes.map((node) => ({
-        nodeId: node.id,
-        previousPayload:
-          node.variant_of_id != null
-            ? { variantOfId: node.variant_of_id }
-            : { parentId: node.parent_id, variantOfId: null },
-        nextPayload: { parentId, variantOfId: null },
-      }))
-
-      const updatedNodes = []
-      for (const entry of moveEntries) {
-        const rollbackLocalEvent = beginLocalEventExpectation()
-        try {
-          const updatedNode = await moveNodeRequest(entry.nodeId, entry.nextPayload)
-          updatedNodes.push(updatedNode)
-          applyNodeUpdate(updatedNode)
-        } catch (error) {
-          rollbackLocalEvent()
-          throw error
-        }
-      }
-
-      pushHistory({
-        undo: async () => {
-          for (const entry of moveEntries) {
-            const rollbackUndoEvent = beginLocalEventExpectation()
-            let revertedNode = null
-            try {
-              revertedNode = await moveNodeRequest(entry.nodeId, entry.previousPayload)
-            } catch (error) {
-              rollbackUndoEvent()
-              throw error
-            }
-            applyNodeUpdate(revertedNode)
-          }
-        },
-        redo: async () => {
-          for (const entry of moveEntries) {
-            const rollbackRedoEvent = beginLocalEventExpectation()
-            let redoneNode = null
-            try {
-              redoneNode = await moveNodeRequest(entry.nodeId, entry.nextPayload)
-            } catch (error) {
-              rollbackRedoEvent()
-              throw error
-            }
-            applyNodeUpdate(redoneNode)
-          }
-        },
-      })
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function deleteNode() {
     if (!selectedNode) {
       return
@@ -2068,15 +2134,11 @@ function App() {
             error={error}
             hasBulkSelection={hasBulkSelection}
             hasLockedSelectionRoot={hasLockedSelectionRoot}
-            moveNodeTo={moveNodeTo}
-            moveParentId={moveParentId}
             nameInputRef={nameInputRef}
-            parentOptions={parentOptions}
             saveNodeDraft={saveNodeDraft}
             selectedNode={selectedNode}
             setDeleteNodeOpen={setDeleteNodeOpen}
             setEditForm={setEditForm}
-            setMoveParentId={setMoveParentId}
             status={status}
           />
         ),
@@ -2096,6 +2158,11 @@ function App() {
             currentUsername={currentUser?.username || ''}
             error={error}
             ownerUsername={tree?.project?.ownerUsername || ''}
+            openRenameProjectDialog={() => {
+              setError('')
+              setProjectName(tree?.project?.name || '')
+              setShowProjectDialog('rename')
+            }}
             persistProjectSettings={persistProjectSettings}
             projectId={tree?.project?.id}
             projectSettings={projectSettings}
@@ -2150,8 +2217,8 @@ function App() {
       className="app-shell"
       data-theme={theme}
     >
-      <TopBar
-        busy={busy}
+        <TopBar
+          busy={busy}
         fileInputRef={fileInputRef}
         fitCanvasToView={fitCanvasToView}
         focusPathMode={focusPathMode}
@@ -2181,11 +2248,11 @@ function App() {
         setImportArchiveFile={setImportArchiveFile}
         setImportProjectName={setImportProjectName}
         movePanelDock={movePanelDock}
-        setOpenMenu={setOpenMenu}
-        setSessionDialogOpen={setSessionDialogOpen}
-        setShowProjectDialog={setShowProjectDialog}
-        setTheme={setTheme}
-        theme={theme}
+          setOpenMenu={setOpenMenu}
+          setSessionDialogOpen={setSessionDialogOpen}
+          setShowProjectDialog={setShowProjectDialog}
+          toggleTheme={toggleThemePreference}
+          theme={theme}
         toggleSidebarPanel={toggleSidebarPanel}
         tree={tree}
         undo={undo}
@@ -2208,6 +2275,7 @@ function App() {
           dragOver={draggingPanelId != null && panelDock[draggingPanelId] !== 'left'}
           onDropPanel={handleDropPanel}
           onEndDrag={() => setDraggingPanelId(null)}
+          onOpenContextMenu={openSidebarContextMenu}
           onStartDrag={setDraggingPanelId}
           open={leftSidebarOpen}
           panels={leftRailPanels}
@@ -2248,6 +2316,7 @@ function App() {
           multiSelectedNodeIds={multiSelectedNodeIds}
           openNewFolderDialog={openNewFolderDialog}
           projectSettings={projectSettings}
+          selectedNodePath={selectedNodePath}
           saveNodeDraft={saveNodeDraft}
           selectedNode={selectedNode}
           selectedNodeId={selectedNodeId}
@@ -2259,7 +2328,9 @@ function App() {
           setPendingUploadMode={setPendingUploadMode}
           setPendingUploadParentId={setPendingUploadParentId}
           setSelectedNodeId={setSelectedNodeId}
+          showGrid={showGrid}
           stopPanning={stopPanning}
+          toggleGrid={toggleGridPreference}
           toggleMultiSelection={toggleMultiSelection}
           transform={transform}
           tree={tree}
@@ -2282,6 +2353,7 @@ function App() {
           dragOver={draggingPanelId != null && panelDock[draggingPanelId] !== 'right'}
           onDropPanel={handleDropPanel}
           onEndDrag={() => setDraggingPanelId(null)}
+          onOpenContextMenu={openSidebarContextMenu}
           onStartDrag={setDraggingPanelId}
           open={rightSidebarOpen}
           panels={rightRailPanels}
@@ -2289,6 +2361,26 @@ function App() {
           togglePanel={toggleSidebarPanel}
         />
       </main>
+
+      {sidebarContextMenu ? (
+        <div
+          className="sidebar-context-menu"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          style={{ left: `${sidebarContextMenu.x}px`, top: `${sidebarContextMenu.y}px` }}
+        >
+          <button
+            onClick={() => {
+              resetPanelLayout()
+            }}
+            type="button"
+          >
+            Reset Panel Layout
+          </button>
+        </div>
+      ) : null}
 
       <AppDialogs
         accountDialog={accountDialog}
@@ -2321,6 +2413,7 @@ function App() {
         newFolderName={newFolderName}
         projectName={projectName}
         projects={projects}
+        renameProject={renameProject}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
         sessionDialogOpen={sessionDialogOpen}

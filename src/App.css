@@ -60,7 +60,6 @@
 .app-shell,
 .topbar,
 .main-layout,
-.canvas-viewport,
 .canvas-status,
 .inspector,
 .inspector__section,
@@ -382,19 +381,49 @@ select {
   cursor: grab;
 }
 
+.canvas-viewport--no-grid {
+  background: var(--canvas);
+}
+
 .canvas-tools {
   position: absolute;
   top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 10px;
   z-index: 18;
   display: flex;
   gap: 6px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: var(--canvas);
   pointer-events: none;
+}
+
+.canvas-tools--right {
+  left: auto;
+  right: 10px;
 }
 
 .canvas-tools .icon-button-wrap {
   pointer-events: auto;
+}
+
+.canvas-tools:not(.canvas-tools--right) .icon-button-wrap:first-child .icon-tooltip {
+  left: 0;
+  transform: translateY(-2px);
+}
+
+.canvas-tools:not(.canvas-tools--right) .icon-button-wrap:first-child:hover .icon-tooltip {
+  transform: translateY(0);
+}
+
+.canvas-tools--right .icon-button-wrap:last-child .icon-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+.canvas-tools--right .icon-button-wrap:last-child:hover .icon-tooltip {
+  transform: translateY(0);
 }
 
 .canvas-tool-button {
@@ -706,9 +735,32 @@ select {
 
 .canvas-caption {
   position: absolute;
-  left: 12px;
   bottom: 12px;
+  display: block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--canvas);
   font-size: 0.82rem;
+  max-width: calc(50% - 24px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 12;
+}
+
+.canvas-caption--left {
+  left: 12px;
+  text-align: left;
+}
+
+.canvas-caption--right {
+  right: 12px;
+  text-align: right;
+}
+
+.canvas-caption__selected {
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
 }
 
 .drop-overlay {
@@ -744,8 +796,8 @@ select {
   }
 }
 
-.node-context-menu {
-  position: absolute;
+.node-context-menu,
+.sidebar-context-menu {
   z-index: 30;
   min-width: 140px;
   display: grid;
@@ -756,8 +808,18 @@ select {
   box-shadow: 0 10px 30px var(--elevation);
 }
 
-.node-context-menu button {
+.node-context-menu {
+  position: absolute;
+}
+
+.sidebar-context-menu {
+  position: fixed;
+}
+
+.node-context-menu button,
+.sidebar-context-menu button {
   text-align: left;
+  white-space: nowrap;
 }
 
 .node-context-menu .danger-text {

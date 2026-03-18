@@ -1,6 +1,6 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { ApiError, api } from '../lib/api'
-import { getUrlState } from '../lib/urlState'
+import { getUrlState, updateUrlState } from '../lib/urlState'
 
 export default function useProjectSync({
   captureSessionId,
@@ -19,12 +19,20 @@ export default function useProjectSync({
   setStatus,
   setTree,
 }) {
+  const projectsRequestSequenceRef = useRef(0)
+  const treeRequestSequenceRef = useRef(0)
+
   const loadProjects = useCallback(
     async (preferredProjectId) => {
+      const requestSequence = ++projectsRequestSequenceRef.current
       const projectList = await api('/api/projects')
+      if (requestSequence !== projectsRequestSequenceRef.current) {
+        return projectList
+      }
       setProjects(projectList)
 
       if (projectList.length === 0) {
+        updateUrlState(null, null, getUrlState().transform)
         setSelectedProjectId(null)
         setTree(null)
         setSelectedNodeId(null)
@@ -49,7 +57,11 @@ export default function useProjectSync({
         return
       }
 
+      const requestSequence = ++treeRequestSequenceRef.current
       const payload = await api(`/api/projects/${projectId}/tree`)
+      if (requestSequence !== treeRequestSequenceRef.current) {
+        return payload
+      }
       setTree(payload)
       setSelectedNodeId(
         preferredNodeId && payload.nodes.some((node) => node.id === preferredNodeId)
@@ -236,6 +248,10 @@ export default function useProjectSync({
     const stream = new EventSource(`/api/projects/${selectedProjectId}/events`)
     stream.onmessage = (event) => {
       const payload = JSON.parse(event.data || '{}')
+
+      if (payload.type === 'connected') {
+        return
+      }
 
       if (payload.type === 'project-deleted') {
         loadProjects().catch((loadError) => {

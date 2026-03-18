@@ -13,7 +13,6 @@ export default function useNodeEditing({
   const nodeSaveSequenceRef = useRef(new Map())
   const [editTargetId, setEditTargetId] = useState(null)
   const [editForm, setEditForm] = useState({ name: '', notes: '', tags: '' })
-  const [moveParentId, setMoveParentId] = useState('')
 
   const editTargetNode = tree?.nodes.find((node) => node.id === editTargetId) || null
 
@@ -93,11 +92,9 @@ export default function useNodeEditing({
     editForm,
     editTargetId,
     editTargetNode,
-    moveParentId,
     nameInputRef,
     saveNodeDraft,
     setEditForm,
     setEditTargetId,
-    setMoveParentId,
   }
 }

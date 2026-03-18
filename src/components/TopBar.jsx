@@ -32,8 +32,8 @@ export default function TopBar({
   setOpenMenu,
   setSessionDialogOpen,
   setShowProjectDialog,
-  setTheme,
   theme,
+  toggleTheme,
   tree,
   undo,
   uploadFiles,
@@ -286,7 +286,7 @@ export default function TopBar({
         </IconButton>
         <IconButton
           aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+          onClick={toggleTheme}
           tooltip={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
         >
           {theme === 'dark' ? <SunIcon /> : <MoonIcon />}

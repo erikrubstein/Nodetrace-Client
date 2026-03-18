@@ -43,6 +43,7 @@ const defaultProjectSettings = {
 
 const defaultUserProjectUi = {
   theme: 'dark',
+  showGrid: true,
   leftSidebarOpen: false,
   rightSidebarOpen: true,
   leftSidebarWidth: 340,
@@ -689,6 +690,14 @@ const updateProjectMetaStmt = db.prepare(`
       updated_at = @updated_at
   WHERE id = @id
 `)
+const getProjectRootNodeStmt = db.prepare(`
+  SELECT *
+  FROM nodes
+  WHERE project_id = ?
+    AND parent_id IS NULL
+  ORDER BY created_at ASC, id ASC
+  LIMIT 1
+`)
 const updateNodeStmt = db.prepare(`
   UPDATE nodes
   SET name = @name,
@@ -745,6 +754,30 @@ const updateProjectSettings = db.transaction(({ id, settings }) => {
     settings_json: JSON.stringify(settings),
     updated_at: now,
   })
+})
+
+const renameProjectAndRoot = db.transaction(({ id, name }) => {
+  const now = new Date().toISOString()
+  const project = assertProject(id)
+  const rootNode = getProjectRootNodeStmt.get(id)
+
+  updateProjectMetaStmt.run({
+    id,
+    name,
+    description: project.description || '',
+    settings_json: project.settings_json || JSON.stringify(defaultProjectSettings),
+    updated_at: now,
+  })
+
+  if (rootNode) {
+    updateNodeStmt.run({
+      id: rootNode.id,
+      name,
+      notes: rootNode.notes || '',
+      tags_json: rootNode.tags_json || '[]',
+      updated_at: now,
+    })
+  }
 })
 
 const createNode = db.transaction((payload) => {
@@ -970,6 +1003,7 @@ function normalizeUserProjectUi(uiInput) {
   }
 
   ui.theme = ui.theme === 'light' ? 'light' : 'dark'
+  ui.showGrid = ui.showGrid !== false
   const panelDock = {
     ...defaultUserProjectUi.panelDock,
     ...(ui.panelDock || {}),
@@ -2156,6 +2190,27 @@ app.post('/api/projects', requireAuth, (req, res, next) => {
   }
 })
 
+app.patch('/api/projects/:id', requireAuth, (req, res, next) => {
+  try {
+    const project = assertProjectAccess(req.params.id, req.user.id)
+    const name = String(req.body?.name || '').trim()
+
+    if (!name) {
+      return res.json({ ok: false, error: 'Project name is required' })
+    }
+
+    renameProjectAndRoot({
+      id: project.id,
+      name,
+    })
+
+    const updatedProject = assertProjectAccess(project.id, req.user.id)
+    res.json(buildTree(updatedProject, getProjectNodes.all(project.id), req.user.id))
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/projects/:id/tree', requireAuth, (req, res, next) => {
   try {
     const project = assertProjectAccess(req.params.id, req.user.id)
@@ -2835,11 +2890,16 @@ app.post('/api/projects/:id/subtree-restore', requireAuth, restoreUpload.any(), 
 app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
   try {
     const node = assertNodeAccess(req.params.id, req.user.id)
+    const requestedName = String(req.body.name || '').trim()
+
+    if (node.parent_id == null && requestedName && requestedName !== node.name) {
+      return res.json({ ok: false, error: 'Rename the project to rename the root node' })
+    }
 
     updateNode({
       id: node.id,
       project_id: node.project_id,
-      name: String(req.body.name || '').trim() || node.name,
+      name: requestedName || node.name,
       notes: String(req.body.notes || '').trim(),
       tags: parseTags(req.body.tags),
     })
