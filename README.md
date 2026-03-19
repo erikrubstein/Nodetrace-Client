@@ -143,6 +143,46 @@ By default:
 - frontend: `http://localhost:5173`
 - backend/API: `http://localhost:3001`
 
+### Shared Backend Workflow
+
+If you want other people using a stable built frontend while you keep developing against the same backend data, use this split:
+
+1. Build the frontend when you want to publish an updated stable UI:
+
+```bash
+npm run build
+```
+
+2. Run the shared backend, which also serves the built `dist/` frontend:
+
+```bash
+npm run serve:shared
+```
+
+People using:
+
+- `http://<host>:3001`
+
+will get the last built frontend plus the live backend/API.
+
+3. In a separate terminal, run only the Vite dev frontend:
+
+```bash
+npm run dev:client
+```
+
+You can then use:
+
+- `http://<host>:5173`
+
+for live frontend development while everyone else stays on the last built UI at `3001`.
+
+Important:
+
+- both frontends still share the same backend and database
+- frontend-only changes stay isolated until you run `npm run build`
+- backend code changes are not isolated in this setup; if you edit and restart the backend, everyone using the shared instance will feel that immediately
+
 Run production build:
 
 ```bash
