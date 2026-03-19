@@ -120,6 +120,7 @@ function App() {
   const pendingLocalEventsRef = useRef(0)
   const treeRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
+  const nodeImageEditSequenceRef = useRef(new Map())
   const loadedUiSignatureRef = useRef('')
   const pendingUiSignatureRef = useRef(null)
   const uiRequestSequenceRef = useRef(0)
@@ -679,7 +680,7 @@ function App() {
     }
   }, [])
 
-  async function patchNodeRequest(nodeId, payload, options = {}) {
+  const patchNodeRequest = useCallback(async (nodeId, payload, options = {}) => {
     const rollbackLocalEvent = beginLocalEventExpectation()
     try {
       const updatedNode = await api(`/api/nodes/${nodeId}`, {
@@ -695,7 +696,7 @@ function App() {
       rollbackLocalEvent()
       throw error
     }
-  }
+  }, [applyNodeUpdate, beginLocalEventExpectation])
 
   async function patchProjectSettingsRequest(projectId, nextSettings) {
     const rollbackLocalEvent = beginLocalEventExpectation()
@@ -740,6 +741,19 @@ function App() {
       throw error
     }
   }, [applyProjectUpdate, beginLocalEventExpectation])
+
+  const saveNodeImageEdits = useCallback(async (nodeId, imageEdits) => {
+    if (!nodeId) {
+      return null
+    }
+    const saveSequence = (nodeImageEditSequenceRef.current.get(nodeId) || 0) + 1
+    nodeImageEditSequenceRef.current.set(nodeId, saveSequence)
+    const updatedNode = await patchNodeRequest(nodeId, { imageEdits }, { skipApply: true })
+    if (nodeImageEditSequenceRef.current.get(nodeId) === saveSequence) {
+      applyNodeUpdate(updatedNode)
+    }
+    return updatedNode
+  }, [applyNodeUpdate, patchNodeRequest])
 
   useEffect(() => {
     if (!currentUser || !selectedProjectId || !tree?.project) {
@@ -979,6 +993,7 @@ function App() {
         name: current.name,
         notes: current.notes || '',
         tags: current.tags || [],
+        image_edits: current.imageEdits || null,
         original_filename: current.original_filename || null,
         image_file_key: imageFileKey,
         preview_file_key: previewFileKey,
@@ -2678,85 +2693,6 @@ function App() {
     uploadFiles,
   })
 
-  async function downloadSelectedImage() {
-    if (!selectedNode?.imageUrl) {
-      return
-    }
-
-    const response = await fetch(selectedNode.imageUrl)
-    if (!response.ok) {
-      throw new Error('Unable to download the selected image.')
-    }
-
-    const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    const extension =
-      blob.type === 'image/png'
-        ? '.png'
-        : blob.type === 'image/webp'
-          ? '.webp'
-          : blob.type === 'image/gif'
-            ? '.gif'
-            : '.jpg'
-    link.download = `${selectedNode.name || 'image'}${extension}`
-    document.body.append(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function copySelectedImage() {
-    if (!selectedNode?.imageUrl) {
-      return
-    }
-
-    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-      throw new Error('Image copy is not supported in this browser.')
-    }
-
-    const response = await fetch(selectedNode.imageUrl)
-    if (!response.ok) {
-      throw new Error('Unable to copy the selected image.')
-    }
-
-    const blob = await response.blob()
-
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/jpeg']: blob })])
-      return
-    } catch (error) {
-      if (!blob.type.startsWith('image/')) {
-        throw error
-      }
-    }
-
-    const imageUrl = URL.createObjectURL(blob)
-    try {
-      const image = await new Promise((resolve, reject) => {
-        const img = new Image()
-        img.onload = () => resolve(img)
-        img.onerror = reject
-        img.src = imageUrl
-      })
-
-      const canvas = document.createElement('canvas')
-      canvas.width = image.naturalWidth
-      canvas.height = image.naturalHeight
-      const context = canvas.getContext('2d')
-      context.drawImage(image, 0, 0)
-      const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
-      if (!pngBlob) {
-        throw new Error('Unable to convert image for clipboard copy.')
-      }
-
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })])
-    } finally {
-      URL.revokeObjectURL(imageUrl)
-    }
-  }
-
   const panelDefinitions = {
       preview: {
         id: 'preview',
@@ -2766,10 +2702,10 @@ function App() {
           <PreviewPanel
             beginPreviewPan={beginPreviewPan}
             busy={busy}
-            copySelectedImage={copySelectedImage}
-            downloadSelectedImage={downloadSelectedImage}
+            patchNodeImageEdits={saveNodeImageEdits}
             previewTransform={previewTransform}
             previewViewportRef={previewViewportRef}
+            resetPreviewTransform={() => setPreviewTransform({ x: 0, y: 0, scale: 1 })}
             selectedNode={selectedNode}
             setError={setError}
             stopPreviewPan={stopPreviewPan}

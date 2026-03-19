@@ -1071,11 +1071,25 @@ select {
 
 .preview-panel__actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.preview-panel__actions button {
-  flex: 1;
+.preview-panel__tool-button {
+  color: var(--muted);
+}
+
+.preview-panel__tool-button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.preview-panel__tool-button.is-active {
+  color: var(--text);
+}
+
+.preview-panel__tool-button.is-active:hover:not(:disabled) {
+  color: var(--text);
 }
 
 .camera-panel {
@@ -1125,12 +1139,16 @@ select {
 .preview-viewport {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: 240px;
   overflow: hidden;
   user-select: none;
   background: var(--surface);
   border-radius: 6px;
   cursor: grab;
+}
+
+.preview-viewport--crop {
+  cursor: crosshair;
 }
 
 .camera-viewport {
@@ -1189,13 +1207,36 @@ select {
   user-select: none;
 }
 
-.preview-stage__image {
+.preview-stage__canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
   pointer-events: none;
+}
+
+.preview-crop-selection {
+  position: absolute;
+  border: 2px solid var(--selected);
+  background: color-mix(in srgb, var(--selected) 10%, transparent);
+  pointer-events: none;
+}
+
+.preview-panel__hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.preview-panel__control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.preview-panel__control-header strong {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
 }
 
 .field-stack {

@@ -99,6 +99,17 @@ const defaultUserProjectUi = {
   },
 }
 
+const defaultNodeImageEdits = {
+  crop: null,
+  brightness: 0,
+  contrast: 100,
+  exposure: 0,
+  sharpness: 0,
+  denoise: 0,
+  invert: false,
+  rotationTurns: 0,
+}
+
 const defaultIdentificationTemplateDefinitions = [
   {
     system_key: 'component-identification',
@@ -324,6 +335,7 @@ function createTextSchema() {
       name TEXT NOT NULL,
       notes TEXT DEFAULT '',
       tags_json TEXT DEFAULT '[]',
+      image_edits_json TEXT DEFAULT '{}',
       image_path TEXT,
       preview_path TEXT,
       original_filename TEXT,
@@ -377,6 +389,9 @@ function ensureTextIdSchema() {
   if (!nodeColumns.some((column) => column.name === 'preview_path')) {
     db.exec(`ALTER TABLE nodes ADD COLUMN preview_path TEXT`)
   }
+  if (!nodeColumns.some((column) => column.name === 'image_edits_json')) {
+    db.exec(`ALTER TABLE nodes ADD COLUMN image_edits_json TEXT DEFAULT '{}'`)
+  }
   if (!nodeColumns.some((column) => column.name === 'variant_of_id')) {
     db.exec(`ALTER TABLE nodes ADD COLUMN variant_of_id INTEGER`)
   }
@@ -427,6 +442,7 @@ function ensureTextIdSchema() {
         name TEXT NOT NULL,
         notes TEXT DEFAULT '',
         tags_json TEXT DEFAULT '[]',
+        image_edits_json TEXT DEFAULT '{}',
         image_path TEXT,
         preview_path TEXT,
         original_filename TEXT,
@@ -445,10 +461,10 @@ function ensureTextIdSchema() {
     const insertNodeRow = db.prepare(`
       INSERT INTO nodes_new (
         id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_path, preview_path, original_filename, created_at, updated_at
+        image_edits_json, image_path, preview_path, original_filename, created_at, updated_at
       ) VALUES (
         @id, @project_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json,
-        @image_path, @preview_path, @original_filename, @created_at, @updated_at
+        @image_edits_json, @image_path, @preview_path, @original_filename, @created_at, @updated_at
       )
     `)
 
@@ -475,6 +491,7 @@ function ensureTextIdSchema() {
         name: row.name,
         notes: row.notes || '',
         tags_json: row.tags_json || '[]',
+        image_edits_json: JSON.stringify(normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}'))),
         image_path: row.image_path ? rewriteUploadPathProjectFolder(row.image_path, projectIdMap.get(row.project_id)) : null,
         preview_path: row.preview_path ? rewriteUploadPathProjectFolder(row.preview_path, projectIdMap.get(row.project_id)) : null,
         original_filename: row.original_filename || null,
@@ -502,7 +519,11 @@ function ensureTextIdSchema() {
 ensureTextIdSchema()
 
 function ensureCollapseSchemaCleanup() {
-  const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  let nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  if (!nodeColumns.some((column) => column.name === 'image_edits_json')) {
+    db.exec(`ALTER TABLE nodes ADD COLUMN image_edits_json TEXT DEFAULT '{}'`)
+    nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  }
   if (!nodeColumns.some((column) => column.name === 'collapsed')) {
     return
   }
@@ -518,6 +539,7 @@ function ensureCollapseSchemaCleanup() {
         name TEXT NOT NULL,
         notes TEXT DEFAULT '',
         tags_json TEXT DEFAULT '[]',
+        image_edits_json TEXT DEFAULT '{}',
         image_path TEXT,
         preview_path TEXT,
         original_filename TEXT,
@@ -530,11 +552,11 @@ function ensureCollapseSchemaCleanup() {
 
       INSERT INTO nodes_clean (
         id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_path, preview_path, original_filename, created_at, updated_at
+        image_edits_json, image_path, preview_path, original_filename, created_at, updated_at
       )
       SELECT
         id, project_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_path, preview_path, original_filename, created_at, updated_at
+        COALESCE(image_edits_json, '{}'), image_path, preview_path, original_filename, created_at, updated_at
       FROM nodes;
 
       DROP TABLE nodes;
@@ -551,6 +573,15 @@ function ensureCollapseSchemaCleanup() {
 }
 
 ensureCollapseSchemaCleanup()
+
+function ensureNodeImageEditSchema() {
+  const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  if (!nodeColumns.some((column) => column.name === 'image_edits_json')) {
+    db.exec(`ALTER TABLE nodes ADD COLUMN image_edits_json TEXT DEFAULT '{}'`)
+  }
+}
+
+ensureNodeImageEditSchema()
 
 function ensureAuthSchema() {
   const projectColumns = db.prepare(`PRAGMA table_info(projects)`).all()
@@ -695,10 +726,10 @@ const insertProject = db.prepare(`
 const insertNode = db.prepare(`
   INSERT INTO nodes (
     id, project_id, parent_id, variant_of_id, type, name, notes, tags_json, image_path, preview_path,
-    original_filename, created_at, updated_at
+    image_edits_json, original_filename, created_at, updated_at
   ) VALUES (
     @id, @project_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
-    @original_filename, @created_at, @updated_at
+    @image_edits_json, @original_filename, @created_at, @updated_at
   )
 `)
 
@@ -1058,6 +1089,7 @@ const updateNodeStmt = db.prepare(`
   SET name = @name,
       notes = @notes,
       tags_json = @tags_json,
+      image_edits_json = @image_edits_json,
       updated_at = @updated_at
   WHERE id = @id
 `)
@@ -1093,6 +1125,7 @@ const createProjectWithRoot = db.transaction(({ name, description, owner_user_id
     name,
     notes: '',
     tags_json: '[]',
+    image_edits_json: JSON.stringify(defaultNodeImageEdits),
     variant_of_id: null,
     image_path: null,
     preview_path: null,
@@ -1136,6 +1169,7 @@ const renameProjectAndRoot = db.transaction(({ id, name }) => {
       name,
       notes: rootNode.notes || '',
       tags_json: rootNode.tags_json || '[]',
+      image_edits_json: rootNode.image_edits_json || JSON.stringify(defaultNodeImageEdits),
       updated_at: now,
     })
   }
@@ -1159,6 +1193,7 @@ const createNode = db.transaction((payload) => {
     created_at: now,
     updated_at: now,
     tags_json: JSON.stringify(payload.tags),
+    image_edits_json: JSON.stringify(normalizeNodeImageEdits(payload.image_edits)),
     variant_of_id: payload.variant_of_id ?? null,
   })
 
@@ -1166,13 +1201,14 @@ const createNode = db.transaction((payload) => {
   return nodeId
 })
 
-const updateNode = db.transaction(({ id, project_id, name, notes, tags }) => {
+const updateNode = db.transaction(({ id, project_id, name, notes, tags, image_edits }) => {
   const now = new Date().toISOString()
   updateNodeStmt.run({
     id,
     name,
     notes,
     tags_json: JSON.stringify(tags),
+    image_edits_json: JSON.stringify(normalizeNodeImageEdits(image_edits)),
     updated_at: now,
   })
   updateProjectTimestamp.run(now, project_id)
@@ -1432,6 +1468,45 @@ function createUntitledName() {
 
 function clampAiDepth(value) {
   return Math.max(0, Math.min(5, Number.parseInt(value, 10) || 0))
+}
+
+function clampImageEdit(value, min, max, fallback) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) {
+    return fallback
+  }
+  return Math.max(min, Math.min(max, number))
+}
+
+function normalizeNodeImageEdits(input) {
+  const raw = input && typeof input === 'object' ? input : {}
+  const cropInput = raw.crop && typeof raw.crop === 'object' ? raw.crop : null
+  let crop = null
+  if (cropInput) {
+    const x = clampImageEdit(cropInput.x, 0, 1, 0)
+    const y = clampImageEdit(cropInput.y, 0, 1, 0)
+    const width = clampImageEdit(cropInput.width, 0, 1, 1)
+    const height = clampImageEdit(cropInput.height, 0, 1, 1)
+    if (width > 0 && height > 0) {
+      crop = {
+        x,
+        y,
+        width: Math.min(width, 1 - x),
+        height: Math.min(height, 1 - y),
+      }
+    }
+  }
+
+  return {
+    crop,
+    brightness: clampImageEdit(raw.brightness, -100, 100, defaultNodeImageEdits.brightness),
+    contrast: clampImageEdit(raw.contrast, 0, 200, defaultNodeImageEdits.contrast),
+    exposure: clampImageEdit(raw.exposure, -100, 100, defaultNodeImageEdits.exposure),
+    sharpness: clampImageEdit(raw.sharpness, 0, 100, defaultNodeImageEdits.sharpness),
+    denoise: clampImageEdit(raw.denoise, 0, 100, defaultNodeImageEdits.denoise),
+    invert: Boolean(raw.invert),
+    rotationTurns: ((Number.parseInt(raw.rotationTurns, 10) || 0) % 4 + 4) % 4,
+  }
 }
 
 function normalizeUserProjectUi(uiInput) {
@@ -2120,6 +2195,7 @@ function serializeNode(row, _collapsedMap = null, identification = null) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: JSON.parse(row.tags_json || '[]'),
+    imageEdits: normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}')),
     collapsed: false,
     isVariant: row.variant_of_id != null,
     identification,
@@ -2610,6 +2686,7 @@ function writeProjectManifest(project, rows, workDir) {
         name: row.name,
         notes: row.notes || '',
         tags: JSON.parse(row.tags_json || '[]'),
+        image_edits: normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}')),
         original_filename: row.original_filename,
         image_file: imageFile,
         preview_file: previewFile,
@@ -2694,6 +2771,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
       name: rootRow.name || 'Root',
       notes: rootRow.notes || '',
       tags_json: JSON.stringify(Array.isArray(rootRow.tags) ? rootRow.tags : []),
+      image_edits_json: JSON.stringify(normalizeNodeImageEdits(rootRow.image_edits)),
       image_path: null,
       preview_path: null,
       original_filename: null,
@@ -2758,6 +2836,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
           name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
           notes: row.notes || '',
           tags: Array.isArray(row.tags) ? row.tags : [],
+          image_edits: row.image_edits,
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
@@ -2866,6 +2945,7 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
         name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
         notes: row.notes || '',
         tags: Array.isArray(row.tags) ? row.tags : [],
+        image_edits: row.image_edits,
         image_path: relativeImagePath,
         preview_path: relativePreviewPath,
         original_filename: row.original_filename || null,
@@ -2969,6 +3049,7 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
       name: rootRow.name || createdRoot.name,
       notes: rootRow.notes || '',
       tags: Array.isArray(rootRow.tags) ? rootRow.tags : [],
+      image_edits: rootRow.image_edits,
     })
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     oldToNew.set(rootManifestId, createdRoot.id)
@@ -3031,6 +3112,7 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
           name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Imported Folder'),
           notes: row.notes || '',
           tags: Array.isArray(row.tags) ? row.tags : [],
+          image_edits: row.image_edits,
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
@@ -4206,7 +4288,11 @@ app.post('/api/projects/:id/subtree-restore', requireAuth, restoreUpload.any(), 
 app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
   try {
     const node = assertNodeAccess(req.params.id, req.user.id)
-    const requestedName = String(req.body.name || '').trim()
+    const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, 'name')
+    const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes')
+    const hasTags = Object.prototype.hasOwnProperty.call(req.body || {}, 'tags')
+    const hasImageEdits = Object.prototype.hasOwnProperty.call(req.body || {}, 'imageEdits')
+    const requestedName = hasName ? String(req.body.name || '').trim() : node.name
 
     if (node.parent_id == null && requestedName && requestedName !== node.name) {
       return res.json({ ok: false, error: 'Rename the project to rename the root node' })
@@ -4216,8 +4302,9 @@ app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
       id: node.id,
       project_id: node.project_id,
       name: requestedName || node.name,
-      notes: String(req.body.notes || '').trim(),
-      tags: parseTags(req.body.tags),
+      notes: hasNotes ? String(req.body.notes || '').trim() : (node.notes || ''),
+      tags: hasTags ? parseTags(req.body.tags) : JSON.parse(node.tags_json || '[]'),
+      image_edits: hasImageEdits ? req.body.imageEdits : JSON.parse(node.image_edits_json || '{}'),
     })
 
     broadcastProjectEvent(node.project_id)
