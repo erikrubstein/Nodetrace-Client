@@ -4,117 +4,211 @@
   <img src="./public/nodetrace.svg" alt="Nodetrace logo" width="120" />
 </p>
 
-Nodetrace is a visual documentation tool for hierarchical photo capture workflows.
+Nodetrace is a collaborative visual documentation tool for building and reviewing hierarchical photo trees.
 
-It is designed for jobs where you need to document complex physical systems in layers: cabinet -> subassembly -> box -> board -> component, with enough structure that the images remain usable later for inspection, teardown review, export, and downstream HBOM work.
+It is built for workflows where a flat folder of images is not enough: cabinet to subassembly to board to component, with enough structure to support inspection, teardown review, collaboration, AI-assisted identification, and eventual HBOM preparation.
 
-## Purpose
+## What It Does
 
-Nodetrace solves a specific problem: once you take hundreds of inspection photos, a normal folder of images is no longer enough. You need a way to:
+Nodetrace lets you:
 
-- organize photos into a true hierarchy
+- organize photos and folders into a true node tree
 - keep alternate views of the same item as variants
-- navigate visually through a large structure
-- add notes and tags to each item
-- capture photos quickly from desktop, phone, or live camera input
-- export both a full app backup and a normal media tree for people who do not use the app
+- collaborate with other users on the same project
+- assign structured identification templates to nodes
+- review field values one field at a time
+- use AI to assist with field completion
+- inspect and enhance images non-destructively in the preview panel
+- search and filter large projects quickly
+- export either a full Nodetrace backup or a normal media tree
 
-## Core Concepts
+## Core Model
 
 - `Project`
-  A complete inspection job. Each project has its own settings, hierarchy, media, and exports.
+  A complete job with its own hierarchy, templates, settings, collaborators, and media.
 - `Folder`
-  A structural node used to group other nodes.
+  A structural node for grouping other nodes.
 - `Photo`
   A node backed by an image. Photos can also have children.
 - `Variant`
-  An alternate view of the same item. Variants are lateral to a node rather than children of it.
-- `Collapsed Group`
-  A visual summary used to compress large child branches without deleting structure.
+  An alternate view of the same item. Variants are lateral to a main node rather than children.
 
-## Main Features
+Every node also has:
 
-- Multiple projects in one app
-- Root-folder-first project structure
-- Nested folders and photos
-- Variant photo support
-- Notes and tags on nodes
-- Drag-and-drop reparenting
-- Bulk selection for move and delete operations
-- Collapsible branches and focus-path viewing
-- Compact and classic layout modes
-- Right-growing and down-growing tree directions
-- Zoomable and pannable canvas
-- Preview panel with high-resolution image view
-- Camera panel for live crop capture from a connected camera
-- Mobile capture endpoint for direct phone-based uploads
-- Undo/redo for project edits
-- Export/import of complete project backups
-- Export of a normal folder-based media tree
+- a unique node ID
+- an owner user
+- notes
+- optional structured identification data
+- optional non-destructive image edits if it is backed by a photo
 
-## Interface Overview
+## Major Features
 
-The UI is built around a canvas-first workflow:
+### Collaboration
 
-- top app menu for file, edit, and view actions
-- top-edge canvas actions for adding folders, photos, variants, fit view, and grid toggle
-- dockable left and right sidebars for inspector, settings, account, preview, and camera panels
+- username/password accounts
+- project owners and collaborators
+- per-project access control
+- live collaborator presence in the top bar
+- colored node outlines showing what other users currently have selected
+- click a collaborator chip to jump to the node they are viewing
 
-The canvas is the primary workspace. Nodes can be selected, moved, collapsed, expanded, and inspected without switching to a separate tree-management view.
+### Tree Editing
 
-## Capture Workflows
+- create folders, photos, and variant photos
+- drag-and-drop reparenting
+- convert between variants and structural children
+- promote a variant to become the main node
+- collapse and expand branches
+- multi-select nodes for bulk operations
+- undo/redo support for project edits
 
-### Desktop
+### Canvas Workflow
 
-- Add folders and photos directly in the canvas
-- Drag image files into the app to upload quickly
-- Use the Camera panel to capture a crop from a live video input
+- zoomable and pannable visual tree
+- fit-to-view and focus-selected actions
+- optional background grid
+- selected-node path display
+- per-user per-project saved canvas position and zoom
 
-### Mobile
+### Docked Panels
 
-Nodetrace exposes a `/capture` endpoint for streamlined phone uploads.
+The UI uses left and right docked sidebars with one active panel per side. Panels can be moved between sides.
 
-- pair a phone to the current desktop session with a short session code
-- take photos directly on the phone
-- send the image to the currently selected node on desktop
-- capture normal photos or variant photos
+Current panels include:
 
-## Storage Model
+- Preview
+- Camera
+- Search
+- Templates
+- Inspector
+- Data
+- Settings
+- Account
 
-Nodetrace stores data locally by default.
+Layout is saved per user and per project.
 
-- Database: `data/database.db`
-- Uploaded media: `data/uploads/<project-id>/...`
+### Search and Filtering
 
-Each uploaded photo stores:
+The Search panel supports:
 
-- the original-resolution image
-- a lower-resolution preview image for canvas rendering
+- name search
+- filter by review status
+- filter by notes presence
+- filter by one or more owners
+- filter by one or more templates
+- batch-select all results
+- click a result to select it and focus it on the canvas
 
-This keeps the main graph responsive even with large projects.
+### Structured Identification
+
+Nodetrace supports template-driven identification workflows.
+
+Templates define fields such as:
+
+- part number
+- manufacturer
+- identifiers
+- material description
+- confidence
+
+Per node, you can:
+
+- apply a template
+- fill or edit field values
+- mark fields reviewed individually
+- use AI Fill on AI-assisted fields
+
+Templates support:
+
+- manual fields
+- AI-assisted fields
+- template-level AI instructions
+- template-level parent/child scope limits
+
+### AI Assistance
+
+AI Fill is project-scoped and uses the project OpenAI API key managed by the project owner.
+
+Current behavior:
+
+- reviewed fields are never overwritten
+- reviewed field values are still used as trusted context
+- scoped node text is provided before images
+- variants are always included for in-scope nodes
+- template-level instructions guide how AI uses bounded context
+
+AI assistance is meant to provide a starting point, not final truth. Human review is still the workflow.
+
+### Preview and Image Enhancement
+
+The Preview panel supports non-destructive, per-node image adjustments:
+
+- zoom and pan
+- fit view
+- crop
+- rotate 90 degrees
+- brightness
+- contrast
+- exposure
+- sharpness
+- denoise
+- invert colors
+- reset crop
+- reset adjustments
+- copy image
+- download image
+
+These edits do not modify the original uploaded file.
+
+### Capture Workflows
+
+#### Desktop
+
+- add folders and photos directly in the app
+- drag image files into the tree
+- use the Camera panel for live capture and crop
+
+#### Mobile
+
+Nodetrace exposes a `/capture` page for phone uploads tied to the current desktop session.
+
+- connect a phone to the active desktop session
+- capture photos directly on the phone
+- upload normal photos or variants
+- send them straight into the selected node context
+
+## Storage
+
+By default Nodetrace stores local data in:
+
+- database: `data/database.db`
+- uploaded media: `data/uploads/<project-id>/...`
+
+Each image keeps:
+
+- an original-resolution file
+- a lower-resolution preview image for fast rendering
 
 ## Export Options
 
-Nodetrace supports two different export paths:
-
 ### Export Project
 
-Creates a full backup archive that contains:
+Creates a full backup archive intended for re-import into Nodetrace.
+
+Includes:
 
 - project metadata
+- hierarchy
 - settings
-- node hierarchy
-- notes and tags
+- collaborators and templates
+- identification data
 - original images
 - preview images
-
-This export is intended for re-import into Nodetrace.
+- non-destructive image edit state
 
 ### Export Media Tree
 
-Creates a normal `.zip` with folders and images arranged to mimic the project structure.
-
-This is intended for sharing with people who do not use Nodetrace.
+Creates a normal folder-based `.zip` that mirrors the project structure for users who do not use Nodetrace.
 
 ## Tech Stack
 
@@ -132,7 +226,7 @@ Install dependencies:
 npm install
 ```
 
-Run in development:
+Run the normal development setup:
 
 ```bash
 npm run dev
@@ -140,61 +234,57 @@ npm run dev
 
 By default:
 
-- frontend: `http://localhost:5173`
+- dev frontend: `http://localhost:5173`
 - backend/API: `http://localhost:3001`
 
 ### Shared Backend Workflow
 
-If you want other people using a stable built frontend while you keep developing against the same backend data, use this split:
+If you want other users on the stable built frontend while you continue working on a separate dev frontend against the same backend data:
 
-1. Build the frontend when you want to publish an updated stable UI:
+1. Build the frontend when you want to publish a stable UI snapshot:
 
 ```bash
 npm run build
 ```
 
-2. Run the shared backend, which also serves the built `dist/` frontend:
+2. Run the shared backend, which also serves the built frontend:
 
 ```bash
 npm run serve:shared
 ```
 
-People using:
+Users can then stay on:
 
 - `http://<host>:3001`
 
-will get the last built frontend plus the live backend/API.
-
-3. In a separate terminal, run only the Vite dev frontend:
+3. In another terminal, run only the Vite frontend:
 
 ```bash
 npm run dev:client
 ```
 
-You can then use:
+You can then work from:
 
 - `http://<host>:5173`
 
-for live frontend development while everyone else stays on the last built UI at `3001`.
-
 Important:
 
-- both frontends still share the same backend and database
-- frontend-only changes stay isolated until you run `npm run build`
-- backend code changes are not isolated in this setup; if you edit and restart the backend, everyone using the shared instance will feel that immediately
+- this isolates frontend work, not backend changes
+- if you restart or change the backend, everyone sharing that backend feels it immediately
 
-Run production build:
+## Environment Notes
 
-```bash
-npm run build
-npm start
+Normal local use does not require much configuration, but AI key storage does.
+
+Nodetrace reads `.env` automatically on server startup.
+
+For project-scoped OpenAI API key storage, define:
+
+```env
+NODETRACE_SECRET_KEY=replace-this-with-a-long-random-secret
 ```
 
-## Repo Notes
-
-- `data/` is gitignored and contains local projects and media
-- `dist/` is gitignored
-- no environment configuration is required for normal local use
+That key is used only to encrypt stored project API keys on the server.
 
 ## Intended Use
 
@@ -202,8 +292,9 @@ Nodetrace is especially useful for:
 
 - industrial equipment inspection
 - teardown documentation
-- cabinet and board photography
-- structured field evidence capture
-- HBOM preparation workflows
+- board and component photography
+- structured evidence capture
+- collaborative reverse-engineering workflows
+- HBOM preparation
 
-It is not meant to be a general photo gallery. It is a structured visual trace tool for documenting real-world systems.
+It is not intended to be a general photo gallery. It is a structured visual trace tool for documenting real-world systems.

@@ -8,6 +8,7 @@ export default function CanvasWorkspace({
   contextMenu,
   contextMenuNode,
   convertNodeToVariant,
+  promoteVariantToMain,
   convertVariantToChild,
   dragActive,
   dragHoverNodeId,
@@ -404,6 +405,21 @@ export default function CanvasWorkspace({
               type="button"
             >
               {contextMenuNode?.collapsed ? 'Expand' : 'Collapse'}
+            </button>
+          ) : null}
+          {contextMenuNode?.isVariant ? (
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={() => {
+                setContextMenu(null)
+                void promoteVariantToMain(contextMenuNode)
+              }}
+              type="button"
+            >
+              Make Main
             </button>
           ) : null}
           {contextMenuNode?.isVariant ? (

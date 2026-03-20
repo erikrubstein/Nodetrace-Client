@@ -2797,6 +2797,61 @@ function App() {
     }
   }
 
+  async function promoteVariantToMain(node) {
+    if (!node?.variant_of_id || !selectedProjectId) {
+      return
+    }
+
+    const previousAnchorId = node.variant_of_id
+    setBusy(true)
+    setError('')
+
+    try {
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      let payload = null
+      try {
+        payload = await api(`/api/nodes/${node.id}/promote-variant`, {
+          method: 'POST',
+        })
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+
+      await loadTree(selectedProjectId, payload.promotedNode?.id || node.id)
+      pushHistory({
+        undo: async () => {
+          const rollbackUndoEvent = beginLocalEventExpectation()
+          try {
+            await api(`/api/nodes/${previousAnchorId}/promote-variant`, {
+              method: 'POST',
+            })
+          } catch (error) {
+            rollbackUndoEvent()
+            throw error
+          }
+          await loadTree(selectedProjectId, previousAnchorId)
+        },
+        redo: async () => {
+          const rollbackRedoEvent = beginLocalEventExpectation()
+          try {
+            await api(`/api/nodes/${node.id}/promote-variant`, {
+              method: 'POST',
+            })
+          } catch (error) {
+            rollbackRedoEvent()
+            throw error
+          }
+          await loadTree(selectedProjectId, node.id)
+        },
+      })
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function deleteNode() {
     if (!selectedNode) {
       return
@@ -3259,6 +3314,7 @@ function App() {
           contextMenu={contextMenu}
           contextMenuNode={contextMenuNode}
           convertNodeToVariant={convertNodeToVariant}
+          promoteVariantToMain={promoteVariantToMain}
           convertVariantToChild={convertVariantToChild}
           dragActive={dragActive}
           dragHoverNodeId={dragHoverNodeId}
