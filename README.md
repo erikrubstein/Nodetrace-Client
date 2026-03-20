@@ -60,6 +60,8 @@ Every node also has:
 - promote a variant to become the main node
 - collapse and expand branches
 - multi-select nodes for bulk operations
+- right-drag marquee selection on the canvas
+- bulk template application and template clearing
 - undo/redo support for project edits
 
 ### Canvas Workflow
@@ -68,6 +70,7 @@ Every node also has:
 - fit-to-view and focus-selected actions
 - optional background grid
 - selected-node path display
+- selection-aware layout changes that keep the selected node anchored during collapse/expand
 - per-user per-project saved canvas position and zoom
 
 ### Docked Panels
