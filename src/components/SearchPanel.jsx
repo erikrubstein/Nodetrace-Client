@@ -34,10 +34,13 @@ function optionRow({ checked, itemKey, label, onClick, type = 'single' }) {
 
 export default function SearchPanel({
   bulkSelectNodeIds,
+  hideNonResults,
+  onResultsChange,
   selectedNodeId,
   templates,
   tree,
   onSelectNode,
+  toggleHideNonResults,
 }) {
   const filterPopoverRef = useRef(null)
   const [query, setQuery] = useState('')
@@ -103,6 +106,10 @@ export default function SearchPanel({
       .filter((node) => !selectedOwnerUsernames.length || selectedOwnerUsernames.includes(node.ownerUsername))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, statusFilter, tree?.nodes])
+
+  useEffect(() => {
+    onResultsChange?.(results.map((node) => node.id))
+  }, [onResultsChange, results])
 
   useEffect(() => {
     if (!filterMenuOpen) {
@@ -273,15 +280,26 @@ export default function SearchPanel({
       <section className="inspector__section search-panel__section search-panel__results-section">
         <div className="inspector__section-header">
           <div className="inspector__title">{results.length} RESULTS</div>
-          <IconButton
-            aria-label="Select all results"
-            className="tool-button"
-            disabled={!results.length}
-            onClick={() => bulkSelectNodeIds(results.map((node) => node.id))}
-            tooltip="Select All Results"
-          >
-            <i aria-hidden="true" className="fa-solid fa-check-double" />
-          </IconButton>
+          <div className="search-panel__results-actions">
+            <IconButton
+              aria-label="Hide non-results"
+              className={`tool-button ${hideNonResults ? 'is-active' : ''}`}
+              disabled={!results.length && !hideNonResults}
+              onClick={toggleHideNonResults}
+              tooltip={hideNonResults ? 'Show All Nodes' : 'Show Results Only'}
+            >
+              <i aria-hidden="true" className="fa-solid fa-eye-slash" />
+            </IconButton>
+            <IconButton
+              aria-label="Select all results"
+              className="tool-button"
+              disabled={!results.length}
+              onClick={() => bulkSelectNodeIds(results.map((node) => node.id))}
+              tooltip="Select All Results"
+            >
+              <i aria-hidden="true" className="fa-solid fa-check-double" />
+            </IconButton>
+          </div>
         </div>
         {results.length ? (
           <div className="search-panel__results">

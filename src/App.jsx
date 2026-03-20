@@ -124,6 +124,8 @@ function App() {
   const [cameraSelection, setCameraSelection] = useState(null)
   const [loadedImages, setLoadedImages] = useState({})
   const [projectPresenceUsers, setProjectPresenceUsers] = useState([])
+  const [searchResultNodeIds, setSearchResultNodeIds] = useState([])
+  const [hideNonResultNodes, setHideNonResultNodes] = useState(false)
   const [draggingPanelId, setDraggingPanelId] = useState(null)
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
   const [mobileConnectionCount, setMobileConnectionCount] = useState(0)
@@ -709,6 +711,8 @@ function App() {
 
   useEffect(() => {
     setMultiSelectedNodeIds([])
+    setSearchResultNodeIds([])
+    setHideNonResultNodes(false)
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = ''
     sidebarUiSignatureRef.current = ''
@@ -3173,10 +3177,13 @@ function App() {
         content: (
           <SearchPanel
             bulkSelectNodeIds={bulkSelectSearchResults}
+            hideNonResults={hideNonResultNodes}
+            onResultsChange={setSearchResultNodeIds}
             onSelectNode={selectNodeAndFocus}
             selectedNodeId={selectedNodeId}
             templates={identificationTemplates}
             tree={tree}
+            toggleHideNonResults={() => setHideNonResultNodes((current) => !current)}
           />
         ),
       },
@@ -3445,6 +3452,8 @@ function App() {
           openNewFolderDialog={openNewFolderDialog}
           projectSettings={projectSettings}
           remoteSelectionsByNodeId={remoteSelectionsByNodeId}
+          hideNonResultNodes={hideNonResultNodes}
+          searchResultNodeIds={searchResultNodeIds}
           selectRootNode={selectRootNode}
           selectedNodePath={selectedNodePath}
           saveNodeDraft={saveNodeDraft}

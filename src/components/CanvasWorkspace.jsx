@@ -22,6 +22,7 @@ export default function CanvasWorkspace({
   focusPathMode,
   handleCanvasContextMenu,
   handleCanvasPointerMove,
+  hideNonResultNodes,
   layout,
   loadedImages,
   markImageLoaded,
@@ -29,6 +30,7 @@ export default function CanvasWorkspace({
   openNewFolderDialog,
   projectSettings,
   remoteSelectionsByNodeId,
+  searchResultNodeIds,
   selectRootNode,
   selectedNodePath,
   saveNodeDraft,
@@ -50,6 +52,7 @@ export default function CanvasWorkspace({
   uploadFiles,
   viewportRef,
 }) {
+  const searchResultNodeIdSet = hideNonResultNodes ? new Set(searchResultNodeIds || []) : null
   const selectedPathSeparatorIndex = selectedNodePath.lastIndexOf(' > ')
   const selectedPathPrefix =
     selectedPathSeparatorIndex >= 0 ? `${selectedNodePath.slice(0, selectedPathSeparatorIndex)} > ` : ''
@@ -188,6 +191,7 @@ export default function CanvasWorkspace({
 
         {layout.nodes.map((item) => {
           const remoteSelections = remoteSelectionsByNodeId?.get(item.id) || []
+          const isSearchMuted = Boolean(searchResultNodeIdSet && !searchResultNodeIdSet.has(item.id))
           const visualSize = item.node.isVariant ? 78 : 112
           const visualOffsetX = item.node.isVariant ? 17 : 0
           const visualOffsetY = item.node.isVariant ? 17 : 0
@@ -206,6 +210,7 @@ export default function CanvasWorkspace({
               item.node.type === 'photo' ? 'photo-node' : 'folder-node'
             } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''} ${
               item.node.isVariant ? 'variant-node' : ''
+            } ${isSearchMuted ? 'graph-node--search-muted' : ''
             }`}
             onContextMenu={(event) => {
               if (item.node.type === 'collapsed-group') {

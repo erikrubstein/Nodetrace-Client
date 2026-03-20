@@ -638,6 +638,24 @@ select {
   z-index: 1;
 }
 
+.graph-node--search-muted .graph-node__visual {
+  background: color-mix(in srgb, var(--surface) 82%, var(--canvas));
+}
+
+.graph-node--search-muted .graph-node__visual::after {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  border: 1px dashed var(--muted);
+  border-radius: 4px;
+  z-index: 3;
+}
+
+.graph-node.variant-node.graph-node--search-muted .graph-node__visual::after {
+  inset: 7px;
+  border-radius: 3px;
+}
+
 .graph-node__presence-ring {
   position: absolute;
   box-shadow: 0 0 0 3px var(--presence-color);
@@ -731,6 +749,18 @@ select {
 .graph-node__image {
   position: relative;
   z-index: 1;
+}
+
+.graph-node--search-muted .graph-node__image,
+.graph-node--search-muted .graph-node__spinner,
+.graph-node--search-muted .graph-node__placeholder,
+.graph-node--search-muted .graph-node__collapsed-grid,
+.graph-node--search-muted .graph-node__sibling-indicator {
+  opacity: 0;
+}
+
+.graph-node--search-muted .graph-node__meta {
+  opacity: 0.65;
 }
 
 .graph-node__image--loading {
@@ -1957,6 +1987,17 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.search-panel__results-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-panel__results-actions .tool-button.is-active,
+.search-panel__results-actions .tool-button.is-active:hover:not(:disabled) {
+  color: var(--text);
 }
 
 .search-panel__results {
