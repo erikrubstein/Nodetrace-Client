@@ -1,5 +1,5 @@
 import IconButton from './IconButton'
-import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon } from './icons'
+import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, RootNodeIcon } from './icons'
 
 export default function CanvasWorkspace({
   beginNodeDrag,
@@ -29,6 +29,7 @@ export default function CanvasWorkspace({
   openNewFolderDialog,
   projectSettings,
   remoteSelectionsByNodeId,
+  selectRootNode,
   selectedNodePath,
   saveNodeDraft,
   selectedNode,
@@ -105,6 +106,15 @@ export default function CanvasWorkspace({
           tooltip="Focus Selected"
         >
           <FocusNodeIcon />
+        </IconButton>
+        <IconButton
+          aria-label="Select root node"
+          className="canvas-tool-button"
+          disabled={!tree?.root || busy}
+          onClick={selectRootNode}
+          tooltip="Select Root"
+        >
+          <RootNodeIcon />
         </IconButton>
         <IconButton
           aria-label="Add folder"

@@ -2036,7 +2036,7 @@ function App() {
   }
 
   function requestDeleteTemplate() {
-    if (!selectedTemplateEditor || selectedTemplateEditor.systemKey) {
+    if (!selectedTemplateEditor) {
       return
     }
     setError('')
@@ -2728,6 +2728,14 @@ function App() {
 
     setEffectiveSelection(uniqueIds, nextPrimaryId)
   }, [selectedNodeId, setEffectiveSelection])
+
+  const selectRootNode = useCallback(async () => {
+    if (!tree?.root?.id) {
+      return
+    }
+    await saveNodeDraft(editTargetNode, editForm)
+    setEffectiveSelection([tree.root.id], tree.root.id)
+  }, [editForm, editTargetNode, saveNodeDraft, setEffectiveSelection, tree?.root?.id])
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -3437,6 +3445,7 @@ function App() {
           openNewFolderDialog={openNewFolderDialog}
           projectSettings={projectSettings}
           remoteSelectionsByNodeId={remoteSelectionsByNodeId}
+          selectRootNode={selectRootNode}
           selectedNodePath={selectedNodePath}
           saveNodeDraft={saveNodeDraft}
           selectedNode={selectedNode}

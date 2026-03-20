@@ -113,43 +113,6 @@ const defaultNodeImageEdits = {
   rotationTurns: 0,
 }
 
-const defaultIdentificationTemplateDefinitions = [
-  {
-    system_key: 'component-identification',
-    name: 'Component Identification',
-    fields: [
-      {
-        key: 'manufacturer',
-        label: 'Manufacturer',
-        type: 'text',
-        required: true,
-        reviewRequired: true,
-      },
-      {
-        key: 'model_number',
-        label: 'Model Number',
-        type: 'text',
-        required: true,
-        reviewRequired: true,
-      },
-      {
-        key: 'component_identifiers',
-        label: 'Component Identifiers',
-        type: 'text',
-        required: true,
-        reviewRequired: true,
-      },
-      {
-        key: 'material_description',
-        label: 'Material Description',
-        type: 'multiline',
-        required: true,
-        reviewRequired: true,
-      },
-    ],
-  },
-]
-
 function generateShortId() {
   let value = ID_FIRST_CHARS[Math.floor(Math.random() * ID_FIRST_CHARS.length)]
   for (let index = 1; index < 5; index += 1) {
@@ -931,12 +894,6 @@ const listIdentificationTemplatesByProject = db.prepare(`
   ORDER BY created_at ASC, id ASC
 `)
 const getIdentificationTemplate = db.prepare(`SELECT * FROM identification_templates WHERE id = ?`)
-const getIdentificationTemplateByProjectAndSystemKey = db.prepare(`
-  SELECT *
-  FROM identification_templates
-  WHERE project_id = ?
-    AND system_key = ?
-`)
 const insertIdentificationTemplate = db.prepare(`
   INSERT INTO identification_templates (id, project_id, system_key, name, ai_instructions, parent_depth, child_depth, fields_json, created_at, updated_at)
   VALUES (@id, @project_id, @system_key, @name, @ai_instructions, @parent_depth, @child_depth, @fields_json, @created_at, @updated_at)
@@ -1200,7 +1157,6 @@ const createProjectWithRoot = db.transaction(({ name, description, owner_user_id
     updated_at: now,
   })
 
-  ensureDefaultIdentificationTemplates(projectId)
 
   return projectId
 })
@@ -2224,31 +2180,6 @@ function serializeIdentificationTemplate(row) {
   }
 }
 
-function ensureDefaultIdentificationTemplates(projectId) {
-  for (const templateDefinition of defaultIdentificationTemplateDefinitions) {
-    const existing = getIdentificationTemplateByProjectAndSystemKey.get(projectId, templateDefinition.system_key)
-    if (existing) {
-      continue
-    }
-
-    const now = new Date().toISOString()
-    insertIdentificationTemplate.run({
-      id: generateUniqueId((candidate) => Boolean(getIdentificationTemplate.get(candidate))),
-      project_id: projectId,
-      system_key: templateDefinition.system_key,
-      name: templateDefinition.name,
-      ai_instructions: '',
-      parent_depth: 0,
-      child_depth: 0,
-      fields_json: JSON.stringify(normalizeIdentificationFieldDefinitions(templateDefinition.fields)),
-      created_at: now,
-      updated_at: now,
-    })
-  }
-
-  return listIdentificationTemplatesByProject.all(projectId)
-}
-
 function buildNodeIdentification(nodeId, templateRowsById, identificationRowsByNodeId, fieldRowsByNodeId) {
   const assignment = identificationRowsByNodeId.get(nodeId)
   if (!assignment) {
@@ -2333,7 +2264,7 @@ function getOrCreateProjectPreferences(project, userId) {
 }
 
 function serializeProject(row, userId) {
-  const templates = ensureDefaultIdentificationTemplates(row.id).map(serializeIdentificationTemplate)
+  const templates = listIdentificationTemplatesByProject.all(row.id).map(serializeIdentificationTemplate)
   const preferences = userId ? getOrCreateProjectPreferences(row, userId) : {
     settings: normalizeProjectSettings(JSON.parse(row.settings_json || '{}')),
     ui: normalizeUserProjectUi({}),
@@ -2389,7 +2320,7 @@ function serializeNodeForUser(row, userId) {
     return null
   }
   const templateRowsById = new Map(
-    ensureDefaultIdentificationTemplates(row.project_id)
+    listIdentificationTemplatesByProject.all(row.project_id)
       .map(serializeIdentificationTemplate)
       .map((template) => [template.id, template]),
   )
@@ -2417,7 +2348,7 @@ function serializeNodeForUser(row, userId) {
 
 function buildTree(project, rows, userId = null) {
   const templateRowsById = new Map(
-    ensureDefaultIdentificationTemplates(project.id)
+    listIdentificationTemplatesByProject.all(project.id)
       .map(serializeIdentificationTemplate)
       .map((template) => [template.id, template]),
   )
@@ -2811,7 +2742,7 @@ function exportProjectMediaArchive(projectId) {
 function writeProjectManifest(project, rows, workDir) {
   const filesDir = path.join(workDir, 'files')
   fs.mkdirSync(filesDir, { recursive: true })
-  const templateRows = ensureDefaultIdentificationTemplates(project.id).map(serializeIdentificationTemplate)
+  const templateRows = listIdentificationTemplatesByProject.all(project.id).map(serializeIdentificationTemplate)
   const identificationsByNodeId = new Map(
     listNodeIdentificationsByProject.all(project.id).map((row) => [row.node_id, row]),
   )
@@ -2922,7 +2853,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
     const templateIdMap = new Map()
     const importedTemplates = Array.isArray(manifest.project?.identification_templates)
       ? manifest.project.identification_templates
-      : defaultIdentificationTemplateDefinitions
+      : []
     for (const template of importedTemplates) {
       const newTemplateId = generateUniqueId((candidate) => Boolean(getIdentificationTemplate.get(candidate)))
       insertIdentificationTemplate.run({
@@ -2937,9 +2868,8 @@ function restoreProjectFromArchive(projectId, archivePath) {
         created_at: now,
         updated_at: now,
       })
-      templateIdMap.set(String(template.id ?? template.old_id ?? template.systemKey ?? template.system_key ?? newTemplateId), newTemplateId)
+      templateIdMap.set(String(template.id ?? template.old_id ?? newTemplateId), newTemplateId)
     }
-    ensureDefaultIdentificationTemplates(projectId)
 
     const rootId = generateUniqueId((candidate) => Boolean(getNode.get(candidate)))
     insertNode.run({
@@ -3198,7 +3128,7 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
     const templateIdMap = new Map()
     const importedTemplates = Array.isArray(manifest.project?.identification_templates)
       ? manifest.project.identification_templates
-      : defaultIdentificationTemplateDefinitions
+      : []
     const now = new Date().toISOString()
     for (const template of importedTemplates) {
       const newTemplateId = generateUniqueId((candidate) => Boolean(getIdentificationTemplate.get(candidate)))
@@ -3214,9 +3144,8 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
         created_at: now,
         updated_at: now,
       })
-      templateIdMap.set(String(template.id ?? template.old_id ?? template.systemKey ?? template.system_key ?? newTemplateId), newTemplateId)
+      templateIdMap.set(String(template.id ?? template.old_id ?? newTemplateId), newTemplateId)
     }
-    ensureDefaultIdentificationTemplates(projectId)
 
     const importedRows = Array.isArray(manifest.nodes) ? manifest.nodes : []
     const oldToNew = new Map()
@@ -4053,9 +3982,6 @@ app.patch('/api/projects/:id/templates/:templateId', requireAuth, (req, res, nex
   try {
     const project = assertProjectAccess(req.params.id, req.user.id)
     const template = assertIdentificationTemplateAccess(req.params.templateId, project.id)
-    if (template.system_key) {
-      return res.json({ ok: false, error: 'Built-in templates cannot be edited' })
-    }
     const name = String(req.body?.name || '').trim()
     const aiInstructions = String(req.body?.aiInstructions || '').trim()
     const parentDepth = clampAiDepth(req.body?.parentDepth)
@@ -4087,9 +4013,6 @@ app.delete('/api/projects/:id/templates/:templateId', requireAuth, (req, res, ne
   try {
     const project = assertProjectAccess(req.params.id, req.user.id)
     const template = assertIdentificationTemplateAccess(req.params.templateId, project.id)
-    if (template.system_key) {
-      return res.json({ ok: false, error: 'Built-in templates cannot be deleted' })
-    }
 
     deleteNodeIdentificationFieldValuesByTemplateStmt.run(template.id)
     deleteNodeIdentificationsByTemplateStmt.run(template.id)
@@ -4657,7 +4580,7 @@ app.post('/api/nodes/:id/identification/ai-fill', requireAuth, async (req, res) 
     const template = assertIdentificationTemplateAccess(assignment.template_id, node.project_id)
     const templateRowsById = new Map([[template.id, serializeIdentificationTemplate(template)]])
     const projectTemplatesById = new Map(
-      ensureDefaultIdentificationTemplates(node.project_id)
+      listIdentificationTemplatesByProject.all(node.project_id)
         .map(serializeIdentificationTemplate)
         .map((templateRow) => [templateRow.id, templateRow]),
     )

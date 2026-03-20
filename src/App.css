@@ -1731,6 +1731,16 @@ button:disabled {
   font-weight: 600;
 }
 
+.settings-panel__meta-row--actions {
+  align-items: center;
+}
+
+.settings-panel__meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .settings-panel__owner-name {
   color: var(--text);
   font-size: 0.92rem;

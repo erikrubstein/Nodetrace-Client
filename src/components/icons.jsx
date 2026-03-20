@@ -38,6 +38,10 @@ export function FocusNodeIcon() {
   return <i aria-hidden="true" className="fa-solid fa-crosshairs" />
 }
 
+export function RootNodeIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-house" />
+}
+
 export function CameraIcon() {
   return <i aria-hidden="true" className="fa-solid fa-camera" />
 }

@@ -1,3 +1,5 @@
+import IconButton from './IconButton'
+
 export default function SettingsPanel({
   collaboratorUsername,
   addCollaborator,
@@ -126,21 +128,29 @@ export default function SettingsPanel({
 
       <section className="inspector__section settings-panel__section">
         <div className="inspector__title">AI</div>
-        <div className="settings-panel__meta-row">
+        <div className="settings-panel__meta-row settings-panel__meta-row--actions">
           <span>OpenAI API Key</span>
-          <strong>{hasProjectOpenAiKey ? openAiApiKeyMask || 'Configured' : 'Not Set'}</strong>
-        </div>
-        {canManageProjectSecrets ? (
-          <div className="templates-panel__actions-bar">
-            <button className="ghost-button" disabled={busy} onClick={openOpenAiKeyDialog} type="button">
-              {hasProjectOpenAiKey ? 'Update Key' : 'Set Key'}
-            </button>
-            {hasProjectOpenAiKey ? (
-              <button className="ghost-button" disabled={busy} onClick={clearProjectOpenAiKey} type="button">
-                Clear Key
-              </button>
+          <div className="settings-panel__meta-actions">
+            <strong>{hasProjectOpenAiKey ? openAiApiKeyMask || 'Configured' : 'Not Set'}</strong>
+            {canManageProjectSecrets && hasProjectOpenAiKey ? (
+              <IconButton
+                aria-label="Remove OpenAI API key"
+                className="tool-button"
+                disabled={busy}
+                onClick={clearProjectOpenAiKey}
+                tooltip="Remove Key"
+              >
+                <i aria-hidden="true" className="fa-solid fa-xmark" />
+              </IconButton>
             ) : null}
           </div>
+        </div>
+        {canManageProjectSecrets ? (
+          !hasProjectOpenAiKey ? (
+            <button className="ghost-button settings-panel__reset" disabled={busy} onClick={openOpenAiKeyDialog} type="button">
+              Set Key
+            </button>
+          ) : null
         ) : (
           <div className="inspector__notice">The project owner manages this key.</div>
         )}

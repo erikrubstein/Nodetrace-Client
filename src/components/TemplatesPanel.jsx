@@ -14,8 +14,7 @@ export default function TemplatesPanel({
   duplicateTemplate,
 }) {
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateEditorId) || null
-  const isBuiltIn = Boolean(selectedTemplate?.systemKey)
-  const canSave = !busy && !isBuiltIn && hasTemplateChanges
+  const canSave = !busy && hasTemplateChanges
   const hasAiFields = templateForm.fields.some((field) => (field.mode || 'manual') === 'ai')
 
   return (
@@ -51,7 +50,6 @@ export default function TemplatesPanel({
         <label>
           <span>Name</span>
           <input
-            disabled={isBuiltIn}
             value={templateForm.name}
             onChange={(event) => {
               clearError()
@@ -65,7 +63,6 @@ export default function TemplatesPanel({
             <label>
               <span>AI Instructions</span>
               <textarea
-                disabled={isBuiltIn}
                 placeholder="Describe how AI should use scoped node text and images for this template."
                 rows="5"
                 value={templateForm.aiInstructions || ''}
@@ -79,7 +76,6 @@ export default function TemplatesPanel({
               <label>
                 <span>Parent depth</span>
                 <input
-                  disabled={isBuiltIn}
                   max="5"
                   min="0"
                   type="number"
@@ -93,7 +89,6 @@ export default function TemplatesPanel({
               <label>
                 <span>Child depth</span>
                 <input
-                  disabled={isBuiltIn}
                   max="5"
                   min="0"
                   type="number"
@@ -115,7 +110,6 @@ export default function TemplatesPanel({
               <div className="template-field-editor__field" key={field.id || index}>
                 <div className="template-field-editor__row">
                   <input
-                    disabled={isBuiltIn}
                     placeholder="Label"
                     value={field.label}
                     onChange={(event) => {
@@ -124,7 +118,6 @@ export default function TemplatesPanel({
                     }}
                   />
                   <input
-                    disabled={isBuiltIn}
                     placeholder="key_name"
                     value={field.key}
                     onChange={(event) => {
@@ -133,7 +126,6 @@ export default function TemplatesPanel({
                     }}
                   />
                   <select
-                    disabled={isBuiltIn}
                     value={field.mode || 'manual'}
                     onChange={(event) => {
                       clearError()
@@ -144,7 +136,6 @@ export default function TemplatesPanel({
                     <option value="ai">AI-Assisted</option>
                   </select>
                   <select
-                    disabled={isBuiltIn}
                     value={field.type}
                     onChange={(event) => {
                       clearError()
@@ -157,7 +148,7 @@ export default function TemplatesPanel({
                   <button
                     aria-label={`Remove ${field.label || 'field'}`}
                     className="tool-button template-field-editor__remove-button"
-                    disabled={busy || isBuiltIn}
+                    disabled={busy}
                     onClick={() => {
                       clearError()
                       updateTemplateField('remove', index)
@@ -172,26 +163,22 @@ export default function TemplatesPanel({
           </div>
         </label>
 
-        {!isBuiltIn ? (
-          <button
-            className="ghost-button wide"
-            disabled={busy}
-            onClick={() => {
-              clearError()
-              updateTemplateField('add')
-            }}
-            type="button"
-          >
-            Add Field
-          </button>
-        ) : null}
+        <button
+          className="ghost-button wide"
+          disabled={busy}
+          onClick={() => {
+            clearError()
+            updateTemplateField('add')
+          }}
+          type="button"
+        >
+          Add Field
+        </button>
 
         <div className="templates-panel__actions-bar">
-          {!isBuiltIn ? (
-            <button className="ghost-button" disabled={!canSave} onClick={requestSaveTemplate} type="button">
-              Save
-            </button>
-          ) : null}
+          <button className="ghost-button" disabled={!canSave} onClick={requestSaveTemplate} type="button">
+            Save
+          </button>
           <button
             className="ghost-button"
             disabled={busy}
@@ -203,11 +190,9 @@ export default function TemplatesPanel({
           >
             Duplicate
           </button>
-          {!isBuiltIn ? (
-            <button className="danger-button" disabled={busy} onClick={requestDeleteTemplate} type="button">
-              Delete
-            </button>
-          ) : null}
+          <button className="danger-button" disabled={busy} onClick={requestDeleteTemplate} type="button">
+            Delete
+          </button>
         </div>
 
         {error ? <div className="inspector__notice error">{error}</div> : null}
