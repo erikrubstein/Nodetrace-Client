@@ -1995,6 +1995,14 @@ button:disabled {
   gap: 10px;
 }
 
+.search-panel__result-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
 .search-panel__result-name {
   font-size: 0.9rem;
   min-width: 0;
@@ -2006,6 +2014,16 @@ button:disabled {
 .search-panel__result-meta {
   color: var(--muted);
   font-size: 0.76rem;
+  flex-shrink: 0;
+}
+
+.search-panel__result-complete {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #79c57a;
   flex-shrink: 0;
 }
 

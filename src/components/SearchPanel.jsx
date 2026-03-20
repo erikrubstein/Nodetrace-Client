@@ -298,11 +298,18 @@ export default function SearchPanel({
               >
                 <span className="search-panel__result-row">
                   <span className="search-panel__result-name">{node.name}</span>
-                  {node.identification?.templateId ? (
-                    <span className="search-panel__result-meta">
-                      {templateNameById.get(node.identification.templateId) || 'Template'}
-                    </span>
-                  ) : null}
+                  <span className="search-panel__result-side">
+                    {node.identification?.templateId ? (
+                      <span className="search-panel__result-meta">
+                        {templateNameById.get(node.identification.templateId) || 'Template'}
+                      </span>
+                    ) : null}
+                    {node.identification?.status === 'reviewed' ? (
+                      <span className="search-panel__result-complete" aria-label="Complete" title="Complete">
+                        <i aria-hidden="true" className="fa-solid fa-check" />
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
               </button>
             ))}
