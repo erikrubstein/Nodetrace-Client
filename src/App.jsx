@@ -2407,6 +2407,14 @@ function App() {
 
     try {
       const previousValue = Boolean(tree?.nodes.find((node) => node.id === nodeId)?.collapsed)
+      const collapsingNode = tree?.root ? findNode(tree.root, nodeId) : null
+      const hidesSelectedNode = Boolean(
+        collapsed &&
+          collapsingNode &&
+          selectedNodeId &&
+          selectedNodeId !== nodeId &&
+          (collapsingNode.children || []).some((child) => collectDescendantIds(child).has(selectedNodeId)),
+      )
       const rollbackLocalEvent = beginLocalEventExpectation()
       let payload = null
       try {
@@ -2416,6 +2424,9 @@ function App() {
         throw error
       }
       applyCollapsedState(payload.node, payload.updatedIds, collapsed)
+      if (hidesSelectedNode) {
+        setSelectedNodeId(nodeId)
+      }
       pushHistory({
         undo: async () => {
           const rollbackUndoEvent = beginLocalEventExpectation()
@@ -2445,7 +2456,7 @@ function App() {
     } finally {
       setBusy(false)
     }
-  }, [applyCollapsedState, beginLocalEventExpectation, pushHistory, setCollapsedRequest, tree?.nodes])
+  }, [applyCollapsedState, beginLocalEventExpectation, pushHistory, selectedNodeId, setCollapsedRequest, tree?.nodes, tree?.root])
 
   useEffect(() => {
     function handleKeyDown(event) {
