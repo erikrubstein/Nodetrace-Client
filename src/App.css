@@ -1834,6 +1834,18 @@ button:disabled {
   justify-self: end;
 }
 
+.search-panel__toolbar .icon-button-wrap .icon-tooltip,
+.search-panel__results-section .icon-button-wrap .icon-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+.search-panel__toolbar .icon-button-wrap:hover .icon-tooltip,
+.search-panel__results-section .icon-button-wrap:hover .icon-tooltip {
+  transform: translateY(0);
+}
+
 .search-panel__filter-popover {
   position: absolute;
   top: calc(100% + 8px);

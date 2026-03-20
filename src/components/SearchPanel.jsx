@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import IconButton from './IconButton'
+
 const statusOptions = [
   { value: 'none', label: 'No template' },
   { value: 'incomplete', label: 'Incomplete' },
@@ -31,6 +33,7 @@ function optionRow({ checked, itemKey, label, onClick, type = 'single' }) {
 }
 
 export default function SearchPanel({
+  bulkSelectNodeIds,
   selectedNodeId,
   templates,
   tree,
@@ -131,14 +134,14 @@ export default function SearchPanel({
             />
             <div className="search-panel__filter-popover-wrap">
               <div ref={filterPopoverRef}>
-              <button
+              <IconButton
                 aria-label="More filters"
                 className={`tool-button search-panel__filter-button ${filterMenuOpen || activeFilterCount ? 'is-active' : ''}`}
                 onClick={() => setFilterMenuOpen((current) => !current)}
-                type="button"
+                tooltip="Filters"
               >
                 <i aria-hidden="true" className="fa-solid fa-filter" />
-              </button>
+              </IconButton>
               {filterMenuOpen ? (
                 <div className="search-panel__filter-popover">
                   <div className="search-panel__filter-header">
@@ -268,7 +271,18 @@ export default function SearchPanel({
       </section>
 
       <section className="inspector__section search-panel__section search-panel__results-section">
-        <div className="inspector__title">Results</div>
+        <div className="inspector__section-header">
+          <div className="inspector__title">{results.length} RESULTS</div>
+          <IconButton
+            aria-label="Select all results"
+            className="tool-button"
+            disabled={!results.length}
+            onClick={() => bulkSelectNodeIds(results.map((node) => node.id))}
+            tooltip="Select All Results"
+          >
+            <i aria-hidden="true" className="fa-solid fa-check-double" />
+          </IconButton>
+        </div>
         {results.length ? (
           <div className="search-panel__results">
             {results.map((node, index) => (

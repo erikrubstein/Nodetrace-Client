@@ -2523,6 +2523,22 @@ function App() {
     setSelectedNodeId(nodeId)
   }, [editForm, editTargetNode, saveNodeDraft, setCollapsed, tree?.nodes])
 
+  const bulkSelectSearchResults = useCallback((nodeIds) => {
+    const uniqueIds = Array.from(new Set((nodeIds || []).filter(Boolean)))
+    if (!uniqueIds.length) {
+      setMultiSelectedNodeIds([])
+      return
+    }
+
+    const nextPrimaryId =
+      selectedNodeId && uniqueIds.includes(selectedNodeId)
+        ? selectedNodeId
+        : uniqueIds[0]
+
+    setSelectedNodeId(nextPrimaryId)
+    setMultiSelectedNodeIds(uniqueIds.filter((nodeId) => nodeId !== nextPrimaryId))
+  }, [selectedNodeId])
+
   useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target
@@ -2897,6 +2913,7 @@ function App() {
         icon: <SearchIcon />,
         content: (
           <SearchPanel
+            bulkSelectNodeIds={bulkSelectSearchResults}
             onSelectNode={selectNodeAndFocus}
             selectedNodeId={selectedNodeId}
             templates={identificationTemplates}
