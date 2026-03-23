@@ -344,7 +344,6 @@ export function renderMobileCapturePage() {
 
       async function refreshSession() {
         const sessionId = sessionInput.value.trim().toLowerCase()
-        updateUrlParams()
         if (!sessionId) {
           sessionInfo = null
           hasConnectedSession = false
@@ -363,6 +362,7 @@ export function renderMobileCapturePage() {
           }
           await heartbeatConnection()
           hasConnectedSession = true
+          updateUrlParams()
           setConnectedState(true)
           setCaptureEnabled(true)
           sessionReadout.textContent = \`Session \${sessionId} | \${sessionInfo.projectName} -> \${sessionInfo.selectedNodeName}\`
@@ -426,7 +426,13 @@ export function renderMobileCapturePage() {
       })
 
       connectButton.addEventListener('click', () => {
-        refreshSession().catch((error) => setStatus(error.message, true))
+        refreshSession()
+          .then(() => {
+            if (hasConnectedSession) {
+              startSessionPolling()
+            }
+          })
+          .catch((error) => setStatus(error.message, true))
       })
 
       captureInput.addEventListener('change', () => {
@@ -459,23 +465,10 @@ export function renderMobileCapturePage() {
       window.addEventListener('pagehide', releaseConnection)
       window.addEventListener('beforeunload', releaseConnection)
 
-      sessionInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          refreshSession().catch((error) => setStatus(error.message, true))
-        }
-      })
-
       sessionInput.value = (search.get('session') || '').trim().toLowerCase()
-      startSessionPolling()
-      if (sessionInput.value) {
-        refreshSession()
-          .catch((error) => setStatus(error.message, true))
-      } else {
-        setConnectedState(false)
-        setCaptureEnabled(false)
-        setStatus('Enter a session code.')
-      }
+      setConnectedState(false)
+      setCaptureEnabled(false)
+      setStatus(sessionInput.value ? 'Tap Connect to join this session.' : 'Enter a session code.')
     </script>
   </body>
 </html>`

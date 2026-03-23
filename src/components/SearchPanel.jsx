@@ -13,6 +13,12 @@ const noteOptions = [
   { value: 'no_notes', label: 'Has No Notes' },
 ]
 
+const typeOptions = [
+  { value: 'folder', label: 'Folder' },
+  { value: 'photo', label: 'Photo' },
+  { value: 'variant', label: 'Variant Photo' },
+]
+
 function optionRow({ checked, itemKey, label, onClick, type = 'single' }) {
   return (
     <button
@@ -41,6 +47,7 @@ export default function SearchPanel({
   onSelectNode,
 }) {
   const filterPopoverRef = useRef(null)
+  const resultsRef = useRef(null)
   const [query, setQuery] = useState('')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [selectedTemplateIds, setSelectedTemplateIds] = useState([])
@@ -48,10 +55,12 @@ export default function SearchPanel({
   const [anyTemplateOnly, setAnyTemplateOnly] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
   const [notesFilter, setNotesFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
   const activeFilterCount =
     Number(Boolean(anyTemplateOnly || selectedTemplateIds.length)) +
     Number(Boolean(statusFilter)) +
     Number(Boolean(notesFilter)) +
+    Number(Boolean(typeFilter)) +
     Number(Boolean(selectedOwnerUsernames.length))
   const templateNameById = useMemo(
     () => new Map((templates || []).map((template) => [template.id, template.name])),
@@ -101,9 +110,24 @@ export default function SearchPanel({
         const hasNotes = Boolean(node.notes?.trim())
         return notesFilter === 'has_notes' ? hasNotes : !hasNotes
       })
+      .filter((node) => {
+        if (!typeFilter) {
+          return true
+        }
+        if (typeFilter === 'variant') {
+          return Boolean(node.isVariant)
+        }
+        if (typeFilter === 'folder') {
+          return node.type === 'folder' && !node.isVariant
+        }
+        if (typeFilter === 'photo') {
+          return node.type === 'photo' && !node.isVariant
+        }
+        return true
+      })
       .filter((node) => !selectedOwnerUsernames.length || selectedOwnerUsernames.includes(node.ownerUsername))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, statusFilter, tree?.nodes])
+  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, statusFilter, tree?.nodes, typeFilter])
 
   useEffect(() => {
     onResultsChange?.(results.map((node) => node.id))
@@ -124,6 +148,52 @@ export default function SearchPanel({
     window.addEventListener('pointerdown', handlePointerDown)
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [filterMenuOpen])
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+        return
+      }
+
+      const target = event.target
+      const targetInResults = resultsRef.current?.contains(target)
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLButtonElement && !targetInResults) ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+
+      if (!results.length) {
+        return
+      }
+
+      event.preventDefault()
+      const currentIndex = results.findIndex((node) => node.id === selectedNodeId)
+      const nextIndex =
+        event.key === 'ArrowDown'
+          ? currentIndex >= 0
+            ? Math.min(currentIndex + 1, results.length - 1)
+            : 0
+          : currentIndex >= 0
+            ? Math.max(currentIndex - 1, 0)
+            : results.length - 1
+
+      const nextNode = results[nextIndex]
+      if (nextNode?.id && nextNode.id !== selectedNodeId) {
+        void onSelectNode(nextNode.id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onSelectNode, results, selectedNodeId])
 
   return (
     <div className="search-panel">
@@ -159,6 +229,7 @@ export default function SearchPanel({
                         setSelectedTemplateIds([])
                         setStatusFilter('')
                         setNotesFilter('')
+                        setTypeFilter('')
                         setSelectedOwnerUsernames([])
                       }}
                     >
@@ -187,6 +258,19 @@ export default function SearchPanel({
                           itemKey: option.value,
                           label: option.label,
                           onClick: () => setNotesFilter((current) => (current === option.value ? '' : option.value)),
+                        }),
+                      )}
+                    </div>
+                  </div>
+                  <div className="search-panel__filter-group">
+                    <span className="search-panel__filter-label">Type</span>
+                    <div className="search-panel__option-list">
+                      {typeOptions.map((option) =>
+                        optionRow({
+                          checked: typeFilter === option.value,
+                          itemKey: option.value,
+                          label: option.label,
+                          onClick: () => setTypeFilter((current) => (current === option.value ? '' : option.value)),
                         }),
                       )}
                     </div>
@@ -291,7 +375,7 @@ export default function SearchPanel({
           </div>
         </div>
         {results.length ? (
-          <div className="search-panel__results">
+          <div ref={resultsRef} className="search-panel__results">
             {results.map((node, index) => (
               <button
                 key={node.id}

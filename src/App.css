@@ -2054,6 +2054,12 @@ button:disabled {
   background: var(--hover);
 }
 
+.search-panel__result:focus,
+.search-panel__result:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .search-panel__result--selected,
 .search-panel__result--selected:hover:not(:disabled) {
   background: color-mix(in srgb, var(--selected) 12%, var(--control-bg));
