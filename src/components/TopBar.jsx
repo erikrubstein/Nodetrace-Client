@@ -23,8 +23,14 @@ export default function TopBar({
   projectName,
   projects,
   redo,
+  appendChildren,
+  appendParents,
+  appendSearchResults,
+  appendVariants,
+  invertSelection,
   selectedNode,
   selectedProjectId,
+  selectionCount,
   setAllNodesCollapsed,
   setDeleteNodeOpen,
   setExportFileName,
@@ -34,6 +40,11 @@ export default function TopBar({
   setOpenMenu,
   setSessionDialogOpen,
   setShowProjectDialog,
+  selectChildren,
+  selectParents,
+  selectSearchResults,
+  selectVariants,
+  searchResultCount,
   theme,
   triggerAddPhoto,
   triggerAddVariantPhoto,
@@ -204,6 +215,119 @@ export default function TopBar({
                 type="button"
               >
                 Delete Node
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="menu-wrap">
+          <button
+            className={`menu-trigger ${openMenu === 'select' ? 'active' : ''}`}
+            onClick={() => setOpenMenu((current) => (current === 'select' ? null : 'select'))}
+            type="button"
+          >
+            Select
+          </button>
+          {openMenu === 'select' ? (
+            <div className="menu-panel">
+              <button
+                className="menu-item"
+                disabled={!searchResultCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  selectSearchResults()
+                }}
+                type="button"
+              >
+                Select Results
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  selectParents()
+                }}
+                type="button"
+              >
+                Select Parents
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  selectChildren()
+                }}
+                type="button"
+              >
+                Select Children
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  selectVariants()
+                }}
+                type="button"
+              >
+                Select Variants
+              </button>
+              <button
+                className="menu-item"
+                disabled={!searchResultCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  appendSearchResults()
+                }}
+                type="button"
+              >
+                Append Select Results
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  appendParents()
+                }}
+                type="button"
+              >
+                Append Select Parents
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  appendChildren()
+                }}
+                type="button"
+              >
+                Append Select Children
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectionCount || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  appendVariants()
+                }}
+                type="button"
+              >
+                Append Select Variants
+              </button>
+              <button
+                className="menu-item"
+                disabled={!tree?.nodes?.length || busy}
+                onClick={() => {
+                  setOpenMenu(null)
+                  invertSelection()
+                }}
+                type="button"
+              >
+                Invert Selection
               </button>
             </div>
           ) : null}

@@ -56,6 +56,8 @@ export default function SearchPanel({
   const [statusFilter, setStatusFilter] = useState('')
   const [notesFilter, setNotesFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [sortField, setSortField] = useState('name')
+  const [sortDirection, setSortDirection] = useState('asc')
   const activeFilterCount =
     Number(Boolean(anyTemplateOnly || selectedTemplateIds.length)) +
     Number(Boolean(statusFilter)) +
@@ -126,8 +128,16 @@ export default function SearchPanel({
         return true
       })
       .filter((node) => !selectedOwnerUsernames.length || selectedOwnerUsernames.includes(node.ownerUsername))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, statusFilter, tree?.nodes, typeFilter])
+      .sort((left, right) => {
+        let comparison = 0
+        if (sortField === 'added_at') {
+          comparison = String(left.added_at || '').localeCompare(String(right.added_at || ''))
+        } else {
+          comparison = left.name.localeCompare(right.name)
+        }
+        return sortDirection === 'desc' ? comparison * -1 : comparison
+      })
+  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, sortDirection, sortField, statusFilter, tree?.nodes, typeFilter])
 
   useEffect(() => {
     onResultsChange?.(results.map((node) => node.id))
@@ -357,6 +367,22 @@ export default function SearchPanel({
             </div>
           </div>
         </label>
+        <div className="search-panel__sort-grid">
+          <label>
+            <span>Sort by</span>
+            <select onChange={(event) => setSortField(event.target.value)} value={sortField}>
+              <option value="name">Name</option>
+              <option value="added_at">Date Added</option>
+            </select>
+          </label>
+          <label>
+            <span>Direction</span>
+            <select onChange={(event) => setSortDirection(event.target.value)} value={sortDirection}>
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
+        </div>
       </section>
 
       <section className="inspector__section search-panel__section search-panel__results-section">

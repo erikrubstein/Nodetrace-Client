@@ -461,6 +461,90 @@ function App() {
     const nextPrimaryId = nodeId === selectedNodeId ? remainingIds[0] || null : selectedNodeId
     setEffectiveSelection(remainingIds, nextPrimaryId)
   }, [addToEffectiveSelection, effectiveSelectedNodeIds, selectedNodeId, setEffectiveSelection])
+  const findTreeNodeById = useCallback((nodeId) => tree?.nodes.find((node) => node.id === nodeId) || null, [tree?.nodes])
+  const collectSelectionParentIds = useCallback((nodeIds) => {
+    const ids = []
+    for (const nodeId of nodeIds || []) {
+      const node = findTreeNodeById(nodeId)
+      const parentId = node?.variant_of_id ?? node?.parent_id ?? null
+      if (parentId) {
+        ids.push(parentId)
+      }
+    }
+    return Array.from(new Set(ids))
+  }, [findTreeNodeById])
+  const collectSelectionChildIds = useCallback((nodeIds) => {
+    const ids = []
+    for (const nodeId of nodeIds || []) {
+      const node = findTreeNodeById(nodeId)
+      for (const child of node?.children || []) {
+        ids.push(child.id)
+      }
+    }
+    return Array.from(new Set(ids))
+  }, [findTreeNodeById])
+  const collectSelectionVariantIds = useCallback((nodeIds) => {
+    const ids = []
+    for (const nodeId of nodeIds || []) {
+      const node = findTreeNodeById(nodeId)
+      if (!node) {
+        continue
+      }
+      if (node.isVariant) {
+        const anchor = findTreeNodeById(node.variant_of_id)
+        for (const variant of anchor?.variants || []) {
+          ids.push(variant.id)
+        }
+        continue
+      }
+      for (const variant of node.variants || []) {
+        ids.push(variant.id)
+      }
+    }
+    return Array.from(new Set(ids))
+  }, [findTreeNodeById])
+  const replaceSelectionWith = useCallback((nodeIds, preferredPrimaryId = null) => {
+    setEffectiveSelection(nodeIds, preferredPrimaryId)
+  }, [setEffectiveSelection])
+  const appendSelectionWith = useCallback((nodeIds, preferredPrimaryId = null) => {
+    addToEffectiveSelection(nodeIds, preferredPrimaryId)
+  }, [addToEffectiveSelection])
+  const invertEffectiveSelection = useCallback(() => {
+    const allNodeIds = (tree?.nodes || []).map((node) => node.id)
+    const selectedSet = new Set(effectiveSelectedNodeIds)
+    const invertedIds = allNodeIds.filter((nodeId) => !selectedSet.has(nodeId))
+    setEffectiveSelection(invertedIds, invertedIds[0] || null)
+  }, [effectiveSelectedNodeIds, setEffectiveSelection, tree?.nodes])
+  const selectSearchResults = useCallback(() => {
+    replaceSelectionWith(searchResultNodeIds, searchResultNodeIds[0] || null)
+  }, [replaceSelectionWith, searchResultNodeIds])
+  const selectParents = useCallback(() => {
+    const parentIds = collectSelectionParentIds(effectiveSelectedNodeIds)
+    replaceSelectionWith(parentIds, parentIds[0] || null)
+  }, [collectSelectionParentIds, effectiveSelectedNodeIds, replaceSelectionWith])
+  const selectChildren = useCallback(() => {
+    const childIds = collectSelectionChildIds(effectiveSelectedNodeIds)
+    replaceSelectionWith(childIds, childIds[0] || null)
+  }, [collectSelectionChildIds, effectiveSelectedNodeIds, replaceSelectionWith])
+  const selectVariants = useCallback(() => {
+    const variantIds = collectSelectionVariantIds(effectiveSelectedNodeIds)
+    replaceSelectionWith(variantIds, variantIds[0] || null)
+  }, [collectSelectionVariantIds, effectiveSelectedNodeIds, replaceSelectionWith])
+  const appendSearchResults = useCallback(() => {
+    appendSelectionWith(searchResultNodeIds, selectedNodeId || searchResultNodeIds[0] || null)
+  }, [appendSelectionWith, searchResultNodeIds, selectedNodeId])
+  const appendParents = useCallback(() => {
+    const parentIds = collectSelectionParentIds(effectiveSelectedNodeIds)
+    appendSelectionWith(parentIds, selectedNodeId || parentIds[0] || null)
+  }, [appendSelectionWith, collectSelectionParentIds, effectiveSelectedNodeIds, selectedNodeId])
+  const appendChildren = useCallback(() => {
+    const childIds = collectSelectionChildIds(effectiveSelectedNodeIds)
+    appendSelectionWith(childIds, selectedNodeId || childIds[0] || null)
+  }, [appendSelectionWith, collectSelectionChildIds, effectiveSelectedNodeIds, selectedNodeId])
+  const appendVariants = useCallback(() => {
+    const variantIds = collectSelectionVariantIds(effectiveSelectedNodeIds)
+    appendSelectionWith(variantIds, selectedNodeId || variantIds[0] || null)
+  }, [appendSelectionWith, collectSelectionVariantIds, effectiveSelectedNodeIds, selectedNodeId])
   const focusPathContext = useMemo(
     () =>
       focusPathMode
@@ -3358,7 +3442,11 @@ function App() {
       data-theme={theme}
     >
         <TopBar
-          busy={busy}
+        appendChildren={appendChildren}
+        appendParents={appendParents}
+        appendSearchResults={appendSearchResults}
+        appendVariants={appendVariants}
+        busy={busy}
         fileInputRef={fileInputRef}
         focusSelectedNode={focusSelectedNode}
         fitCanvasToView={fitCanvasToView}
@@ -3379,10 +3467,12 @@ function App() {
         projectName={tree?.project?.name}
         projects={projects}
         redo={redo}
+        invertSelection={invertEffectiveSelection}
         rightActivePanel={resolvedRightActivePanel}
         rightSidebarOpen={effectiveRightSidebarOpen}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
+        selectionCount={effectiveSelectedNodeIds.length}
         openNewFolderDialog={openNewFolderDialog}
         setAllNodesCollapsed={setAllNodesCollapsed}
         setDeleteNodeOpen={setDeleteNodeOpen}
@@ -3395,6 +3485,11 @@ function App() {
           setOpenMenu={setOpenMenu}
           setSessionDialogOpen={setSessionDialogOpen}
           setShowProjectDialog={setShowProjectDialog}
+        selectChildren={selectChildren}
+        selectParents={selectParents}
+        selectSearchResults={selectSearchResults}
+        selectVariants={selectVariants}
+        searchResultCount={searchResultNodeIds.length}
         toggleTheme={toggleThemePreference}
         theme={theme}
         triggerAddPhoto={triggerAddPhoto}

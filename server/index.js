@@ -307,6 +307,7 @@ function createTextSchema() {
       image_path TEXT,
       preview_path TEXT,
       original_filename TEXT,
+      added_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id),
@@ -416,6 +417,7 @@ function ensureTextIdSchema() {
         image_path TEXT,
         preview_path TEXT,
         original_filename TEXT,
+        added_at TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(project_id) REFERENCES projects_new(id),
@@ -432,10 +434,10 @@ function ensureTextIdSchema() {
     const insertNodeRow = db.prepare(`
       INSERT INTO nodes_new (
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_edits_json, image_path, preview_path, original_filename, created_at, updated_at
+        image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
       ) VALUES (
         @id, @project_id, @owner_user_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json,
-        @image_edits_json, @image_path, @preview_path, @original_filename, @created_at, @updated_at
+        @image_edits_json, @image_path, @preview_path, @original_filename, @added_at, @created_at, @updated_at
       )
     `)
 
@@ -467,6 +469,7 @@ function ensureTextIdSchema() {
         image_path: row.image_path ? rewriteUploadPathProjectFolder(row.image_path, projectIdMap.get(row.project_id)) : null,
         preview_path: row.preview_path ? rewriteUploadPathProjectFolder(row.preview_path, projectIdMap.get(row.project_id)) : null,
         original_filename: row.original_filename || null,
+        added_at: row.added_at || new Date().toISOString(),
         created_at: row.created_at,
         updated_at: row.updated_at,
       })
@@ -516,6 +519,7 @@ function ensureCollapseSchemaCleanup() {
         image_path TEXT,
         preview_path TEXT,
         original_filename TEXT,
+        added_at TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(project_id) REFERENCES projects(id),
@@ -526,11 +530,11 @@ function ensureCollapseSchemaCleanup() {
 
       INSERT INTO nodes_clean (
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_edits_json, image_path, preview_path, original_filename, created_at, updated_at
+        image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
       )
       SELECT
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        COALESCE(image_edits_json, '{}'), image_path, preview_path, original_filename, created_at, updated_at
+        COALESCE(image_edits_json, '{}'), image_path, preview_path, original_filename, COALESCE(added_at, created_at), created_at, updated_at
       FROM nodes;
 
       DROP TABLE nodes;
@@ -556,6 +560,17 @@ function ensureNodeImageEditSchema() {
 }
 
 ensureNodeImageEditSchema()
+
+function ensureNodeAddedAtSchema() {
+  const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  if (!nodeColumns.some((column) => column.name === 'added_at')) {
+    db.exec(`ALTER TABLE nodes ADD COLUMN added_at TEXT`)
+    const now = new Date().toISOString()
+    db.prepare(`UPDATE nodes SET added_at = ? WHERE added_at IS NULL OR TRIM(added_at) = ''`).run(now)
+  }
+}
+
+ensureNodeAddedAtSchema()
 
 function ensureAuthSchema() {
   const projectColumns = db.prepare(`PRAGMA table_info(projects)`).all()
@@ -719,10 +734,10 @@ const insertProject = db.prepare(`
 const insertNode = db.prepare(`
   INSERT INTO nodes (
     id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json, image_path, preview_path,
-    image_edits_json, original_filename, created_at, updated_at
+    image_edits_json, original_filename, added_at, created_at, updated_at
   ) VALUES (
     @id, @project_id, @owner_user_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
-    @image_edits_json, @original_filename, @created_at, @updated_at
+    @image_edits_json, @original_filename, @added_at, @created_at, @updated_at
   )
 `)
 
@@ -1158,6 +1173,7 @@ const createProjectWithRoot = db.transaction(({ name, description, owner_user_id
     image_path: null,
     preview_path: null,
     original_filename: null,
+    added_at: now,
     created_at: now,
     updated_at: now,
   })
@@ -1223,6 +1239,7 @@ const createNode = db.transaction((payload) => {
     id: nodeId,
     ...payload,
     owner_user_id: resolvedOwnerUserId,
+    added_at: payload.added_at || now,
     created_at: now,
     updated_at: now,
     tags_json: JSON.stringify(payload.tags),
@@ -2309,6 +2326,7 @@ function serializeNode(row, _collapsedMap = null, identification = null) {
     name: row.name,
     notes: row.notes,
     original_filename: row.original_filename,
+    added_at: row.added_at || row.created_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: JSON.parse(row.tags_json || '[]'),
@@ -2896,6 +2914,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
       image_path: null,
       preview_path: null,
       original_filename: null,
+      added_at: rootRow.added_at || now,
       created_at: now,
       updated_at: now,
     })
@@ -2962,6 +2981,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
+          added_at: row.added_at || row.created_at || now,
         })
 
         if (row.identification?.template_id) {

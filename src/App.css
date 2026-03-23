@@ -1936,6 +1936,12 @@ button:disabled {
   align-items: center;
 }
 
+.search-panel__sort-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .search-panel__filter-button {
   color: var(--muted);
 }
