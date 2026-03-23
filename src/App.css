@@ -1670,6 +1670,21 @@ button:disabled {
   overflow-y: auto;
 }
 
+.project-picker__toolbar,
+.project-picker__create {
+  display: grid;
+  gap: 10px;
+}
+
+.project-picker__divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.project-picker__actions {
+  justify-content: flex-end;
+}
+
 .collaborator-list {
   max-height: 180px;
 }

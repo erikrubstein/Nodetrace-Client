@@ -15,6 +15,7 @@ export default function SettingsPanel({
   openAiApiKeyMask,
   openOpenAiKeyDialog,
   ownerUsername,
+  openDeleteProjectDialog,
   openRenameProjectDialog,
   persistProjectSettings,
   projectId,
@@ -124,6 +125,11 @@ export default function SettingsPanel({
         <button className="ghost-button settings-panel__reset" disabled={busy} onClick={openRenameProjectDialog} type="button">
           Rename Project
         </button>
+        {canManageUsers ? (
+          <button className="danger-button" disabled={busy || !projectId} onClick={openDeleteProjectDialog} type="button">
+            Delete Project
+          </button>
+        ) : null}
       </section>
 
       <section className="inspector__section settings-panel__section">

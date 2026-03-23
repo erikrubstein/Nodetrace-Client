@@ -3286,6 +3286,11 @@ function App() {
               setProjectName(tree?.project?.name || '')
               setShowProjectDialog('rename')
             }}
+            openDeleteProjectDialog={() => {
+              setError('')
+              setDeleteProjectText('')
+              setShowProjectDialog('delete')
+            }}
             persistProjectSettings={persistProjectSettings}
             projectId={tree?.project?.id}
             projectSettings={projectSettings}

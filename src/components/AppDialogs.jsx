@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+
 export default function AppDialogs({
   applyIdentificationTemplate,
   applyIdentificationTemplateToSelection,
@@ -65,6 +67,30 @@ export default function AppDialogs({
   templateDialog,
   setTemplateDialog,
 }) {
+  const [openProjectSearch, setOpenProjectSearch] = useState('')
+
+  const sortedProjects = useMemo(
+    () =>
+      [...projects].sort((left, right) =>
+        String(left?.name || '').localeCompare(String(right?.name || ''), undefined, {
+          sensitivity: 'base',
+          numeric: true,
+        }),
+      ),
+    [projects],
+  )
+
+  const filteredProjects = useMemo(() => {
+    const query = openProjectSearch.toLowerCase()
+    if (!query) {
+      return sortedProjects
+    }
+
+    return sortedProjects.filter((project) => String(project?.name || '').toLowerCase().includes(query))
+  }, [openProjectSearch, sortedProjects])
+
+  const canCloseOpenProjectDialog = Boolean(tree?.project?.id)
+
   return (
     <>
       {accountDialog === 'username' ? (
@@ -299,24 +325,80 @@ export default function AppDialogs({
       ) : null}
 
       {showProjectDialog === 'open' ? (
-        <div className="dialog-backdrop" onClick={() => setShowProjectDialog(null)} role="presentation">
-          <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+        <div
+          className="dialog-backdrop"
+          onClick={() => {
+            if (!canCloseOpenProjectDialog) {
+              return
+            }
+            setOpenProjectSearch('')
+            setShowProjectDialog(null)
+          }}
+          role="presentation"
+        >
+          <div
+            className="dialog dialog--wide"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
             <div className="dialog__title">Open Project</div>
+            <div className="project-picker__toolbar">
+              <input
+                autoFocus
+                onChange={(event) => setOpenProjectSearch(event.target.value)}
+                placeholder="Search projects"
+                value={openProjectSearch}
+              />
+            </div>
+            <div className="project-picker__divider" />
             <div className="project-list">
-              {projects.map((project) => (
+              {filteredProjects.length ? (
+                filteredProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
+                    onClick={() => {
+                      setOpenProjectSearch('')
+                      setShowProjectId(project.id)
+                      setShowProjectDialog(null)
+                    }}
+                    type="button"
+                  >
+                    <span>{project.name}</span>
+                    <small>{project.node_count} nodes</small>
+                  </button>
+                ))
+              ) : (
+                <div className="inspector__notice">No projects match that search.</div>
+              )}
+            </div>
+            {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions project-picker__actions">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => {
+                  setOpenProjectSearch('')
+                  setProjectName('')
+                  setShowProjectDialog('create')
+                }}
+                type="button"
+              >
+                Create Project
+              </button>
+              {canCloseOpenProjectDialog ? (
                 <button
-                  key={project.id}
-                  className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
+                  className="ghost-button"
+                  disabled={busy}
                   onClick={() => {
-                    setShowProjectId(project.id)
+                    setOpenProjectSearch('')
                     setShowProjectDialog(null)
                   }}
                   type="button"
                 >
-                  <span>{project.name}</span>
-                  <small>{project.node_count} nodes</small>
+                  Close
                 </button>
-              ))}
+              ) : null}
             </div>
           </div>
         </div>

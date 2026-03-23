@@ -848,6 +848,10 @@ const getUserProjectPreference = db.prepare(`
   WHERE user_id = ?
     AND project_id = ?
 `)
+const deleteUserProjectPreferencesByProjectStmt = db.prepare(`
+  DELETE FROM user_project_preferences
+  WHERE project_id = ?
+`)
 const upsertUserProjectPreference = db.prepare(`
   INSERT INTO user_project_preferences (user_id, project_id, settings_json, ui_json, created_at, updated_at)
   VALUES (@user_id, @project_id, @settings_json, @ui_json, @created_at, @updated_at)
@@ -1483,11 +1487,12 @@ const deleteProjectRecursive = db.transaction((projectId) => {
     }
   }
 
-  deleteNodesByProjectStmt.run(projectId)
-  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
   deleteNodeIdentificationFieldValuesByProjectStmt.run(projectId)
   deleteNodeIdentificationsByProjectStmt.run(projectId)
+  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
+  deleteNodesByProjectStmt.run(projectId)
   deleteIdentificationTemplatesByProjectStmt.run(projectId)
+  deleteUserProjectPreferencesByProjectStmt.run(projectId)
   deleteProjectCollaboratorsStmt.run(projectId)
   deleteProjectStmt.run(projectId)
 
@@ -1514,10 +1519,10 @@ const clearProjectContents = db.transaction((projectId) => {
     }
   }
 
-  deleteNodesByProjectStmt.run(projectId)
-  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
   deleteNodeIdentificationFieldValuesByProjectStmt.run(projectId)
   deleteNodeIdentificationsByProjectStmt.run(projectId)
+  deleteNodeCollapsePrefsByProjectStmt.run(projectId)
+  deleteNodesByProjectStmt.run(projectId)
   deleteIdentificationTemplatesByProjectStmt.run(projectId)
 
   const projectUploadDir = getProjectUploadDir(projectId)
@@ -2279,6 +2284,7 @@ function serializeProject(row, userId) {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    node_count: Math.max(0, Number(row.node_count || 0)),
     ownerUserId: row.owner_user_id || null,
     ownerUsername: row.owner_username || null,
     canManageUsers: Boolean(userId && row.owner_user_id === userId),

@@ -27,7 +27,6 @@ export default function TopBar({
   selectedProjectId,
   setAllNodesCollapsed,
   setDeleteNodeOpen,
-  setDeleteProjectText,
   setExportFileName,
   setFocusPathMode,
   setImportArchiveFile,
@@ -125,18 +124,6 @@ export default function TopBar({
                 type="button"
               >
                 Import Project
-              </button>
-              <button
-                className="menu-item danger-text"
-                disabled={!tree?.project || busy}
-                onClick={() => {
-                  setDeleteProjectText('')
-                  setShowProjectDialog('delete')
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                Delete Project
               </button>
             </div>
           ) : null}
