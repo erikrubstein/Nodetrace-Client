@@ -1212,18 +1212,64 @@ function App() {
     }
   }, [applyProjectUpdate, beginLocalEventExpectation])
 
-  const saveNodeImageEdits = useCallback(async (nodeId, imageEdits) => {
-    if (!nodeId) {
+  const saveNodeMediaEdits = useCallback(async (nodeId, mediaId, imageEdits) => {
+    if (!nodeId || !mediaId) {
       return null
     }
-    const saveSequence = (nodeImageEditSequenceRef.current.get(nodeId) || 0) + 1
-    nodeImageEditSequenceRef.current.set(nodeId, saveSequence)
-    const updatedNode = await patchNodeRequest(nodeId, { imageEdits }, { skipApply: true })
-    if (nodeImageEditSequenceRef.current.get(nodeId) === saveSequence) {
+    const sequenceKey = `${nodeId}:${mediaId}`
+    const saveSequence = (nodeImageEditSequenceRef.current.get(sequenceKey) || 0) + 1
+    nodeImageEditSequenceRef.current.set(sequenceKey, saveSequence)
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    let updatedNode = null
+    try {
+      updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageEdits }),
+      })
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+    if (nodeImageEditSequenceRef.current.get(sequenceKey) === saveSequence) {
       applyNodeUpdate(updatedNode)
     }
     return updatedNode
-  }, [applyNodeUpdate, patchNodeRequest])
+  }, [applyNodeUpdate, beginLocalEventExpectation])
+
+  const setPrimaryMediaRequest = useCallback(async (nodeId, mediaId) => {
+    if (!nodeId || !mediaId) {
+      return null
+    }
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}/primary`, {
+        method: 'POST',
+      })
+      applyNodeUpdate(updatedNode)
+      return updatedNode
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+  }, [applyNodeUpdate, beginLocalEventExpectation])
+
+  const removeNodeMediaRequest = useCallback(async (nodeId, mediaId) => {
+    if (!nodeId || !mediaId) {
+      return null
+    }
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
+        method: 'DELETE',
+      })
+      applyNodeUpdate(updatedNode)
+      return updatedNode
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+  }, [applyNodeUpdate, beginLocalEventExpectation])
 
   useEffect(() => {
     if (!currentUser || !selectedProjectId || !tree?.project || !projectUiReady) {
@@ -3454,9 +3500,11 @@ function App() {
             <PreviewPanel
               beginPreviewPan={beginPreviewPan}
               busy={busy}
-              patchNodeImageEdits={saveNodeImageEdits}
+              patchNodeMediaEdits={saveNodeMediaEdits}
               previewTransform={previewTransform}
               previewViewportRef={previewViewportRef}
+              removeNodeMedia={removeNodeMediaRequest}
+              setPrimaryMedia={setPrimaryMediaRequest}
               setPreviewTransform={setPreviewTransform}
               selectedNode={selectedNode}
               setError={setError}

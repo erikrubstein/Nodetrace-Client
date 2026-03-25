@@ -335,9 +335,34 @@ const updateNodeMediaPlacementStmt = db.prepare(`
       updated_at = @updated_at
   WHERE id = @id
 `)
+const updateNodeMediaEditsStmt = db.prepare(`
+  UPDATE node_media
+  SET image_edits_json = @image_edits_json,
+      updated_at = @updated_at
+  WHERE id = @id
+`)
+const clearNodeLegacyImageFieldsStmt = db.prepare(`
+  UPDATE nodes
+  SET image_path = NULL,
+      preview_path = NULL,
+      original_filename = NULL,
+      image_edits_json = @image_edits_json,
+      updated_at = @updated_at
+  WHERE id = @id
+`)
+const resetNodeMediaPrimaryFlagsStmt = db.prepare(`
+  UPDATE node_media
+  SET is_primary = 0,
+      updated_at = @updated_at
+  WHERE node_id = @node_id
+`)
 const deleteNodeMediaByLegacySourceStmt = db.prepare(`
   DELETE FROM node_media
   WHERE legacy_source_node_id = ?
+`)
+const deleteNodeMediaByIdStmt = db.prepare(`
+  DELETE FROM node_media
+  WHERE id = ?
 `)
 const deleteNodeMediaByProjectStmt = db.prepare(`
   DELETE FROM node_media
@@ -764,9 +789,15 @@ function resequenceNodeMedia(nodeId) {
     return
   }
 
+  const mediaRows = listNodeMediaByNodeStmt.all(nodeId)
+  const primaryMediaId =
+    mediaRows.find((media) => Number(media.is_primary))?.id ||
+    mediaRows.find((media) => media.legacy_source_node_id === nodeId)?.id ||
+    mediaRows[0]?.id ||
+    null
   let nextVariantSortOrder = 1
-  for (const media of listNodeMediaByNodeStmt.all(nodeId)) {
-    const isPrimary = media.legacy_source_node_id === nodeId ? 1 : 0
+  for (const media of mediaRows) {
+    const isPrimary = media.id === primaryMediaId ? 1 : 0
     const sortOrder = isPrimary ? 0 : nextVariantSortOrder
     if (!isPrimary) {
       nextVariantSortOrder += 1
@@ -803,12 +834,16 @@ function syncLegacyNodeMedia(nodeId) {
 
   const ownerNodeId = node.variant_of_id || node.id
   const now = new Date().toISOString()
+  const shouldBePrimary =
+    node.variant_of_id == null
+      ? 1
+      : Number(existing?.is_primary || 0)
   const payload = {
     id: existing?.id || null,
     project_id: node.project_id,
     node_id: ownerNodeId,
     legacy_source_node_id: node.id,
-    is_primary: node.variant_of_id == null ? 1 : 0,
+    is_primary: shouldBePrimary,
     sort_order: node.variant_of_id == null ? 0 : Number(existing?.sort_order || 0),
     image_edits_json: JSON.stringify(normalizeNodeImageEdits(JSON.parse(node.image_edits_json || '{}'))),
     image_path: node.image_path || null,
@@ -828,6 +863,16 @@ function syncLegacyNodeMedia(nodeId) {
     resequenceNodeMedia(previousOwnerNodeId)
   }
   resequenceNodeMedia(ownerNodeId)
+}
+
+function assertNodeMedia(nodeId, mediaId) {
+  const media = listNodeMediaByNodeStmt.all(nodeId).find((item) => item.id === mediaId)
+  if (!media) {
+    const error = new Error('Media not found')
+    error.status = 404
+    throw error
+  }
+  return media
 }
 
 const createProjectWithRoot = db.transaction(({ name, description, owner_user_id }) => {
@@ -1188,6 +1233,79 @@ const deleteNodeRecursive = db.transaction((nodeId, projectId) => {
   }
 
   updateProjectTimestamp.run(new Date().toISOString(), projectId)
+})
+
+const updateNodeMediaEdits = db.transaction(({ nodeId, mediaId, imageEdits, projectId }) => {
+  const media = assertNodeMedia(nodeId, mediaId)
+  const now = new Date().toISOString()
+  const imageEditsJson = JSON.stringify(normalizeNodeImageEdits(imageEdits))
+  updateNodeMediaEditsStmt.run({
+    id: media.id,
+    image_edits_json: imageEditsJson,
+    updated_at: now,
+  })
+  if (media.legacy_source_node_id) {
+    updateNodeStmt.run({
+      id: media.legacy_source_node_id,
+      name: assertNode(media.legacy_source_node_id).name,
+      notes: assertNode(media.legacy_source_node_id).notes || '',
+      tags_json: assertNode(media.legacy_source_node_id).tags_json || '[]',
+      review_status: normalizeNodeReviewStatus(assertNode(media.legacy_source_node_id).review_status),
+      needs_attention: normalizeNodeReviewStatus(assertNode(media.legacy_source_node_id).review_status) === 'needs_attention' ? 1 : 0,
+      image_edits_json: imageEditsJson,
+      updated_at: now,
+    })
+  }
+  updateProjectTimestamp.run(now, projectId)
+})
+
+const setPrimaryNodeMedia = db.transaction(({ nodeId, mediaId, projectId }) => {
+  assertNodeMedia(nodeId, mediaId)
+  const now = new Date().toISOString()
+  resetNodeMediaPrimaryFlagsStmt.run({
+    node_id: nodeId,
+    updated_at: now,
+  })
+  updateNodeMediaPlacementStmt.run({
+    id: mediaId,
+    node_id: nodeId,
+    is_primary: 1,
+    sort_order: 0,
+    updated_at: now,
+  })
+  resequenceNodeMedia(nodeId)
+  updateProjectTimestamp.run(now, projectId)
+})
+
+const removeNodeMedia = db.transaction(({ nodeId, mediaId, projectId }) => {
+  const media = assertNodeMedia(nodeId, mediaId)
+  const now = new Date().toISOString()
+  const sourceNodeId = media.legacy_source_node_id || null
+  if (sourceNodeId && sourceNodeId !== nodeId) {
+    deleteNodeRecursive(sourceNodeId, projectId)
+    return
+  }
+
+  for (const filePath of [media.image_path, media.preview_path]) {
+    if (!filePath) {
+      continue
+    }
+    const absolutePath = path.join(uploadsDir, filePath)
+    if (fs.existsSync(absolutePath)) {
+      fs.unlinkSync(absolutePath)
+    }
+  }
+
+  if (sourceNodeId === nodeId) {
+    clearNodeLegacyImageFieldsStmt.run({
+      id: nodeId,
+      image_edits_json: JSON.stringify(defaultNodeImageEdits),
+      updated_at: now,
+    })
+  }
+  deleteNodeMediaByIdStmt.run(media.id)
+  resequenceNodeMedia(nodeId)
+  updateProjectTimestamp.run(now, projectId)
 })
 
 const deleteProjectRecursive = db.transaction((projectId) => {
@@ -3222,6 +3340,7 @@ const serverContext = {
   renderMobileCapturePage,
   renameProjectAndRoot,
   requireAuth,
+  removeNodeMedia,
   resolveVariantAnchor,
   restoreProjectFromArchive,
   restoreSubtreeFromPayload,
@@ -3231,9 +3350,11 @@ const serverContext = {
   serializeNodeForUser,
   serializeProject,
   setAuthCookie,
+  setPrimaryNodeMedia,
   setNodeCollapsedStateRecursive,
   setProjectCollapsedState,
   updateIdentificationTemplate,
+  updateNodeMediaEdits,
   updateNode,
   updatePasswordStmt,
   updateProjectOpenAiKey,

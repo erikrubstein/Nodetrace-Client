@@ -30,9 +30,11 @@ function tooltipButton({ active = false, disabled = false, iconClassName, label,
 export default function PreviewPanel({
   beginPreviewPan,
   busy,
-  patchNodeImageEdits,
+  patchNodeMediaEdits,
   previewTransform,
   previewViewportRef,
+  removeNodeMedia,
+  setPrimaryMedia,
   setPreviewTransform,
   selectedNode,
   setError,
@@ -51,20 +53,36 @@ export default function PreviewPanel({
   const viewportSizeRef = useRef({ width: 0, height: 0 })
   const [sourceMimeType, setSourceMimeType] = useState('image/jpeg')
   const [localEdits, setLocalEdits] = useState(defaultImageEdits)
+  const [activeMediaId, setActiveMediaId] = useState(null)
   const [cropMode, setCropMode] = useState(false)
   const [cropSelection, setCropSelection] = useState(null)
   const [imageReady, setImageReady] = useState(false)
+  const mediaItems = useMemo(() => selectedNode?.media || [], [selectedNode?.media])
+  const selectedMedia = useMemo(
+    () => mediaItems.find((item) => item.id === activeMediaId) || mediaItems[0] || null,
+    [activeMediaId, mediaItems],
+  )
+
+  useEffect(() => {
+    const preferredMediaId = selectedNode?.primaryMediaId || mediaItems[0]?.id || null
+    setActiveMediaId((current) => {
+      if (current && mediaItems.some((item) => item.id === current)) {
+        return current
+      }
+      return preferredMediaId
+    })
+  }, [mediaItems, selectedNode?.primaryMediaId])
 
   const normalizedSelectedEdits = useMemo(
-    () => normalizeImageEdits(selectedNode?.imageEdits),
-    [selectedNode?.imageEdits],
+    () => normalizeImageEdits(selectedMedia?.imageEdits),
+    [selectedMedia?.imageEdits],
   )
   const selectedEditSignature = useMemo(
     () => JSON.stringify(normalizedSelectedEdits),
     [normalizedSelectedEdits],
   )
   const localEditSignature = useMemo(() => JSON.stringify(normalizeImageEdits(localEdits)), [localEdits])
-  const hasImage = Boolean(selectedNode?.imageUrl)
+  const hasImage = Boolean(selectedMedia?.imageUrl)
   const hasCrop = Boolean(localEdits.crop)
   const hasAdjustmentChanges = useMemo(
     () =>
@@ -83,7 +101,7 @@ export default function PreviewPanel({
     let objectUrl = null
 
     async function loadSourceImage() {
-      if (!selectedNode?.imageUrl) {
+      if (!selectedMedia?.imageUrl) {
         sourceImageRef.current = null
         sourceImageNodeIdRef.current = null
         if (renderCanvasRef.current) {
@@ -97,7 +115,7 @@ export default function PreviewPanel({
 
       setImageReady(false)
       try {
-        const response = await fetch(selectedNode.imageUrl)
+        const response = await fetch(selectedMedia.imageUrl)
         if (!response.ok) {
           throw new Error('Unable to load the selected image.')
         }
@@ -113,7 +131,7 @@ export default function PreviewPanel({
           return
         }
         sourceImageRef.current = image
-        sourceImageNodeIdRef.current = selectedNode.id
+        sourceImageNodeIdRef.current = `${selectedNode.id}:${selectedMedia.id}`
         setSourceMimeType(blob.type || 'image/jpeg')
         setImageReady(true)
       } catch (error) {
@@ -134,10 +152,10 @@ export default function PreviewPanel({
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [selectedNode?.id, selectedNode?.imageUrl, setError])
+  }, [selectedMedia?.id, selectedMedia?.imageUrl, selectedNode?.id, setError])
 
   useEffect(() => {
-    const nextNodeId = selectedNode?.id ?? null
+    const nextNodeId = selectedMedia ? `${selectedNode?.id}:${selectedMedia.id}` : selectedNode?.id ?? null
     const nodeChanged = syncedNodeIdRef.current !== nextNodeId
     const serverChanged = syncedEditSignatureRef.current !== selectedEditSignature
     const localMatchesPreviousServer = localEditSignature === syncedEditSignatureRef.current
@@ -168,10 +186,10 @@ export default function PreviewPanel({
       setCropMode(false)
       setCropSelection(null)
     }
-  }, [localEditSignature, normalizedSelectedEdits, selectedEditSignature, selectedNode?.id])
+  }, [localEditSignature, normalizedSelectedEdits, selectedEditSignature, selectedMedia, selectedMedia?.id, selectedNode?.id])
 
   useEffect(() => {
-    if (!selectedNode?.id || localEditSignature === selectedEditSignature) {
+    if (!selectedNode?.id || !selectedMedia?.id || localEditSignature === selectedEditSignature) {
       return undefined
     }
 
@@ -180,7 +198,7 @@ export default function PreviewPanel({
     saveSequenceRef.current = nextSequence
     saveTimerRef.current = window.setTimeout(async () => {
       try {
-        await patchNodeImageEdits(selectedNode.id, localEdits)
+        await patchNodeMediaEdits(selectedNode.id, selectedMedia.id, localEdits)
       } catch (error) {
         if (saveSequenceRef.current === nextSequence) {
           setError(error.message || 'Unable to save image adjustments.')
@@ -191,7 +209,7 @@ export default function PreviewPanel({
     return () => {
       window.clearTimeout(saveTimerRef.current)
     }
-  }, [localEditSignature, localEdits, patchNodeImageEdits, selectedEditSignature, selectedNode?.id, setError])
+  }, [localEditSignature, localEdits, patchNodeMediaEdits, selectedEditSignature, selectedMedia?.id, selectedNode?.id, setError])
 
   function updateEdit(key, value) {
     setLocalEdits((current) => ({
@@ -237,7 +255,7 @@ export default function PreviewPanel({
   useLayoutEffect(() => {
     const canvas = renderCanvasRef.current
     const image = sourceImageRef.current
-    if (!canvas || !imageReady || !image || sourceImageNodeIdRef.current !== selectedNode?.id) {
+    if (!canvas || !imageReady || !image || sourceImageNodeIdRef.current !== `${selectedNode?.id}:${selectedMedia?.id}`) {
       return
     }
     renderImageEditsToCanvas(canvas, image, localEdits, { maxDimension: 1800 })
@@ -248,7 +266,7 @@ export default function PreviewPanel({
       pendingInitialFitRef.current = false
       fitPreviewView()
     }
-  }, [fitPreviewView, imageReady, localEdits, selectedNode?.id])
+  }, [fitPreviewView, imageReady, localEdits, selectedMedia?.id, selectedNode?.id])
 
   useLayoutEffect(() => {
     const viewport = previewViewportRef.current
@@ -535,11 +553,53 @@ export default function PreviewPanel({
       label: 'Invert Colors',
       onClick: () => updateEdit('invert', !localEdits.invert),
     }),
+    tooltipButton({
+      disabled: !hasImage || busy || selectedMedia?.isPrimary,
+      iconClassName: 'fa-solid fa-star',
+      label: 'Make Main Photo',
+      onClick: async () => {
+        try {
+          await setPrimaryMedia(selectedNode.id, selectedMedia.id)
+        } catch (error) {
+          setError(error.message || 'Unable to update the main photo.')
+        }
+      },
+    }),
+    tooltipButton({
+      disabled: !hasImage || busy,
+      iconClassName: 'fa-solid fa-trash',
+      label: 'Remove Photo',
+      onClick: async () => {
+        try {
+          await removeNodeMedia(selectedNode.id, selectedMedia.id)
+        } catch (error) {
+          setError(error.message || 'Unable to remove the selected photo.')
+        }
+      },
+    }),
   ]
 
   return (
     <div className="preview-panel">
       <div className="preview-panel__actions">{toolButtons}</div>
+      {mediaItems.length > 1 ? (
+        <div className="preview-panel__media-strip">
+          {mediaItems.map((mediaItem) => (
+            <button
+              key={mediaItem.id}
+              className={`preview-panel__media-thumb ${mediaItem.id === selectedMedia?.id ? 'is-active' : ''}`}
+              onClick={() => setActiveMediaId(mediaItem.id)}
+              type="button"
+            >
+              {mediaItem.previewUrl || mediaItem.imageUrl ? (
+                <img alt="" src={mediaItem.previewUrl || mediaItem.imageUrl} />
+              ) : (
+                <span>{mediaItem.isPrimary ? 'Main' : 'Photo'}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {hasImage ? (
         <>
           <div

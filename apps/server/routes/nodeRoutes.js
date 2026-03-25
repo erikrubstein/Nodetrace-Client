@@ -37,6 +37,9 @@ export function registerNodeRoutes(app, ctx) {
     ensureNoCycle,
     promoteVariantToMain,
     deleteNodeRecursive,
+    updateNodeMediaEdits,
+    removeNodeMedia,
+    setPrimaryNodeMedia,
   } = ctx
 
   app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
@@ -371,6 +374,52 @@ export function registerNodeRoutes(app, ctx) {
       deleteNodeRecursive(node.id, node.project_id)
       broadcastProjectEvent(node.project_id)
       res.status(204).send()
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  app.patch('/api/nodes/:id/media/:mediaId', requireAuth, (req, res, next) => {
+    try {
+      const node = assertNodeAccess(req.params.id, req.user.id)
+      updateNodeMediaEdits({
+        nodeId: node.id,
+        mediaId: String(req.params.mediaId || '').trim(),
+        imageEdits: req.body?.imageEdits,
+        projectId: node.project_id,
+      })
+      broadcastProjectEvent(node.project_id)
+      res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  app.post('/api/nodes/:id/media/:mediaId/primary', requireAuth, (req, res, next) => {
+    try {
+      const node = assertNodeAccess(req.params.id, req.user.id)
+      setPrimaryNodeMedia({
+        nodeId: node.id,
+        mediaId: String(req.params.mediaId || '').trim(),
+        projectId: node.project_id,
+      })
+      broadcastProjectEvent(node.project_id)
+      res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  app.delete('/api/nodes/:id/media/:mediaId', requireAuth, (req, res, next) => {
+    try {
+      const node = assertNodeAccess(req.params.id, req.user.id)
+      removeNodeMedia({
+        nodeId: node.id,
+        mediaId: String(req.params.mediaId || '').trim(),
+        projectId: node.project_id,
+      })
+      broadcastProjectEvent(node.project_id)
+      res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
     } catch (error) {
       next(error)
     }

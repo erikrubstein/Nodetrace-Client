@@ -1320,6 +1320,36 @@ select {
   flex-wrap: wrap;
 }
 
+.preview-panel__media-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.preview-panel__media-thumb {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+  padding: 0;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.preview-panel__media-thumb.is-active {
+  border-color: var(--accent);
+}
+
+.preview-panel__media-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .preview-panel__tool-button {
   color: var(--muted);
 }
@@ -1346,8 +1376,7 @@ select {
 }
 
 .camera-panel__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
   gap: 10px;
 }
 
