@@ -303,6 +303,7 @@ function createTextSchema() {
       name TEXT NOT NULL,
       notes TEXT DEFAULT '',
       tags_json TEXT DEFAULT '[]',
+      needs_attention INTEGER NOT NULL DEFAULT 0,
       image_edits_json TEXT DEFAULT '{}',
       image_path TEXT,
       preview_path TEXT,
@@ -413,6 +414,7 @@ function ensureTextIdSchema() {
         name TEXT NOT NULL,
         notes TEXT DEFAULT '',
         tags_json TEXT DEFAULT '[]',
+        needs_attention INTEGER NOT NULL DEFAULT 0,
         image_edits_json TEXT DEFAULT '{}',
         image_path TEXT,
         preview_path TEXT,
@@ -434,10 +436,10 @@ function ensureTextIdSchema() {
     const insertNodeRow = db.prepare(`
       INSERT INTO nodes_new (
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
+        needs_attention, image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
       ) VALUES (
         @id, @project_id, @owner_user_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json,
-        @image_edits_json, @image_path, @preview_path, @original_filename, @added_at, @created_at, @updated_at
+        @needs_attention, @image_edits_json, @image_path, @preview_path, @original_filename, @added_at, @created_at, @updated_at
       )
     `)
 
@@ -465,6 +467,7 @@ function ensureTextIdSchema() {
         name: row.name,
         notes: row.notes || '',
         tags_json: row.tags_json || '[]',
+        needs_attention: Number(row.needs_attention || 0),
         image_edits_json: JSON.stringify(normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}'))),
         image_path: row.image_path ? rewriteUploadPathProjectFolder(row.image_path, projectIdMap.get(row.project_id)) : null,
         preview_path: row.preview_path ? rewriteUploadPathProjectFolder(row.preview_path, projectIdMap.get(row.project_id)) : null,
@@ -515,6 +518,7 @@ function ensureCollapseSchemaCleanup() {
         name TEXT NOT NULL,
         notes TEXT DEFAULT '',
         tags_json TEXT DEFAULT '[]',
+        needs_attention INTEGER NOT NULL DEFAULT 0,
         image_edits_json TEXT DEFAULT '{}',
         image_path TEXT,
         preview_path TEXT,
@@ -530,11 +534,11 @@ function ensureCollapseSchemaCleanup() {
 
       INSERT INTO nodes_clean (
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
+        needs_attention, image_edits_json, image_path, preview_path, original_filename, added_at, created_at, updated_at
       )
       SELECT
         id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json,
-        COALESCE(image_edits_json, '{}'), image_path, preview_path, original_filename, COALESCE(added_at, created_at), created_at, updated_at
+        COALESCE(needs_attention, 0), COALESCE(image_edits_json, '{}'), image_path, preview_path, original_filename, COALESCE(added_at, created_at), created_at, updated_at
       FROM nodes;
 
       DROP TABLE nodes;
@@ -560,6 +564,15 @@ function ensureNodeImageEditSchema() {
 }
 
 ensureNodeImageEditSchema()
+
+function ensureNodeNeedsAttentionSchema() {
+  const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
+  if (!nodeColumns.some((column) => column.name === 'needs_attention')) {
+    db.exec(`ALTER TABLE nodes ADD COLUMN needs_attention INTEGER NOT NULL DEFAULT 0`)
+  }
+}
+
+ensureNodeNeedsAttentionSchema()
 
 function ensureNodeAddedAtSchema() {
   const nodeColumns = db.prepare(`PRAGMA table_info(nodes)`).all()
@@ -734,10 +747,10 @@ const insertProject = db.prepare(`
 const insertNode = db.prepare(`
   INSERT INTO nodes (
     id, project_id, owner_user_id, parent_id, variant_of_id, type, name, notes, tags_json, image_path, preview_path,
-    image_edits_json, original_filename, added_at, created_at, updated_at
+    needs_attention, image_edits_json, original_filename, added_at, created_at, updated_at
   ) VALUES (
     @id, @project_id, @owner_user_id, @parent_id, @variant_of_id, @type, @name, @notes, @tags_json, @image_path, @preview_path,
-    @image_edits_json, @original_filename, @added_at, @created_at, @updated_at
+    @needs_attention, @image_edits_json, @original_filename, @added_at, @created_at, @updated_at
   )
 `)
 
@@ -1126,6 +1139,7 @@ const updateNodeStmt = db.prepare(`
   SET name = @name,
       notes = @notes,
       tags_json = @tags_json,
+      needs_attention = @needs_attention,
       image_edits_json = @image_edits_json,
       updated_at = @updated_at
   WHERE id = @id
@@ -1168,6 +1182,7 @@ const createProjectWithRoot = db.transaction(({ name, description, owner_user_id
     name,
     notes: '',
     tags_json: '[]',
+    needs_attention: 0,
     image_edits_json: JSON.stringify(defaultNodeImageEdits),
     variant_of_id: null,
     image_path: null,
@@ -1243,6 +1258,7 @@ const createNode = db.transaction((payload) => {
     created_at: now,
     updated_at: now,
     tags_json: JSON.stringify(payload.tags),
+    needs_attention: payload.needs_attention ? 1 : 0,
     image_edits_json: JSON.stringify(normalizeNodeImageEdits(payload.image_edits)),
     variant_of_id: payload.variant_of_id ?? null,
   })
@@ -1251,13 +1267,14 @@ const createNode = db.transaction((payload) => {
   return nodeId
 })
 
-const updateNode = db.transaction(({ id, project_id, name, notes, tags, image_edits }) => {
+const updateNode = db.transaction(({ id, project_id, name, notes, tags, needs_attention, image_edits }) => {
   const now = new Date().toISOString()
   updateNodeStmt.run({
     id,
     name,
     notes,
     tags_json: JSON.stringify(tags),
+    needs_attention: needs_attention ? 1 : 0,
     image_edits_json: JSON.stringify(normalizeNodeImageEdits(image_edits)),
     updated_at: now,
   })
@@ -2330,6 +2347,7 @@ function serializeNode(row, _collapsedMap = null, identification = null) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: JSON.parse(row.tags_json || '[]'),
+    needsAttention: Boolean(row.needs_attention),
     imageEdits: normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}')),
     collapsed: false,
     isVariant: row.variant_of_id != null,
@@ -2910,6 +2928,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
       name: rootRow.name || 'Root',
       notes: rootRow.notes || '',
       tags_json: JSON.stringify(Array.isArray(rootRow.tags) ? rootRow.tags : []),
+      needs_attention: Number(rootRow.needs_attention || 0),
       image_edits_json: JSON.stringify(normalizeNodeImageEdits(rootRow.image_edits)),
       image_path: null,
       preview_path: null,
@@ -2977,6 +2996,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
           name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
           notes: row.notes || '',
           tags: Array.isArray(row.tags) ? row.tags : [],
+          needs_attention: Boolean(row.needs_attention),
           image_edits: row.image_edits,
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
@@ -4470,6 +4490,7 @@ app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
     const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, 'name')
     const hasNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'notes')
     const hasTags = Object.prototype.hasOwnProperty.call(req.body || {}, 'tags')
+    const hasNeedsAttention = Object.prototype.hasOwnProperty.call(req.body || {}, 'needsAttention')
     const hasImageEdits = Object.prototype.hasOwnProperty.call(req.body || {}, 'imageEdits')
     const requestedName = hasName ? String(req.body.name || '').trim() : node.name
 
@@ -4483,6 +4504,7 @@ app.patch('/api/nodes/:id', requireAuth, (req, res, next) => {
       name: requestedName || node.name,
       notes: hasNotes ? String(req.body.notes || '').trim() : (node.notes || ''),
       tags: hasTags ? parseTags(req.body.tags) : JSON.parse(node.tags_json || '[]'),
+      needs_attention: hasNeedsAttention ? Boolean(req.body.needsAttention) : Boolean(node.needs_attention),
       image_edits: hasImageEdits ? req.body.imageEdits : JSON.parse(node.image_edits_json || '{}'),
     })
 

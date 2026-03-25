@@ -26,18 +26,30 @@ export default function CameraPanel({
           </select>
         </label>
         <div className="camera-panel__hint">
-          {selectedNode && !selectedNode.isVariant
-            ? `Capture target: ${selectedNode.name}`
-            : 'Select a non-variant node to capture into.'}
+          {selectedNode
+            ? selectedNode.isVariant
+              ? `Capture target: ${selectedNode.name} (variant anchor)`
+              : `Capture target: ${selectedNode.name}`
+            : 'Select a node to capture into.'}
         </div>
-        <button
-          className="primary-button wide"
-          disabled={!selectedNode || selectedNode.isVariant || busy}
-          onClick={() => void captureFullCameraFrame()}
-          type="button"
-        >
-          Take Photo
-        </button>
+        <div className="camera-panel__actions">
+          <button
+            className="primary-button wide"
+            disabled={!selectedNode || selectedNode.isVariant || busy}
+            onClick={() => void captureFullCameraFrame()}
+            type="button"
+          >
+            Take Photo
+          </button>
+          <button
+            className="ghost-button wide"
+            disabled={!selectedNode || busy}
+            onClick={() => void captureFullCameraFrame('variant')}
+            type="button"
+          >
+            Take Variant Photo
+          </button>
+        </div>
       </div>
       <div
         ref={cameraViewportRef}

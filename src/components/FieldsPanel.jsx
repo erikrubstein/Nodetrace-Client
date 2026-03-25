@@ -13,6 +13,7 @@ export default function FieldsPanel({
   clearError,
   hasBulkSelection,
   identification,
+  patchNodeNeedsAttention,
   patchIdentificationField,
   runIdentificationAiFill,
   selectedNode,
@@ -102,6 +103,18 @@ export default function FieldsPanel({
     }
   }
 
+  async function handleToggleNeedsAttention() {
+    if (!selectedNode) {
+      return
+    }
+    clearError()
+    try {
+      await patchNodeNeedsAttention(selectedNode.id, !selectedNode.needsAttention)
+    } catch {
+      // Parent handles global error state.
+    }
+  }
+
   if (!selectedNode) {
     return (
       <div className="fields-panel">
@@ -122,23 +135,25 @@ export default function FieldsPanel({
     )
   }
 
-  if (!identification) {
-    return (
-      <div className="fields-panel">
-        <div className="inspector__section">
-          <div className="inspector__empty">Apply a template in Inspector to work with structured fields.</div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="fields-panel">
       <div className="inspector__section field-stack">
         <div className="inspector__title">Status</div>
-        <div className={`identification-status-block identification-status-block--${identification.status}`}>
-          {identification.status === 'reviewed' ? 'Complete' : `Incomplete ${reviewProgress}`}
-        </div>
+        {identification ? (
+          <div className={`identification-status-block identification-status-block--${identification.status}`}>
+            {identification.status === 'reviewed' ? 'Complete' : `Incomplete ${reviewProgress}`}
+          </div>
+        ) : (
+          <div className="identification-status-block identification-status-block--incomplete">No Template</div>
+        )}
+        <button
+          className={`ghost-button wide needs-attention-button ${selectedNode.needsAttention ? 'is-active' : ''}`}
+          disabled={busy}
+          onClick={() => void handleToggleNeedsAttention()}
+          type="button"
+        >
+          Needs Attention
+        </button>
       </div>
 
       {hasAiFields ? (
@@ -162,63 +177,69 @@ export default function FieldsPanel({
         </div>
       ) : null}
 
-      <div className="inspector__section field-stack">
-        <div className="inspector__title">Fields</div>
-        <div className="identification-fields">
-          {identification.fields.map((field) => {
-            const draftValue = dirtyFields[field.key] ? fieldDrafts[field.key] ?? '' : formatFieldDraft(field)
+      {identification ? (
+        <div className="inspector__section field-stack">
+          <div className="inspector__title">Fields</div>
+          <div className="identification-fields">
+            {identification.fields.map((field) => {
+              const draftValue = dirtyFields[field.key] ? fieldDrafts[field.key] ?? '' : formatFieldDraft(field)
 
-            return (
-              <div key={field.key} className="identification-field">
-                <div className="identification-field__header">
-                  <div className="identification-field__label">
-                    <span>{field.label}</span>
+              return (
+                <div key={field.key} className="identification-field">
+                  <div className="identification-field__header">
+                    <div className="identification-field__label">
+                      <span>{field.label}</span>
+                    </div>
+                  </div>
+                  <div className="identification-field__control">
+                    {field.type === 'multiline' ? (
+                      <textarea
+                        className={field.reviewed ? 'identification-field__input is-reviewed' : 'identification-field__input'}
+                        disabled={field.reviewed}
+                        rows="4"
+                        tabIndex={field.reviewed ? -1 : 0}
+                        value={draftValue}
+                        onBlur={() => void handleSaveField(field)}
+                        onChange={(event) => {
+                          clearError()
+                          setDirtyFields((current) => ({ ...current, [field.key]: true }))
+                          setFieldDrafts((current) => ({ ...current, [field.key]: event.target.value }))
+                        }}
+                      />
+                    ) : (
+                      <input
+                        className={field.reviewed ? 'identification-field__input is-reviewed' : 'identification-field__input'}
+                        disabled={field.reviewed}
+                        tabIndex={field.reviewed ? -1 : 0}
+                        value={draftValue}
+                        onBlur={() => void handleSaveField(field)}
+                        onChange={(event) => {
+                          clearError()
+                          setDirtyFields((current) => ({ ...current, [field.key]: true }))
+                          setFieldDrafts((current) => ({ ...current, [field.key]: event.target.value }))
+                        }}
+                      />
+                    )}
+                    <button
+                      aria-label={field.reviewed ? `Unreview ${field.label}` : `Review ${field.label}`}
+                      className={`identification-field__review-toggle ${field.reviewed ? 'is-reviewed' : ''}`}
+                      disabled={busy}
+                      onClick={() => void handleToggleReviewed(field)}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-check" />
+                    </button>
                   </div>
                 </div>
-                <div className="identification-field__control">
-                  {field.type === 'multiline' ? (
-                    <textarea
-                      className={field.reviewed ? 'identification-field__input is-reviewed' : 'identification-field__input'}
-                      disabled={field.reviewed}
-                      rows="4"
-                      tabIndex={field.reviewed ? -1 : 0}
-                      value={draftValue}
-                      onBlur={() => void handleSaveField(field)}
-                      onChange={(event) => {
-                        clearError()
-                        setDirtyFields((current) => ({ ...current, [field.key]: true }))
-                        setFieldDrafts((current) => ({ ...current, [field.key]: event.target.value }))
-                      }}
-                    />
-                  ) : (
-                    <input
-                      className={field.reviewed ? 'identification-field__input is-reviewed' : 'identification-field__input'}
-                      disabled={field.reviewed}
-                      tabIndex={field.reviewed ? -1 : 0}
-                      value={draftValue}
-                      onBlur={() => void handleSaveField(field)}
-                      onChange={(event) => {
-                        clearError()
-                        setDirtyFields((current) => ({ ...current, [field.key]: true }))
-                        setFieldDrafts((current) => ({ ...current, [field.key]: event.target.value }))
-                      }}
-                    />
-                  )}
-                  <button
-                    aria-label={field.reviewed ? `Unreview ${field.label}` : `Review ${field.label}`}
-                    className={`identification-field__review-toggle ${field.reviewed ? 'is-reviewed' : ''}`}
-                    disabled={busy}
-                    onClick={() => void handleToggleReviewed(field)}
-                    type="button"
-                  >
-                    <i aria-hidden="true" className="fa-solid fa-check" />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="inspector__section">
+          <div className="inspector__empty">Apply a template in Inspector to work with structured fields.</div>
+        </div>
+      )}
     </div>
   )
 }

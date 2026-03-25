@@ -1340,6 +1340,7 @@ function App() {
         name: current.name,
         notes: current.notes || '',
         tags: current.tags || [],
+        needs_attention: current.needsAttention ? 1 : 0,
         image_edits: current.imageEdits || null,
         original_filename: current.original_filename || null,
         image_file_key: imageFileKey,
@@ -1905,6 +1906,27 @@ function App() {
         applyNodeUpdate(previousNode)
       }
       rollbackLocalEvent()
+      throw error
+    }
+  }
+
+  async function patchNodeNeedsAttentionRequest(nodeId, needsAttention) {
+    if (!nodeId) {
+      return null
+    }
+    const currentNode = treeRef.current?.nodes?.find((node) => node.id === nodeId) || null
+    if (currentNode) {
+      applyNodeUpdate({
+        ...currentNode,
+        needsAttention: Boolean(needsAttention),
+      })
+    }
+    try {
+      return await patchNodeRequest(nodeId, { needsAttention: Boolean(needsAttention) })
+    } catch (error) {
+      if (currentNode) {
+        applyNodeUpdate(currentNode)
+      }
       throw error
     }
   }
@@ -3266,6 +3288,7 @@ function App() {
             onResultsChange={setSearchResultNodeIds}
             onSelectNode={selectNodeAndFocus}
             selectedNodeId={selectedNodeId}
+            selectedNodeIds={effectiveSelectedNodeIds}
             templates={identificationTemplates}
             tree={tree}
           />
@@ -3314,6 +3337,7 @@ function App() {
             clearError={() => setError('')}
             hasBulkSelection={hasBulkSelection}
             identification={selectedNode?.identification || null}
+            patchNodeNeedsAttention={patchNodeNeedsAttentionRequest}
             patchIdentificationField={patchIdentificationFieldRequest}
             runIdentificationAiFill={runIdentificationAiFillRequest}
             selectedNode={selectedNode}

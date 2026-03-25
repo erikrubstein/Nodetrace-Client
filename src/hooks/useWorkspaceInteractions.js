@@ -337,14 +337,19 @@ export default function useWorkspaceInteractions({
     setCameraNotice('Selection added.')
   }, [selectedNode, setCameraNotice, setCameraSelection, uploadFiles])
 
-  async function captureFullCameraFrame() {
+  async function captureFullCameraFrame(mode = 'child') {
     const video = cameraVideoRef.current
     if (!video?.videoWidth || !video?.videoHeight) {
       setCameraNotice('Camera frame is not ready yet.')
       return
     }
 
-    if (!selectedNode || selectedNode.isVariant) {
+    if (!selectedNode) {
+      setCameraNotice(mode === 'variant' ? 'Select a node before capturing a variant.' : 'Select a non-variant node before capturing.')
+      return
+    }
+
+    if (mode !== 'variant' && selectedNode.isVariant) {
       setCameraNotice('Select a non-variant node before capturing.')
       return
     }
@@ -361,9 +366,9 @@ export default function useWorkspaceInteractions({
     }
 
     const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' })
-    setCameraNotice('Uploading full frame...')
-    await uploadFiles([file], selectedNode.id, 'child')
-    setCameraNotice('Full frame added.')
+    setCameraNotice(mode === 'variant' ? 'Uploading variant frame...' : 'Uploading full frame...')
+    await uploadFiles([file], selectedNode.id, mode)
+    setCameraNotice(mode === 'variant' ? 'Variant frame added.' : 'Full frame added.')
   }
 
   useEffect(() => {

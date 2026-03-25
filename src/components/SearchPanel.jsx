@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { collectDescendantIds, findNode } from '../lib/tree'
 
 import IconButton from './IconButton'
 
@@ -6,6 +7,7 @@ const statusOptions = [
   { value: 'none', label: 'No template' },
   { value: 'incomplete', label: 'Incomplete' },
   { value: 'reviewed', label: 'Complete' },
+  { value: 'needs_attention', label: 'Needs Attention' },
 ]
 
 const noteOptions = [
@@ -17,6 +19,11 @@ const typeOptions = [
   { value: 'folder', label: 'Folder' },
   { value: 'photo', label: 'Photo' },
   { value: 'variant', label: 'Variant Photo' },
+]
+
+const variantOptions = [
+  { value: 'has_variants', label: 'Has Variants' },
+  { value: 'no_variants', label: 'No Variants' },
 ]
 
 function optionRow({ checked, itemKey, label, onClick, type = 'single' }) {
@@ -42,6 +49,7 @@ export default function SearchPanel({
   bulkSelectNodeIds,
   onResultsChange,
   selectedNodeId,
+  selectedNodeIds,
   templates,
   tree,
   onSelectNode,
@@ -56,6 +64,8 @@ export default function SearchPanel({
   const [statusFilter, setStatusFilter] = useState('')
   const [notesFilter, setNotesFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [selectionScopeFilter, setSelectionScopeFilter] = useState(false)
+  const [variantPresenceFilter, setVariantPresenceFilter] = useState('')
   const [sortField, setSortField] = useState('name')
   const [sortDirection, setSortDirection] = useState('asc')
   const activeFilterCount =
@@ -63,6 +73,8 @@ export default function SearchPanel({
     Number(Boolean(statusFilter)) +
     Number(Boolean(notesFilter)) +
     Number(Boolean(typeFilter)) +
+    Number(Boolean(selectionScopeFilter)) +
+    Number(Boolean(variantPresenceFilter)) +
     Number(Boolean(selectedOwnerUsernames.length))
   const templateNameById = useMemo(
     () => new Map((templates || []).map((template) => [template.id, template.name])),
@@ -79,6 +91,23 @@ export default function SearchPanel({
       ).sort((a, b) => a.localeCompare(b)),
     [tree?.nodes],
   )
+  const selectionScopeIds = useMemo(() => {
+    if (!selectionScopeFilter || !tree?.root || !selectedNodeIds?.length) {
+      return null
+    }
+
+    const scopedIds = new Set()
+    for (const nodeId of selectedNodeIds) {
+      const node = findNode(tree.root, nodeId)
+      if (!node) {
+        continue
+      }
+      for (const descendantId of collectDescendantIds(node)) {
+        scopedIds.add(descendantId)
+      }
+    }
+    return scopedIds
+  }, [selectedNodeIds, selectionScopeFilter, tree])
 
   const results = useMemo(() => {
     const loweredQuery = query.trim().toLowerCase()
@@ -96,10 +125,13 @@ export default function SearchPanel({
         return selectedTemplateIds.includes(node.identification?.templateId)
       })
       .filter((node) => {
-        const status = node.identification?.status || 'none'
         if (!statusFilter) {
           return true
         }
+        if (statusFilter === 'needs_attention') {
+          return Boolean(node.needsAttention)
+        }
+        const status = node.identification?.status || 'none'
         if (statusFilter === 'incomplete') {
           return status === 'incomplete' || status === 'pending_review'
         }
@@ -111,6 +143,12 @@ export default function SearchPanel({
         }
         const hasNotes = Boolean(node.notes?.trim())
         return notesFilter === 'has_notes' ? hasNotes : !hasNotes
+      })
+      .filter((node) => {
+        if (!selectionScopeIds) {
+          return true
+        }
+        return selectionScopeIds.has(node.id)
       })
       .filter((node) => {
         if (!typeFilter) {
@@ -127,6 +165,13 @@ export default function SearchPanel({
         }
         return true
       })
+      .filter((node) => {
+        if (!variantPresenceFilter) {
+          return true
+        }
+        const hasVariants = Boolean(node.variants?.length)
+        return variantPresenceFilter === 'has_variants' ? hasVariants : !hasVariants
+      })
       .filter((node) => !selectedOwnerUsernames.length || selectedOwnerUsernames.includes(node.ownerUsername))
       .sort((left, right) => {
         let comparison = 0
@@ -137,7 +182,7 @@ export default function SearchPanel({
         }
         return sortDirection === 'desc' ? comparison * -1 : comparison
       })
-  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, sortDirection, sortField, statusFilter, tree?.nodes, typeFilter])
+  }, [anyTemplateOnly, notesFilter, query, selectedOwnerUsernames, selectedTemplateIds, selectionScopeIds, sortDirection, sortField, statusFilter, tree?.nodes, typeFilter, variantPresenceFilter])
 
   useEffect(() => {
     onResultsChange?.(results.map((node) => node.id))
@@ -240,6 +285,8 @@ export default function SearchPanel({
                         setStatusFilter('')
                         setNotesFilter('')
                         setTypeFilter('')
+                        setSelectionScopeFilter(false)
+                        setVariantPresenceFilter('')
                         setSelectedOwnerUsernames([])
                       }}
                     >
@@ -286,6 +333,17 @@ export default function SearchPanel({
                     </div>
                   </div>
                   <div className="search-panel__filter-group">
+                    <span className="search-panel__filter-label">Scope</span>
+                    <div className="search-panel__option-list">
+                      {optionRow({
+                        checked: selectionScopeFilter,
+                        itemKey: 'selected-subtree',
+                        label: 'Selected and Children',
+                        onClick: () => setSelectionScopeFilter((current) => !current),
+                      })}
+                    </div>
+                  </div>
+                  <div className="search-panel__filter-group">
                     <span className="search-panel__filter-label">Owner</span>
                     <div className="search-panel__option-list search-panel__option-list--scroll">
                       {ownerOptions.map((ownerUsername) => (
@@ -314,6 +372,20 @@ export default function SearchPanel({
                           <span>{ownerUsername}</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div className="search-panel__filter-group">
+                    <span className="search-panel__filter-label">Variants</span>
+                    <div className="search-panel__option-list">
+                      {variantOptions.map((option) =>
+                        optionRow({
+                          checked: variantPresenceFilter === option.value,
+                          itemKey: option.value,
+                          label: option.label,
+                          onClick: () =>
+                            setVariantPresenceFilter((current) => (current === option.value ? '' : option.value)),
+                        }),
+                      )}
                     </div>
                   </div>
                   <div className="search-panel__filter-group">
