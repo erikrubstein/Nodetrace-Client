@@ -1,5 +1,5 @@
 import IconButton from './IconButton'
-import { AddFolderIcon, AddPhotoIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, RootNodeIcon } from './icons'
+import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, RootNodeIcon } from './icons'
 
 export default function CanvasWorkspace({
   beginNodeDrag,
@@ -8,9 +8,6 @@ export default function CanvasWorkspace({
   canvasMarqueeRect,
   contextMenu,
   contextMenuNode,
-  convertNodeToVariant,
-  promoteVariantToMain,
-  convertVariantToChild,
   dragActive,
   dragHoverNodeId,
   dragPreview,
@@ -48,6 +45,8 @@ export default function CanvasWorkspace({
   toggleHideNonResults,
   toggleGrid,
   toggleMultiSelection,
+  triggerAddPhoto,
+  triggerAddPhotoNode,
   transform,
   tree,
   uploadFiles,
@@ -130,17 +129,22 @@ export default function CanvasWorkspace({
           <AddFolderIcon />
         </IconButton>
         <IconButton
+          aria-label="Add photo node"
+          className="canvas-tool-button"
+          disabled={!selectedNode || busy}
+          onClick={triggerAddPhotoNode}
+          tooltip="Add Photo Node"
+        >
+          <AddPhotoIcon />
+        </IconButton>
+        <IconButton
           aria-label="Add photo"
           className="canvas-tool-button"
           disabled={!selectedNode || busy}
-          onClick={() => {
-            setPendingUploadParentId(selectedNode?.id || null)
-            setPendingUploadMode('variant')
-            fileInputRef.current?.click()
-          }}
+          onClick={triggerAddPhoto}
           tooltip="Add Photo"
         >
-          <AddPhotoIcon />
+          <AddVariantIcon />
         </IconButton>
       </div>
       <div className="canvas-tools canvas-tools--right">
@@ -384,6 +388,23 @@ export default function CanvasWorkspace({
               }}
               onClick={() => {
                 setPendingUploadParentId(contextMenu.nodeId)
+                setPendingUploadMode('child')
+                setContextMenu(null)
+                fileInputRef.current?.click()
+              }}
+              type="button"
+            >
+              Add Photo Node
+            </button>
+          ) : null}
+          {!contextMenuNode?.isVariant ? (
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={() => {
+                setPendingUploadParentId(contextMenu.nodeId)
                 setPendingUploadMode('variant')
                 setContextMenu(null)
                 fileInputRef.current?.click()
@@ -408,54 +429,6 @@ export default function CanvasWorkspace({
               type="button"
             >
               {contextMenuNode?.collapsed ? 'Expand' : 'Collapse'}
-            </button>
-          ) : null}
-          {contextMenuNode?.isVariant ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setContextMenu(null)
-                void promoteVariantToMain(contextMenuNode)
-              }}
-              type="button"
-            >
-              Make Main
-            </button>
-          ) : null}
-          {contextMenuNode?.isVariant ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setContextMenu(null)
-                void convertVariantToChild(contextMenuNode)
-              }}
-              type="button"
-            >
-              Convert to Child
-            </button>
-          ) : null}
-          {!contextMenuNode?.isVariant &&
-          contextMenuNode?.parent_id != null &&
-          !(contextMenuNode?.children?.length > 0) &&
-          !(contextMenuNode?.variants?.length > 0) ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setContextMenu(null)
-                void convertNodeToVariant(contextMenuNode, contextMenuNode.parent_id)
-              }}
-              type="button"
-            >
-              Convert to Variant
             </button>
           ) : null}
           <button

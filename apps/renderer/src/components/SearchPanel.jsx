@@ -407,7 +407,7 @@ export default function SearchPanel({
                     </div>
                   </div>
                   <div className="search-panel__filter-group">
-                    <span className="search-panel__filter-label">Variants</span>
+                    <span className="search-panel__filter-label">Photos</span>
                     <div className="search-panel__option-list">
                       {variantOptions.map((option) =>
                         optionRow({

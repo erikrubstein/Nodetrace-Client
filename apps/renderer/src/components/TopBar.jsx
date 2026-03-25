@@ -27,7 +27,6 @@ export default function TopBar({
   appendChildren,
   appendParents,
   appendSearchResults,
-  appendVariants,
   invertSelection,
   selectedNode,
   selectedProjectId,
@@ -44,10 +43,10 @@ export default function TopBar({
   selectChildren,
   selectParents,
   selectSearchResults,
-  selectVariants,
   searchResultCount,
   theme,
   triggerAddPhoto,
+  triggerAddPhotoNode,
   toggleTheme,
   tree,
   undo,
@@ -192,6 +191,17 @@ export default function TopBar({
                 disabled={!selectedNode || busy}
                 onClick={() => {
                   setOpenMenu(null)
+                  triggerAddPhotoNode()
+                }}
+                type="button"
+              >
+                Add Photo Node
+              </button>
+              <button
+                className="menu-item"
+                disabled={!selectedNode || busy}
+                onClick={() => {
+                  setOpenMenu(null)
                   triggerAddPhoto()
                 }}
                 type="button"
@@ -258,17 +268,6 @@ export default function TopBar({
               </button>
               <button
                 className="menu-item"
-                disabled={!selectionCount || busy}
-                onClick={() => {
-                  setOpenMenu(null)
-                  selectVariants()
-                }}
-                type="button"
-              >
-                Select Variants
-              </button>
-              <button
-                className="menu-item"
                 disabled={!searchResultCount || busy}
                 onClick={() => {
                   setOpenMenu(null)
@@ -299,17 +298,6 @@ export default function TopBar({
                 type="button"
               >
                 Append Select Children
-              </button>
-              <button
-                className="menu-item"
-                disabled={!selectionCount || busy}
-                onClick={() => {
-                  setOpenMenu(null)
-                  appendVariants()
-                }}
-                type="button"
-              >
-                Append Select Variants
               </button>
               <button
                 className="menu-item"

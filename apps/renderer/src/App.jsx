@@ -543,26 +543,6 @@ function App() {
     }
     return Array.from(new Set(ids))
   }, [findTreeNodeById])
-  const collectSelectionVariantIds = useCallback((nodeIds) => {
-    const ids = []
-    for (const nodeId of nodeIds || []) {
-      const node = findTreeNodeById(nodeId)
-      if (!node) {
-        continue
-      }
-      if (node.isVariant) {
-        const anchor = findTreeNodeById(node.variant_of_id)
-        for (const variant of anchor?.variants || []) {
-          ids.push(variant.id)
-        }
-        continue
-      }
-      for (const variant of node.variants || []) {
-        ids.push(variant.id)
-      }
-    }
-    return Array.from(new Set(ids))
-  }, [findTreeNodeById])
   const replaceSelectionWith = useCallback((nodeIds, preferredPrimaryId = null) => {
     setEffectiveSelection(nodeIds, preferredPrimaryId)
   }, [setEffectiveSelection])
@@ -586,10 +566,6 @@ function App() {
     const childIds = collectSelectionChildIds(effectiveSelectedNodeIds)
     replaceSelectionWith(childIds, childIds[0] || null)
   }, [collectSelectionChildIds, effectiveSelectedNodeIds, replaceSelectionWith])
-  const selectVariants = useCallback(() => {
-    const variantIds = collectSelectionVariantIds(effectiveSelectedNodeIds)
-    replaceSelectionWith(variantIds, variantIds[0] || null)
-  }, [collectSelectionVariantIds, effectiveSelectedNodeIds, replaceSelectionWith])
   const appendSearchResults = useCallback(() => {
     appendSelectionWith(searchResultNodeIds, selectedNodeId || searchResultNodeIds[0] || null)
   }, [appendSelectionWith, searchResultNodeIds, selectedNodeId])
@@ -601,10 +577,6 @@ function App() {
     const childIds = collectSelectionChildIds(effectiveSelectedNodeIds)
     appendSelectionWith(childIds, selectedNodeId || childIds[0] || null)
   }, [appendSelectionWith, collectSelectionChildIds, effectiveSelectedNodeIds, selectedNodeId])
-  const appendVariants = useCallback(() => {
-    const variantIds = collectSelectionVariantIds(effectiveSelectedNodeIds)
-    appendSelectionWith(variantIds, selectedNodeId || variantIds[0] || null)
-  }, [appendSelectionWith, collectSelectionVariantIds, effectiveSelectedNodeIds, selectedNodeId])
   const focusPathContext = useMemo(
     () =>
       focusPathMode
@@ -2870,6 +2842,15 @@ function App() {
     setNewFolderName('New Node')
   }
 
+  function triggerAddPhotoNode() {
+    if (!selectedNode || busy) {
+      return
+    }
+    setPendingUploadParentId(selectedNode.id)
+    setPendingUploadMode('child')
+    fileInputRef.current?.click()
+  }
+
   function triggerAddPhoto() {
     if (!selectedNode || busy) {
       return
@@ -2877,10 +2858,6 @@ function App() {
     setPendingUploadParentId(selectedNode.id)
     setPendingUploadMode('variant')
     fileInputRef.current?.click()
-  }
-
-  function triggerAddVariantPhoto() {
-    triggerAddPhoto()
   }
 
   async function uploadFiles(files, targetNodeId = selectedNode?.id, mode = 'child', options = {}) {
@@ -3111,168 +3088,6 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [focusPathMode, nameInputRef, redo, selectedNode, setCollapsed, undo])
-
-  async function convertNodeToVariant(node, anchorId = node?.parent_id) {
-    if (!node || !anchorId) {
-      return
-    }
-
-    setBusy(true)
-    setError('')
-
-    try {
-      const previousPayload =
-        node.variant_of_id != null
-          ? { variantOfId: node.variant_of_id }
-          : { parentId: node.parent_id, variantOfId: null }
-      const nextPayload = { variantOfId: anchorId }
-
-      const rollbackLocalEvent = beginLocalEventExpectation()
-      let updatedNode = null
-      try {
-        updatedNode = await moveNodeRequest(node.id, nextPayload)
-      } catch (error) {
-        rollbackLocalEvent()
-        throw error
-      }
-      applyNodeUpdate(updatedNode)
-      pushHistory({
-        undo: async () => {
-          const rollbackUndoEvent = beginLocalEventExpectation()
-          let revertedNode = null
-          try {
-            revertedNode = await moveNodeRequest(node.id, previousPayload)
-          } catch (error) {
-            rollbackUndoEvent()
-            throw error
-          }
-          applyNodeUpdate(revertedNode)
-        },
-        redo: async () => {
-          const rollbackRedoEvent = beginLocalEventExpectation()
-          let redoneNode = null
-          try {
-            redoneNode = await moveNodeRequest(node.id, nextPayload)
-          } catch (error) {
-            rollbackRedoEvent()
-            throw error
-          }
-          applyNodeUpdate(redoneNode)
-        },
-      })
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function convertVariantToChild(node) {
-    if (!node?.variant_of_id) {
-      return
-    }
-
-    setBusy(true)
-    setError('')
-
-    try {
-      const previousPayload = { variantOfId: node.variant_of_id }
-      const nextPayload = { parentId: node.variant_of_id, variantOfId: null }
-
-      const rollbackLocalEvent = beginLocalEventExpectation()
-      let updatedNode = null
-      try {
-        updatedNode = await moveNodeRequest(node.id, nextPayload)
-      } catch (error) {
-        rollbackLocalEvent()
-        throw error
-      }
-      applyNodeUpdate(updatedNode)
-      pushHistory({
-        undo: async () => {
-          const rollbackUndoEvent = beginLocalEventExpectation()
-          let revertedNode = null
-          try {
-            revertedNode = await moveNodeRequest(node.id, previousPayload)
-          } catch (error) {
-            rollbackUndoEvent()
-            throw error
-          }
-          applyNodeUpdate(revertedNode)
-        },
-        redo: async () => {
-          const rollbackRedoEvent = beginLocalEventExpectation()
-          let redoneNode = null
-          try {
-            redoneNode = await moveNodeRequest(node.id, nextPayload)
-          } catch (error) {
-            rollbackRedoEvent()
-            throw error
-          }
-          applyNodeUpdate(redoneNode)
-        },
-      })
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function promoteVariantToMain(node) {
-    if (!node?.variant_of_id || !selectedProjectId) {
-      return
-    }
-
-    const previousAnchorId = node.variant_of_id
-    setBusy(true)
-    setError('')
-
-    try {
-      const rollbackLocalEvent = beginLocalEventExpectation()
-      let payload = null
-      try {
-        payload = await api(`/api/nodes/${node.id}/promote-variant`, {
-          method: 'POST',
-        })
-      } catch (error) {
-        rollbackLocalEvent()
-        throw error
-      }
-
-      await loadTree(selectedProjectId, payload.promotedNode?.id || node.id)
-      pushHistory({
-        undo: async () => {
-          const rollbackUndoEvent = beginLocalEventExpectation()
-          try {
-            await api(`/api/nodes/${previousAnchorId}/promote-variant`, {
-              method: 'POST',
-            })
-          } catch (error) {
-            rollbackUndoEvent()
-            throw error
-          }
-          await loadTree(selectedProjectId, previousAnchorId)
-        },
-        redo: async () => {
-          const rollbackRedoEvent = beginLocalEventExpectation()
-          try {
-            await api(`/api/nodes/${node.id}/promote-variant`, {
-              method: 'POST',
-            })
-          } catch (error) {
-            rollbackRedoEvent()
-            throw error
-          }
-          await loadTree(selectedProjectId, node.id)
-        },
-      })
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
 
   async function deleteNode() {
     if (!selectedNode) {
@@ -3811,7 +3626,6 @@ function App() {
         appendChildren={appendChildren}
         appendParents={appendParents}
         appendSearchResults={appendSearchResults}
-        appendVariants={appendVariants}
         busy={busy}
         fileInputRef={fileInputRef}
         focusSelectedNode={focusSelectedNode}
@@ -3853,12 +3667,11 @@ function App() {
         selectChildren={selectChildren}
         selectParents={selectParents}
         selectSearchResults={selectSearchResults}
-        selectVariants={selectVariants}
         searchResultCount={searchResultNodeIds.length}
         toggleTheme={toggleThemePreference}
         theme={theme}
         triggerAddPhoto={triggerAddPhoto}
-        triggerAddVariantPhoto={triggerAddVariantPhoto}
+        triggerAddPhotoNode={triggerAddPhotoNode}
         toggleSidebarPanel={toggleSidebarPanel}
         tree={tree}
         undo={undo}
@@ -3912,9 +3725,6 @@ function App() {
           canvasMarqueeRect={canvasMarqueeRect}
           contextMenu={contextMenu}
           contextMenuNode={contextMenuNode}
-          convertNodeToVariant={convertNodeToVariant}
-          promoteVariantToMain={promoteVariantToMain}
-          convertVariantToChild={convertVariantToChild}
           dragActive={dragActive}
           dragHoverNodeId={dragHoverNodeId}
           dragPreview={dragPreview}
@@ -3931,6 +3741,8 @@ function App() {
           markImageLoaded={markImageLoaded}
           multiSelectedNodeIds={multiSelectedNodeIds}
           openNewFolderDialog={openNewFolderDialog}
+          triggerAddPhoto={triggerAddPhoto}
+          triggerAddPhotoNode={triggerAddPhotoNode}
           projectSettings={projectSettings}
           remoteSelectionsByNodeId={remoteSelectionsByNodeId}
           hideNonResultNodes={hideNonResultNodes}
