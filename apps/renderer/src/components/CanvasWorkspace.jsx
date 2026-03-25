@@ -121,11 +121,11 @@ export default function CanvasWorkspace({
           <RootNodeIcon />
         </IconButton>
         <IconButton
-          aria-label="Add folder"
+          aria-label="Add node"
           className="canvas-tool-button"
           disabled={!selectedNode || busy}
           onClick={() => openNewFolderDialog()}
-          tooltip="Add Folder"
+          tooltip="Add Node"
         >
           <AddFolderIcon />
         </IconButton>
@@ -373,7 +373,7 @@ export default function CanvasWorkspace({
               }}
               type="button"
             >
-              Add Folder
+              Add Node
             </button>
           ) : null}
           {!contextMenuNode?.isVariant ? (

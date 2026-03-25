@@ -178,14 +178,14 @@ export default function TopBar({
               </button>
               <button
                 className="menu-item"
-                disabled={!selectedNode || selectedNode.isVariant || busy}
+                disabled={!selectedNode || busy}
                 onClick={() => {
                   setOpenMenu(null)
                   openNewFolderDialog()
                 }}
                 type="button"
               >
-                Add Folder
+                Add Node
               </button>
               <button
                 className="menu-item"

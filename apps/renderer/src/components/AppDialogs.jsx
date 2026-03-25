@@ -420,10 +420,10 @@ export default function AppDialogs({
             }
             role="dialog"
           >
-            <div className="dialog__title">New Folder</div>
+            <div className="dialog__title">New Node</div>
             <input
               autoFocus
-              placeholder="Folder name"
+              placeholder="Node name"
               value={newFolderName}
               onChange={(event) => setNewFolderName(event.target.value)}
             />

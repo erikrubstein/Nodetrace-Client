@@ -112,7 +112,7 @@ function App() {
   const [projectName, setProjectName] = useState('')
   const [projectApiKeyInput, setProjectApiKeyInput] = useState('')
   const [newFolderDialog, setNewFolderDialog] = useState(null)
-  const [newFolderName, setNewFolderName] = useState('New Folder')
+  const [newFolderName, setNewFolderName] = useState('New Node')
   const [exportFileName, setExportFileName] = useState('')
   const [importProjectName, setImportProjectName] = useState('')
   const [importArchiveFile, setImportArchiveFile] = useState(null)
@@ -1258,18 +1258,37 @@ function App() {
     if (!nodeId || !mediaId) {
       return null
     }
-    const rollbackLocalEvent = beginLocalEventExpectation()
+    const performDelete = async () => {
+      const rollbackLocalEvent = beginLocalEventExpectation()
+      try {
+        return await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
+          method: 'DELETE',
+        })
+      } catch (error) {
+        rollbackLocalEvent()
+        throw error
+      }
+    }
+
     try {
-      const updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
-        method: 'DELETE',
-      })
+      const updatedNode = await performDelete()
       applyNodeUpdate(updatedNode)
       return updatedNode
     } catch (error) {
-      rollbackLocalEvent()
+      if (error instanceof ApiError && error.status === 404 && selectedProjectId) {
+        const refreshedTree = await loadTree(selectedProjectId, selectedNodeIdRef.current)
+        const refreshedNode = refreshedTree?.nodes?.find((item) => item.id === nodeId) || null
+        const mediaStillExists = refreshedNode?.media?.some((item) => item.id === mediaId)
+        if (!mediaStillExists) {
+          return refreshedNode
+        }
+        const updatedNode = await performDelete()
+        applyNodeUpdate(updatedNode)
+        return updatedNode
+      }
       throw error
     }
-  }, [applyNodeUpdate, beginLocalEventExpectation])
+  }, [applyNodeUpdate, beginLocalEventExpectation, loadTree, selectedProjectId])
 
   useEffect(() => {
     if (!currentUser || !selectedProjectId || !tree?.project || !projectUiReady) {
@@ -1404,7 +1423,7 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         parentId,
-        name: payload.name ?? 'New Folder',
+        name: payload.name ?? 'New Node',
         notes: payload.notes ?? '',
         tags: payload.tags ?? '',
       }),
@@ -2793,7 +2812,7 @@ function App() {
         const rollbackLocalEvent = beginLocalEventExpectation()
         let created = null
         try {
-          created = await createFolderRequest(selectedProjectId, parentId, { name: newFolderName.trim() || 'New Folder' })
+          created = await createFolderRequest(selectedProjectId, parentId, { name: newFolderName.trim() || 'New Node' })
         } catch (error) {
           rollbackLocalEvent()
           throw error
@@ -2837,7 +2856,7 @@ function App() {
       return
     }
 
-    setNewFolderName('New Folder')
+    setNewFolderName('New Node')
     setNewFolderDialog({ parentId })
   }
 
@@ -2848,7 +2867,7 @@ function App() {
 
     await addFolder(newFolderDialog.parentId)
     setNewFolderDialog(null)
-    setNewFolderName('New Folder')
+    setNewFolderName('New Node')
   }
 
   function triggerAddPhoto() {
