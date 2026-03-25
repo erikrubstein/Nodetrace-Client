@@ -1,6 +1,8 @@
 export default function DockedSidebar({
   activePanel,
+  canPopout = false,
   onClose,
+  onPopout,
   onResizeStart,
   side,
   visible,
@@ -16,6 +18,11 @@ export default function DockedSidebar({
           <div className="sidebar-shell__titlebar">
             <span className="sidebar-shell__title">{activePanel.title}</span>
             <div className="sidebar-shell__actions">
+              {canPopout ? (
+                <button className="sidebar-shell__action" onClick={onPopout} title="Open in window" type="button">
+                  <i aria-hidden="true" className="fa-solid fa-up-right-from-square" />
+                </button>
+              ) : null}
               <button className="sidebar-shell__action" onClick={onClose} title="Collapse sidebar" type="button">
                 <i aria-hidden="true" className="fa-solid fa-xmark" />
               </button>

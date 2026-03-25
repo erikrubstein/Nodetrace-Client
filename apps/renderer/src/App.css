@@ -113,6 +113,42 @@ select {
   overflow: hidden;
 }
 
+.app-shell--panel-window {
+  display: block;
+}
+
+.panel-window-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.panel-window-shell__titlebar {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.panel-window-shell__body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-window-shell__empty {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
 .app-shell--auth {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);

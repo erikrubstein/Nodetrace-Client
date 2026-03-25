@@ -21,6 +21,7 @@ import useUndoRedo from './hooks/useUndoRedo'
 import useWorkspaceInteractions from './hooks/useWorkspaceInteractions'
 import { ApiError, api, uploadWithProgress } from './lib/api'
 import { defaultProjectSettings, defaultUserProjectUi, panelIds, SIDEBAR_RAIL_WIDTH } from './lib/constants'
+import { isDesktopEnvironment, openDesktopPanelWindow } from './lib/desktop'
 import { blobFromUrl, createPreviewFile } from './lib/image'
 import {
   buildClientTree,
@@ -75,6 +76,8 @@ function getPresenceInitials(username) {
 }
 
 function App() {
+  const { panelWindowId } = getUrlState()
+  const isPanelWindow = Boolean(panelWindowId)
   const [currentUser, setCurrentUser] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [projects, setProjects] = useState([])
@@ -3440,8 +3443,18 @@ function App() {
   const rightRailPanels = rightDockedPanelIds.map((panelId) => panelDefinitions[panelId]).filter(Boolean)
   const activeLeftPanel = resolvedLeftActivePanel ? panelDefinitions[resolvedLeftActivePanel] : null
   const activeRightPanel = resolvedRightActivePanel ? panelDefinitions[resolvedRightActivePanel] : null
+  const windowPanel = panelWindowId ? panelDefinitions[panelWindowId] : null
   const effectiveLeftSidebarOpen = projectUiReady ? leftSidebarOpen : false
   const effectiveRightSidebarOpen = projectUiReady ? rightSidebarOpen : false
+  const canPopoutPanels = isDesktopEnvironment() && !isPanelWindow
+
+  async function popoutPanel(panelId) {
+    await openDesktopPanelWindow({
+      panelId,
+      projectId: selectedProjectId,
+      nodeId: selectedNodeId,
+    })
+  }
 
   if (!authReady) {
     return <div className="app-shell app-shell--loading" data-theme={theme}>Loading...</div>
@@ -3460,6 +3473,24 @@ function App() {
       </div>
     )
   }
+
+  if (isPanelWindow) {
+    return (
+      <div className="app-shell app-shell--panel-window" data-theme={theme}>
+        <div className="panel-window-shell">
+          {windowPanel ? (
+            <>
+              <div className="panel-window-shell__titlebar">{windowPanel.title}</div>
+              <div className="panel-window-shell__body">{windowPanel.content}</div>
+            </>
+          ) : (
+            <div className="panel-window-shell__empty">Panel not found.</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="app-shell"
@@ -3549,7 +3580,9 @@ function App() {
         />
         <DockedSidebar
           activePanel={activeLeftPanel}
+          canPopout={canPopoutPanels && Boolean(activeLeftPanel)}
           onClose={() => setLeftSidebarOpen(false)}
+          onPopout={() => activeLeftPanel && void popoutPanel(activeLeftPanel.id)}
           onResizeStart={(event) => {
             resizeRef.current = { pointerId: event.pointerId, target: 'left' }
             document.body.classList.add('is-resizing')
@@ -3612,7 +3645,9 @@ function App() {
         />
         <DockedSidebar
           activePanel={activeRightPanel}
+          canPopout={canPopoutPanels && Boolean(activeRightPanel)}
           onClose={() => setRightSidebarOpen(false)}
+          onPopout={() => activeRightPanel && void popoutPanel(activeRightPanel.id)}
           onResizeStart={(event) => {
             resizeRef.current = { pointerId: event.pointerId, target: 'right' }
             document.body.classList.add('is-resizing')

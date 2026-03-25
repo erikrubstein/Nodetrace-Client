@@ -127,7 +127,16 @@ function openPanelWindow(options = {}) {
     panelWindows.delete(panelId)
   })
 
-  loadWindow(panelWindow, `/?panelWindow=${encodeURIComponent(panelId)}`).catch((error) => {
+  const windowUrl = new URL(getRendererUrl('/'))
+  windowUrl.searchParams.set('panelWindow', panelId)
+  if (options.projectId) {
+    windowUrl.searchParams.set('project', String(options.projectId))
+  }
+  if (options.nodeId) {
+    windowUrl.searchParams.set('node', String(options.nodeId))
+  }
+
+  panelWindow.loadURL(windowUrl.toString()).catch((error) => {
     console.error(error)
     panelWindow.loadURL(`data:text/plain,${encodeURIComponent(error.message)}`).catch(() => {})
   })
