@@ -7,6 +7,7 @@ import multer from 'multer'
 import AdmZip from 'adm-zip'
 import { initializeDatabase } from './db/bootstrap.js'
 import { renderMobileCapturePage } from './mobileCapturePage.js'
+import { defaultProjectSettings, defaultUserProjectUi } from '../../packages/shared/src/projectDefaults.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -69,38 +70,6 @@ fs.mkdirSync(path.join(tempDir, 'imports'), { recursive: true })
 
 const ID_FIRST_CHARS = 'abcdefghijklmnopqrstuvwxyz'
 const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789'
-
-const defaultProjectSettings = {
-  orientation: 'horizontal',
-  horizontalGap: 72,
-  verticalGap: 44,
-  imageMode: 'square',
-  layoutMode: 'compact',
-}
-
-const defaultUserProjectUi = {
-  theme: 'dark',
-  showGrid: true,
-  canvasTransform: null,
-  selectedNodeIds: [],
-  leftSidebarOpen: false,
-  rightSidebarOpen: true,
-  leftSidebarWidth: 340,
-  rightSidebarWidth: 320,
-  leftActivePanel: 'preview',
-  rightActivePanel: 'inspector',
-  panelDock: {
-    preview: 'left',
-    camera: 'left',
-    search: 'left',
-    templates: 'left',
-    inspector: 'right',
-    fields: 'right',
-    settings: 'right',
-    collaborators: 'right',
-    account: 'right',
-  },
-}
 
 const defaultNodeImageEdits = {
   crop: null,
