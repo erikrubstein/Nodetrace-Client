@@ -82,6 +82,9 @@ export default function SearchPanel({
     Array.isArray(initialState?.selectedPhotoFilters) ? initialState.selectedPhotoFilters : [],
   )
   const [selectionScopeFilter, setSelectionScopeFilter] = useState(() => Boolean(initialState?.selectionScopeFilter))
+  const [selectionScopeSeedIds, setSelectionScopeSeedIds] = useState(() =>
+    Array.isArray(initialState?.selectionScopeSeedIds) ? initialState.selectionScopeSeedIds : [],
+  )
   const [sortField, setSortField] = useState(() => (initialState?.sortField === 'added_at' ? 'added_at' : 'name'))
   const [sortDirection, setSortDirection] = useState(() => (initialState?.sortDirection === 'desc' ? 'desc' : 'asc'))
   const activeFilterCount =
@@ -145,6 +148,7 @@ export default function SearchPanel({
         selectedNoteFilters,
         selectedPhotoFilters,
         selectionScopeFilter,
+        selectionScopeSeedIds,
         sortField,
         sortDirection,
       }),
@@ -159,6 +163,7 @@ export default function SearchPanel({
     selectedTags,
     selectedTemplateIds,
     selectionScopeFilter,
+    selectionScopeSeedIds,
     sortDirection,
     sortField,
     statusFilter,
@@ -166,12 +171,12 @@ export default function SearchPanel({
   ])
 
   const selectionScopeIds = useMemo(() => {
-    if (!selectionScopeFilter || !tree?.root || !selectedNodeIds?.length) {
+    if (!selectionScopeFilter || !tree?.root || !selectionScopeSeedIds?.length) {
       return null
     }
 
     const scopedIds = new Set()
-    for (const nodeId of selectedNodeIds) {
+    for (const nodeId of selectionScopeSeedIds) {
       const node = findNode(tree.root, nodeId)
       if (!node) {
         continue
@@ -180,8 +185,14 @@ export default function SearchPanel({
         scopedIds.add(descendantId)
       }
     }
-    return scopedIds
-  }, [selectedNodeIds, selectionScopeFilter, tree])
+    return scopedIds.size ? scopedIds : null
+  }, [selectionScopeFilter, selectionScopeSeedIds, tree])
+
+  const pinnedScopeCount = useMemo(
+    () =>
+      selectionScopeSeedIds.filter((nodeId, index, current) => current.indexOf(nodeId) === index).length,
+    [selectionScopeSeedIds],
+  )
 
   const results = useMemo(() => {
     const loweredQuery = query.trim().toLowerCase()
@@ -369,6 +380,7 @@ export default function SearchPanel({
                           setSelectedNoteFilters([])
                           setSelectedPhotoFilters([])
                           setSelectionScopeFilter(false)
+                          setSelectionScopeSeedIds([])
                           setAnyTagOnly(false)
                           setSelectedTags([])
                           setSelectedOwnerUsernames([])
@@ -437,8 +449,23 @@ export default function SearchPanel({
                         {optionRow({
                           checked: selectionScopeFilter,
                           itemKey: 'selected-subtree',
-                          label: 'Selected and Children',
-                          onClick: () => setSelectionScopeFilter((current) => !current),
+                          label:
+                            selectionScopeFilter && pinnedScopeCount
+                              ? `Pinned Selection and Children (${pinnedScopeCount})`
+                              : 'Pin Selection and Children',
+                          onClick: () => {
+                            if (selectionScopeFilter) {
+                              setSelectionScopeFilter(false)
+                              setSelectionScopeSeedIds([])
+                              return
+                            }
+                            const snapshotIds = Array.from(new Set((selectedNodeIds || []).filter(Boolean)))
+                            if (!snapshotIds.length) {
+                              return
+                            }
+                            setSelectionScopeSeedIds(snapshotIds)
+                            setSelectionScopeFilter(true)
+                          },
                         })}
                       </div>
                     </div>
