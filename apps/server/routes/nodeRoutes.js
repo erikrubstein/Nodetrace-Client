@@ -32,6 +32,7 @@ export function registerNodeRoutes(app, ctx) {
     ensureNoChildren,
     ensureNodeBelongsToProject,
     resolveVariantAnchor,
+    mergeNodeIntoTargetMedia,
     moveNode,
     ensureCanHaveChildren,
     ensureNoCycle,
@@ -40,6 +41,7 @@ export function registerNodeRoutes(app, ctx) {
     updateNodeMediaEdits,
     removeNodeMedia,
     setPrimaryNodeMedia,
+    extractNodeMediaToSibling,
     buildTree,
   } = ctx
 
@@ -526,6 +528,53 @@ export function registerNodeRoutes(app, ctx) {
       })
       broadcastProjectEvent(node.project_id)
       res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  app.post('/api/nodes/:id/merge-into-photo', requireAuth, (req, res, next) => {
+    try {
+      const sourceNode = assertNodeAccess(req.params.id, req.user.id)
+      const targetNodeId = String(req.body?.targetNodeId || '').trim()
+      if (!targetNodeId) {
+        return res.status(400).json({ error: 'Target node is required' })
+      }
+
+      const targetNode = assertNodeAccess(targetNodeId, req.user.id)
+      mergeNodeIntoTargetMedia({
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        projectId: sourceNode.project_id,
+      })
+      broadcastProjectEvent(sourceNode.project_id)
+      const project = assertProjectAccess(sourceNode.project_id, req.user.id)
+      res.json({
+        ok: true,
+        targetNodeId: targetNode.id,
+        tree: buildTree(project, getProjectNodes.all(project.id), req.user.id),
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  app.post('/api/nodes/:id/media/:mediaId/extract', requireAuth, (req, res, next) => {
+    try {
+      const node = assertNodeAccess(req.params.id, req.user.id)
+      const newNodeId = extractNodeMediaToSibling({
+        nodeId: node.id,
+        mediaId: String(req.params.mediaId || '').trim(),
+        projectId: node.project_id,
+        ownerUserId: req.user.id,
+      })
+      broadcastProjectEvent(node.project_id)
+      const project = assertProjectAccess(node.project_id, req.user.id)
+      res.json({
+        ok: true,
+        newNodeId,
+        tree: buildTree(project, getProjectNodes.all(project.id), req.user.id),
+      })
     } catch (error) {
       next(error)
     }

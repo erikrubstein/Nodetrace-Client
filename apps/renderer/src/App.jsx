@@ -107,6 +107,7 @@ function App() {
   const [openMenu, setOpenMenu] = useState(null)
   const [showProjectDialog, setShowProjectDialog] = useState(null)
   const [templateDialog, setTemplateDialog] = useState(null)
+  const [importTemplateDialog, setImportTemplateDialog] = useState(null)
   const [selectedTemplateEditorId, setSelectedTemplateEditorId] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [projectApiKeyInput, setProjectApiKeyInput] = useState('')
@@ -119,6 +120,8 @@ function App() {
   const [deleteProjectText, setDeleteProjectText] = useState('')
   const [deleteNodeOpen, setDeleteNodeOpen] = useState(false)
   const [identificationTemplateRemoval, setIdentificationTemplateRemoval] = useState(null)
+  const [applyTemplateConfirmation, setApplyTemplateConfirmation] = useState(null)
+  const [mergePhotoConfirmation, setMergePhotoConfirmation] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
   const [sidebarContextMenu, setSidebarContextMenu] = useState(null)
   const [dragActive, setDragActive] = useState(false)
@@ -1265,6 +1268,46 @@ function App() {
     }
   }, [applyNodeUpdate, beginLocalEventExpectation, loadTree, selectedProjectId])
 
+  const mergeNodeIntoPhotoRequest = useCallback(async (sourceNodeId, targetNodeId) => {
+    if (!sourceNodeId || !targetNodeId || !selectedProjectId) {
+      return null
+    }
+
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const payload = await api(`/api/nodes/${sourceNodeId}/merge-into-photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetNodeId }),
+      })
+      applyTreePayload(payload.tree)
+      setSelectedNodeId(payload.targetNodeId || targetNodeId)
+      return payload
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+  }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
+
+  const extractNodeMediaToSiblingRequest = useCallback(async (nodeId, mediaId) => {
+    if (!nodeId || !mediaId || !selectedProjectId) {
+      return null
+    }
+
+    const rollbackLocalEvent = beginLocalEventExpectation()
+    try {
+      const payload = await api(`/api/nodes/${nodeId}/media/${mediaId}/extract`, {
+        method: 'POST',
+      })
+      applyTreePayload(payload.tree)
+      setSelectedNodeId(payload.newNodeId || null)
+      return payload
+    } catch (error) {
+      rollbackLocalEvent()
+      throw error
+    }
+  }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
+
   useEffect(() => {
     if (!currentUser || !selectedProjectId || !tree?.project || !projectUiReady) {
       return undefined
@@ -1643,11 +1686,22 @@ function App() {
           return
         }
 
+        if (asVariant) {
+          const targetNode = tree?.nodes.find((item) => item.id === parentId)
+          setMergePhotoConfirmation({
+            sourceNodeId: nodeId,
+            sourceNodeName: node.name,
+            targetNodeId: parentId,
+            targetNodeName: targetNode?.name || 'the target node',
+          })
+          return
+        }
+
         const beforePayload =
           node.variant_of_id != null
             ? { variantOfId: node.variant_of_id }
             : { parentId: node.parent_id, variantOfId: null }
-        const afterPayload = asVariant ? { variantOfId: parentId } : { parentId, variantOfId: null }
+        const afterPayload = { parentId, variantOfId: null }
         const rollbackLocalEvent = beginLocalEventExpectation()
         let updatedNode = null
         try {
@@ -1692,6 +1746,27 @@ function App() {
     },
     [applyNodeUpdate, beginLocalEventExpectation, moveNodeRequest, pushHistory, tree?.nodes],
   )
+
+  async function confirmMergeNodeIntoPhoto() {
+    if (!mergePhotoConfirmation) {
+      return
+    }
+
+    setError('')
+    setBusy(true)
+    try {
+      await mergeNodeIntoPhotoRequest(
+        mergePhotoConfirmation.sourceNodeId,
+        mergePhotoConfirmation.targetNodeId,
+      )
+      setSelectedNodeId(mergePhotoConfirmation.targetNodeId)
+      setMergePhotoConfirmation(null)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const {
     editForm,
@@ -1902,6 +1977,31 @@ function App() {
             : project,
         ),
       )
+      setShowProjectDialog(null)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmApplyTemplateSelection() {
+    if (!applyTemplateConfirmation) {
+      return
+    }
+
+    setError('')
+    setBusy(true)
+    try {
+      if (applyTemplateConfirmation.nodeId) {
+        await applyIdentificationTemplateRequest(
+          applyTemplateConfirmation.nodeId,
+          applyTemplateConfirmation.templateId,
+        )
+      } else {
+        await applyIdentificationTemplateToSelection(applyTemplateConfirmation.templateId)
+      }
+      setApplyTemplateConfirmation(null)
       setShowProjectDialog(null)
     } catch (submitError) {
       setError(submitError.message)
@@ -2247,6 +2347,57 @@ function App() {
           })),
         })
       }
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function importTemplateFromProject(sourceProjectId, sourceTemplateId) {
+    if (!selectedProjectId || !sourceProjectId || !sourceTemplateId) {
+      return
+    }
+
+    setError('')
+    setBusy(true)
+    try {
+      const sourceProject = projects.find((project) => project.id === sourceProjectId) || null
+      const sourceTemplate = sourceProject?.identificationTemplates?.find((template) => template.id === sourceTemplateId) || null
+      if (!sourceTemplate) {
+        throw new Error('Template not found in the selected project')
+      }
+
+      const nextTree = await createOrUpdateTemplateRequest(selectedProjectId, {
+        name: sourceTemplate.name,
+        aiInstructions: sourceTemplate.aiInstructions || '',
+        parentDepth: Number(sourceTemplate.parentDepth || 0),
+        childDepth: Number(sourceTemplate.childDepth || 0),
+        fields: (sourceTemplate.fields || []).map((field) => ({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          mode: field.mode || 'manual',
+        })),
+      })
+      const nextTemplate = nextTree?.project?.identificationTemplates?.at(-1) || null
+      if (nextTemplate) {
+        setSelectedTemplateEditorId(nextTemplate.id)
+        setTemplateForm({
+          name: nextTemplate.name || '',
+          aiInstructions: nextTemplate.aiInstructions || '',
+          parentDepth: Number(nextTemplate.parentDepth || 0),
+          childDepth: Number(nextTemplate.childDepth || 0),
+          fields: (nextTemplate.fields || []).map((field) => ({
+            id: `${nextTemplate.id}-${field.key || Math.random().toString(36).slice(2, 8)}`,
+            key: field.key,
+            label: field.label,
+            type: field.type,
+            mode: field.mode || 'manual',
+          })),
+        })
+      }
+      setImportTemplateDialog(null)
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -3367,6 +3518,7 @@ function App() {
             <PreviewPanel
               beginPreviewPan={beginPreviewPan}
               busy={busy}
+              extractNodeMediaToSibling={extractNodeMediaToSiblingRequest}
               patchNodeMediaEdits={saveNodeMediaEdits}
               previewTransform={previewTransform}
               previewViewportRef={previewViewportRef}
@@ -3454,6 +3606,8 @@ function App() {
             key={`${selectedNode?.id || 'none'}:${selectedNode?.identification?.templateId || 'none'}`}
             aiFillRunning={aiFillNodeId === selectedNode?.id}
             busy={busy}
+            bulkSelectionCount={bulkSelectionCount}
+            bulkTemplateCount={selectionNodesWithTemplates.length}
             clearError={() => setError('')}
             hasIdentificationTemplates={identificationTemplates.length > 0}
             hasBulkSelection={hasBulkSelection}
@@ -3464,7 +3618,11 @@ function App() {
               setError('')
               setShowProjectDialog('apply-template')
             }}
-            openRemoveTemplateDialog={() => requestRemoveIdentificationTemplates([selectedNode.id])}
+            openRemoveTemplateDialog={() =>
+              requestRemoveIdentificationTemplates(
+                hasBulkSelection ? explicitSelectedNodes.map((node) => node.id) : [selectedNode.id],
+              )
+            }
             selectedNode={selectedNode}
           />
         ),
@@ -3481,6 +3639,7 @@ function App() {
             duplicateTemplate={duplicateTemplate}
             hasTemplateChanges={hasTemplateChanges}
             error={error}
+            openImportTemplateDialog={() => setImportTemplateDialog({ sourceProjectId: '', sourceTemplateId: '' })}
             requestDeleteTemplate={requestDeleteTemplate}
             requestSaveTemplate={requestSaveTemplate}
             selectedTemplateEditorId={selectedTemplateEditorId}
@@ -3611,13 +3770,13 @@ function App() {
         <div className="panel-window-shell">
           {windowPanel ? (
             <>
-              <div className="panel-window-shell__titlebar">
-                <span className="panel-window-shell__title">{windowPanel.title}</span>
+              <div className="sidebar-shell__titlebar panel-window-shell__titlebar">
+                <span className="sidebar-shell__title panel-window-shell__title">{windowPanel.title}</span>
                 {isDesktopEnvironment() ? (
-                  <div className="desktop-window-controls panel-window-shell__controls">
+                  <div className="sidebar-shell__actions panel-window-shell__controls">
                     <button
                       aria-label="Minimize window"
-                      className="desktop-window-controls__button"
+                      className="sidebar-shell__action desktop-window-controls__button"
                       onClick={() => void minimizeDesktopWindow()}
                       type="button"
                     >
@@ -3625,7 +3784,7 @@ function App() {
                     </button>
                     <button
                       aria-label={desktopWindowMaximized ? 'Restore window' : 'Maximize window'}
-                      className="desktop-window-controls__button"
+                      className="sidebar-shell__action desktop-window-controls__button"
                       onClick={() => void toggleMaximizeDesktopWindow()}
                       type="button"
                     >
@@ -3633,7 +3792,7 @@ function App() {
                     </button>
                     <button
                       aria-label="Close window"
-                      className="desktop-window-controls__button desktop-window-controls__button--close"
+                      className="sidebar-shell__action desktop-window-controls__button desktop-window-controls__button--close"
                       onClick={() => void closeDesktopWindow()}
                       type="button"
                     >
@@ -3642,7 +3801,7 @@ function App() {
                   </div>
                 ) : null}
               </div>
-              <div className="panel-window-shell__body">{windowPanel.content}</div>
+              <div className="sidebar-shell__body panel-window-shell__body">{windowPanel.content}</div>
             </>
           ) : (
             <div className="panel-window-shell__empty">Panel not found.</div>
@@ -3853,16 +4012,17 @@ function App() {
       ) : null}
 
       <AppDialogs
-        applyIdentificationTemplate={applyIdentificationTemplateRequest}
-        applyIdentificationTemplateToSelection={applyIdentificationTemplateToSelection}
         accountDialog={accountDialog}
         accountForm={accountForm}
         accountStatus={accountStatus}
+        applyTemplateConfirmation={applyTemplateConfirmation}
         bulkSelectionCount={bulkSelectionCount}
         bulkTemplateCount={selectionNodesWithTemplates.length}
         busy={busy}
         changePassword={changePassword}
         changeUsername={changeUsername}
+        confirmApplyTemplateSelection={confirmApplyTemplateSelection}
+        confirmMergeNodeIntoPhoto={confirmMergeNodeIntoPhoto}
         confirmRemoveIdentificationTemplate={confirmRemoveIdentificationTemplate}
         createProject={createProject}
         currentUser={currentUser}
@@ -3880,6 +4040,8 @@ function App() {
         handleDialogEnter={handleDialogEnter}
         hasBulkSelection={hasBulkSelection}
         identificationTemplates={identificationTemplates}
+        importTemplateDialog={importTemplateDialog}
+        importTemplateFromProject={importTemplateFromProject}
         importArchiveFile={importArchiveFile}
         importInputRef={importInputRef}
         importProject={importProject}
@@ -3887,6 +4049,7 @@ function App() {
         projectApiKeyInput={projectApiKeyInput}
         identificationTemplateRemovalCount={identificationTemplateRemovalCount}
         identificationTemplateRemovalNodes={identificationTemplateRemovalNodes}
+        mergePhotoConfirmation={mergePhotoConfirmation}
         mobileConnectionCount={mobileConnectionCount}
         newFolderDialog={newFolderDialog}
         newFolderName={newFolderName}
@@ -3899,6 +4062,7 @@ function App() {
         sessionDialogOpen={sessionDialogOpen}
         setAccountDialog={setAccountDialog}
         setAccountForm={setAccountForm}
+        setApplyTemplateConfirmation={setApplyTemplateConfirmation}
         setDeleteNodeOpen={setDeleteNodeOpen}
         setDeleteProjectText={setDeleteProjectText}
         setExportFileName={setExportFileName}
@@ -3910,6 +4074,7 @@ function App() {
           requestRemoveIdentificationTemplates([nodeId])
         }}
         setImportProjectName={setImportProjectName}
+        setImportTemplateDialog={setImportTemplateDialog}
         setNewFolderDialog={setNewFolderDialog}
         setNewFolderName={setNewFolderName}
         setProjectApiKeyInput={setProjectApiKeyInput}
@@ -3918,6 +4083,7 @@ function App() {
         setShowProjectDialog={setShowProjectDialog}
         setShowProjectId={setSelectedProjectId}
         setTemplateDialog={setTemplateDialog}
+        setMergePhotoConfirmation={setMergePhotoConfirmation}
         showProjectDialog={showProjectDialog}
         submitNewFolder={submitNewFolder}
         submitTemplateDialog={submitTemplateDialog}

@@ -10,6 +10,8 @@ function formatFieldDraft(field) {
 export default function FieldsPanel({
   aiFillRunning,
   busy,
+  bulkSelectionCount,
+  bulkTemplateCount,
   clearError,
   hasIdentificationTemplates,
   hasBulkSelection,
@@ -112,8 +114,25 @@ export default function FieldsPanel({
   if (hasBulkSelection) {
     return (
       <div className="fields-panel">
-        <div className="inspector__section">
-          <div className="inspector__empty">Select a single node to edit structured data.</div>
+        <div className="inspector__section field-stack">
+          <div className="inspector__title">Template</div>
+          <div className="inspector__notice">{bulkSelectionCount} nodes selected.</div>
+          <button
+            className="ghost-button wide"
+            disabled={!hasIdentificationTemplates || busy}
+            onClick={openApplyTemplateDialog}
+            type="button"
+          >
+            Apply Template
+          </button>
+          <button
+            className="ghost-button wide"
+            disabled={!bulkTemplateCount || busy}
+            onClick={openRemoveTemplateDialog}
+            type="button"
+          >
+            Clear Template
+          </button>
         </div>
       </div>
     )

@@ -249,6 +249,37 @@ function getProjectUploadDir(projectId) {
   return path.join(uploadsDir, String(projectId))
 }
 
+function copyStoredUpload(projectId, relativePath, label = 'media') {
+  if (!relativePath) {
+    return null
+  }
+
+  const sourcePath = path.join(uploadsDir, relativePath)
+  if (!fs.existsSync(sourcePath)) {
+    return null
+  }
+
+  const targetDir = getProjectUploadDir(projectId)
+  fs.mkdirSync(targetDir, { recursive: true })
+  const ext = path.extname(relativePath) || '.jpg'
+  const safeBaseName = path
+    .basename(relativePath, ext)
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+  const filename = `${Date.now()}-${label}-${generateUniqueId(() => false)}-${safeBaseName}${ext}`
+  const destinationPath = path.join(targetDir, filename)
+  fs.copyFileSync(sourcePath, destinationPath)
+  return path.relative(uploadsDir, destinationPath).replaceAll('\\', '/')
+}
+
+function cloneMediaPayloadToProject(projectId, media, label = 'media') {
+  return {
+    image_path: copyStoredUpload(projectId, media.image_path, `${label}-image`),
+    preview_path: copyStoredUpload(projectId, media.preview_path, `${label}-preview`),
+    original_filename: media.original_filename || null,
+    image_edits: normalizeNodeImageEdits(JSON.parse(media.image_edits_json || '{}')),
+  }
+}
+
 const db = initializeDatabase({
   dbPath,
   generateUniqueId,
@@ -330,6 +361,7 @@ const updateNodeMediaMirrorStmt = db.prepare(`
 const updateNodeMediaPlacementStmt = db.prepare(`
   UPDATE node_media
   SET node_id = @node_id,
+      legacy_source_node_id = @legacy_source_node_id,
       is_primary = @is_primary,
       sort_order = @sort_order,
       updated_at = @updated_at
@@ -810,6 +842,7 @@ function resequenceNodeMedia(nodeId) {
       updateNodeMediaPlacementStmt.run({
         id: media.id,
         node_id: nodeId,
+        legacy_source_node_id: media.legacy_source_node_id || null,
         is_primary: isPrimary,
         sort_order: sortOrder,
         updated_at: new Date().toISOString(),
@@ -1270,6 +1303,7 @@ const setPrimaryNodeMedia = db.transaction(({ nodeId, mediaId, projectId }) => {
   updateNodeMediaPlacementStmt.run({
     id: mediaId,
     node_id: nodeId,
+    legacy_source_node_id: null,
     is_primary: 1,
     sort_order: 0,
     updated_at: now,
@@ -1307,6 +1341,91 @@ const removeNodeMedia = db.transaction(({ nodeId, mediaId, projectId }) => {
   deleteNodeMediaByIdStmt.run(media.id)
   resequenceNodeMedia(nodeId)
   updateProjectTimestamp.run(now, projectId)
+})
+
+const mergeNodeIntoTargetMedia = db.transaction(({ sourceNodeId, targetNodeId, projectId }) => {
+  const sourceNode = assertNode(sourceNodeId)
+  const targetNode = assertNode(targetNodeId)
+  ensureNotRoot(sourceNode)
+  ensureNodeBelongsToProject(sourceNode, projectId)
+  ensureNodeBelongsToProject(targetNode, projectId)
+  ensureCanHaveChildren(targetNode)
+  ensureNoChildren(sourceNode)
+  if (sourceNode.id === targetNode.id) {
+    const error = new Error('A node cannot be merged into itself')
+    error.status = 400
+    throw error
+  }
+
+  const sourceMediaRows = listNodeMediaByNodeStmt.all(sourceNode.id)
+  const preservedMedia = sourceMediaRows.find((item) => Number(item.is_primary)) || sourceMediaRows[0] || null
+  if (!preservedMedia?.image_path) {
+    const error = new Error('Only nodes with a photo can become an additional photo')
+    error.status = 400
+    throw error
+  }
+
+  const copiedMedia = cloneMediaPayloadToProject(projectId, preservedMedia, 'merge')
+  const now = new Date().toISOString()
+  insertNodeMediaMirrorStmt.run({
+    id: generateUniqueId((candidate) => Boolean(getNodeMediaByIdStmt.get(candidate))),
+    project_id: projectId,
+    node_id: targetNode.id,
+    legacy_source_node_id: null,
+    is_primary: 0,
+    sort_order: listNodeMediaByNodeStmt.all(targetNode.id).length + 1,
+    image_edits_json: JSON.stringify(copiedMedia.image_edits),
+    image_path: copiedMedia.image_path,
+    preview_path: copiedMedia.preview_path,
+    original_filename: copiedMedia.original_filename,
+    created_at: now,
+    updated_at: now,
+  })
+  resequenceNodeMedia(targetNode.id)
+  deleteNodeRecursive(sourceNode.id, projectId)
+  updateProjectTimestamp.run(now, projectId)
+})
+
+const extractNodeMediaToSibling = db.transaction(({ nodeId, mediaId, projectId, ownerUserId }) => {
+  const sourceNode = assertNode(nodeId)
+  ensureNodeBelongsToProject(sourceNode, projectId)
+  if (sourceNode.parent_id == null) {
+    const error = new Error('The root node cannot receive sibling photo nodes')
+    error.status = 400
+    throw error
+  }
+
+  const media = assertNodeMedia(nodeId, mediaId)
+  if (!media.image_path) {
+    const error = new Error('Only saved photos can be converted into their own node')
+    error.status = 400
+    throw error
+  }
+
+  const copiedMedia = cloneMediaPayloadToProject(projectId, media, 'extract')
+  const newNodeId = createNode({
+    project_id: projectId,
+    owner_user_id: ownerUserId || sourceNode.owner_user_id || null,
+    parent_id: sourceNode.parent_id,
+    variant_of_id: null,
+    type: 'photo',
+    name: createUntitledName(),
+    notes: '',
+    tags: [],
+    review_status: 'new',
+    image_edits: copiedMedia.image_edits,
+    image_path: copiedMedia.image_path,
+    preview_path: copiedMedia.preview_path,
+    original_filename: copiedMedia.original_filename,
+  })
+
+  removeNodeMedia({
+    nodeId: sourceNode.id,
+    mediaId: media.id,
+    projectId,
+  })
+
+  return newNodeId
 })
 
 const deleteProjectRecursive = db.transaction((projectId) => {
@@ -3296,6 +3415,7 @@ const serverContext = {
   ensureNoCycle,
   ensureNodeBelongsToProject,
   ensureNotRoot,
+  extractNodeMediaToSibling,
   exportProjectArchive,
   exportProjectMediaArchive,
   fs,
@@ -3331,6 +3451,7 @@ const serverContext = {
   listProjectSessions,
   listSessionsByUserStmt,
   maskProjectApiKey,
+  mergeNodeIntoTargetMedia,
   moveNode,
   normalizeIdentificationFieldDefinitions,
   normalizeIdentificationFieldValue,
@@ -3368,6 +3489,7 @@ const serverContext = {
   updateUsernameStmt,
   upsertNodeIdentification,
   upsertNodeIdentificationFieldValue,
+  upsertUserNodeCollapsePreference,
   upsertUserProjectPreference,
   upload,
   uploadsDir,

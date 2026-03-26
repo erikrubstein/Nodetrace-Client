@@ -4,6 +4,7 @@ export default function TemplatesPanel({
   hasTemplateChanges,
   error,
   createNewTemplate,
+  openImportTemplateDialog,
   requestDeleteTemplate,
   requestSaveTemplate,
   selectedTemplateEditorId,
@@ -36,6 +37,15 @@ export default function TemplatesPanel({
               </option>
             ))}
           </select>
+          <button
+            aria-label="Import template from another project"
+            className="tool-button templates-panel__new-button"
+            disabled={busy}
+            onClick={openImportTemplateDialog}
+            type="button"
+          >
+            <i aria-hidden="true" className="fa-solid fa-file-import" />
+          </button>
           <button
             aria-label="New template"
             className="tool-button templates-panel__new-button"

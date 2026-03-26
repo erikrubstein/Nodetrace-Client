@@ -26,6 +26,7 @@ export function importRestorePayloadRoutes(app, ctx) {
     resolveVariantAnchor,
     serializeNodeForUser,
     upsertNodeIdentification,
+    upsertUserNodeCollapsePreference,
     assertIdentificationTemplateAccess,
   } = ctx
 
@@ -198,6 +199,15 @@ export function importRestorePayloadRoutes(app, ctx) {
         preview_path: null,
         original_filename: null,
       })
+      const now = new Date().toISOString()
+      upsertUserNodeCollapsePreference.run({
+        user_id: req.user.id,
+        project_id: projectId,
+        node_id: nodeId,
+        collapsed: 0,
+        created_at: now,
+        updated_at: now,
+      })
 
       broadcastProjectEvent(projectId)
       res.status(201).json(serializeNodeForUser(assertNode(nodeId), req.user.id))
@@ -285,6 +295,15 @@ export function importRestorePayloadRoutes(app, ctx) {
         image_edits: imageEdits,
         original_filename: originalFile.originalname,
       })
+      const collapseTimestamp = new Date().toISOString()
+      upsertUserNodeCollapsePreference.run({
+        user_id: req.user.id,
+        project_id: projectId,
+        node_id: nodeId,
+        collapsed: 0,
+        created_at: collapseTimestamp,
+        updated_at: collapseTimestamp,
+      })
 
       if (template) {
         const now = new Date().toISOString()
@@ -369,6 +388,17 @@ export function importRestorePayloadRoutes(app, ctx) {
         image_edits: imageEdits,
         original_filename: originalFile.originalname,
       })
+      const collapseTimestamp = new Date().toISOString()
+      if (session.userId) {
+        upsertUserNodeCollapsePreference.run({
+          user_id: session.userId,
+          project_id: projectId,
+          node_id: nodeId,
+          collapsed: 0,
+          created_at: collapseTimestamp,
+          updated_at: collapseTimestamp,
+        })
+      }
 
       if (template) {
         const now = new Date().toISOString()

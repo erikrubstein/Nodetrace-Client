@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
 
 export default function AppDialogs({
-  applyIdentificationTemplate,
-  applyIdentificationTemplateToSelection,
   accountDialog,
   accountForm,
   accountStatus,
+  applyTemplateConfirmation,
   busy,
   bulkTemplateCount,
   changePassword,
   changeUsername,
+  confirmApplyTemplateSelection,
+  confirmMergeNodeIntoPhoto,
   createProject,
   currentUser,
   deleteNode,
@@ -31,9 +32,12 @@ export default function AppDialogs({
   importInputRef,
   importProject,
   importProjectName,
+  importTemplateDialog,
+  importTemplateFromProject,
   projectApiKeyInput,
   identificationTemplateRemovalCount,
   identificationTemplateRemovalNodes,
+  mergePhotoConfirmation,
   mobileConnectionCount,
   newFolderDialog,
   newFolderName,
@@ -45,11 +49,13 @@ export default function AppDialogs({
   sessionDialogOpen,
   setAccountDialog,
   setAccountForm,
+  setApplyTemplateConfirmation,
   setDeleteNodeOpen,
   setDeleteProjectText,
   setExportFileName,
   setIdentificationTemplateRemovalNodeId,
   setImportProjectName,
+  setImportTemplateDialog,
   setNewFolderDialog,
   setNewFolderName,
   setProjectApiKeyInput,
@@ -58,6 +64,7 @@ export default function AppDialogs({
   setShowProjectId,
   projectName,
   setProjectName,
+  setMergePhotoConfirmation,
   showProjectDialog,
   submitNewFolder,
   submitTemplateDialog,
@@ -88,6 +95,18 @@ export default function AppDialogs({
 
     return sortedProjects.filter((project) => String(project?.name || '').toLowerCase().includes(query))
   }, [openProjectSearch, sortedProjects])
+
+  const importableProjects = useMemo(
+    () =>
+      (projects || []).filter(
+        (project) =>
+          project.id !== selectedProjectId && Array.isArray(project.identificationTemplates) && project.identificationTemplates.length > 0,
+      ),
+    [projects, selectedProjectId],
+  )
+  const selectedImportProject =
+    importableProjects.find((project) => project.id === importTemplateDialog?.sourceProjectId) || null
+  const importableTemplates = selectedImportProject?.identificationTemplates || []
 
   const canCloseOpenProjectDialog = Boolean(tree?.project?.id)
 
@@ -668,16 +687,6 @@ export default function AppDialogs({
         <div className="dialog-backdrop" onClick={() => !busy && setShowProjectDialog(null)} role="presentation">
           <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="dialog__title">Apply Template</div>
-            {hasBulkSelection ? (
-              <div className="inspector__notice">
-                Apply a template to <strong>{bulkSelectionCount} selected nodes</strong>.
-                {bulkTemplateCount ? ` ${bulkTemplateCount} currently have template data that may be replaced.` : ''}
-              </div>
-            ) : selectedNode?.identification ? (
-              <div className="inspector__notice">
-                Applying a different template here may replace the current template data on <strong>{selectedNode.name}</strong>.
-              </div>
-            ) : null}
             <div className="project-list">
               {identificationTemplates.map((template) => (
                 <button
@@ -688,16 +697,11 @@ export default function AppDialogs({
                     if (!selectedNode && !hasBulkSelection) {
                       return
                     }
-                    try {
-                      if (hasBulkSelection) {
-                        await applyIdentificationTemplateToSelection(template.id)
-                      } else {
-                        await applyIdentificationTemplate(selectedNode.id, template.id)
-                      }
-                      setShowProjectDialog(null)
-                    } catch {
-                      // Parent handles global error state.
-                    }
+                    setApplyTemplateConfirmation({
+                      templateId: template.id,
+                      templateName: template.name,
+                      nodeId: hasBulkSelection ? null : selectedNode.id,
+                    })
                   }}
                   type="button"
                 >
@@ -707,6 +711,100 @@ export default function AppDialogs({
               ))}
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {applyTemplateConfirmation ? (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !busy && setApplyTemplateConfirmation(null)}
+          role="presentation"
+        >
+          <div
+            className="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleDialogEnter(event, confirmApplyTemplateSelection, !busy)}
+            role="dialog"
+          >
+            <div className="dialog__title">Apply Template</div>
+            <div className="inspector__notice">
+              {hasBulkSelection ? (
+                <>
+                  Apply <strong>{applyTemplateConfirmation.templateName}</strong> to{' '}
+                  <strong>{bulkSelectionCount} selected nodes</strong>?
+                  {bulkTemplateCount ? ` ${bulkTemplateCount} currently have template data that may be replaced.` : ''}
+                </>
+              ) : (
+                <>
+                  Apply <strong>{applyTemplateConfirmation.templateName}</strong> to{' '}
+                  <strong>{selectedNode?.name || 'this node'}</strong>?
+                  {selectedNode?.identification ? ' Current template data may be replaced.' : ''}
+                </>
+              )}
+            </div>
+            {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setApplyTemplateConfirmation(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={confirmApplyTemplateSelection}
+                type="button"
+              >
+                Apply Template
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {mergePhotoConfirmation ? (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !busy && setMergePhotoConfirmation(null)}
+          role="presentation"
+        >
+          <div
+            className="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleDialogEnter(event, confirmMergeNodeIntoPhoto, !busy)}
+            role="dialog"
+          >
+            <div className="dialog__title">Convert To Additional Photo</div>
+            <div className="inspector__notice">
+              Move the main photo from <strong>{mergePhotoConfirmation.sourceNodeName}</strong> onto{' '}
+              <strong>{mergePhotoConfirmation.targetNodeName}</strong> as an additional photo?
+            </div>
+            <div className="inspector__notice">
+              This will delete the source node data and preserve only its main photo.
+            </div>
+            {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setMergePhotoConfirmation(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={busy}
+                onClick={confirmMergeNodeIntoPhoto}
+                type="button"
+              >
+                Convert Photo
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -770,6 +868,98 @@ export default function AppDialogs({
               </button>
               <button className="primary-button" disabled={busy} onClick={() => void submitTemplateDialog()} type="button">
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importTemplateDialog ? (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !busy && setImportTemplateDialog(null)}
+          role="presentation"
+        >
+          <div
+            className="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) =>
+              handleDialogEnter(
+                event,
+                () =>
+                  importTemplateFromProject(
+                    importTemplateDialog.sourceProjectId,
+                    importTemplateDialog.sourceTemplateId,
+                  ),
+                Boolean(importTemplateDialog.sourceProjectId && importTemplateDialog.sourceTemplateId) && !busy,
+              )
+            }
+            role="dialog"
+          >
+            <div className="dialog__title">Import Template</div>
+            <label>
+              <span>Project</span>
+              <select
+                autoFocus
+                disabled={busy}
+                value={importTemplateDialog.sourceProjectId || ''}
+                onChange={(event) =>
+                  setImportTemplateDialog({
+                    sourceProjectId: event.target.value,
+                    sourceTemplateId: '',
+                  })
+                }
+              >
+                <option value="">Select project</option>
+                {importableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Template</span>
+              <select
+                disabled={busy || !selectedImportProject}
+                value={importTemplateDialog.sourceTemplateId || ''}
+                onChange={(event) =>
+                  setImportTemplateDialog((current) => ({
+                    ...current,
+                    sourceTemplateId: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Select template</option>
+                {importableTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setImportTemplateDialog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy || !importTemplateDialog.sourceProjectId || !importTemplateDialog.sourceTemplateId}
+                onClick={() =>
+                  void importTemplateFromProject(
+                    importTemplateDialog.sourceProjectId,
+                    importTemplateDialog.sourceTemplateId,
+                  )
+                }
+                type="button"
+              >
+                Import Template
               </button>
             </div>
           </div>

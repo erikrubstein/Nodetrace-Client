@@ -30,6 +30,7 @@ function tooltipButton({ active = false, disabled = false, iconClassName, label,
 export default function PreviewPanel({
   beginPreviewPan,
   busy,
+  extractNodeMediaToSibling,
   patchNodeMediaEdits,
   previewTransform,
   previewViewportRef,
@@ -562,6 +563,18 @@ export default function PreviewPanel({
           await setPrimaryMedia(selectedNode.id, selectedMedia.id)
         } catch (error) {
           setError(error.message || 'Unable to update the main photo.')
+        }
+      },
+    }),
+    tooltipButton({
+      disabled: !hasImage || busy,
+      iconClassName: 'fa-solid fa-up-right-from-square',
+      label: 'Convert Photo To Sibling Node',
+      onClick: async () => {
+        try {
+          await extractNodeMediaToSibling(selectedNode.id, selectedMedia.id)
+        } catch (error) {
+          setError(error.message || 'Unable to convert the selected photo into a node.')
         }
       },
     }),

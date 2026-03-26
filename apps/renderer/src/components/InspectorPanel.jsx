@@ -1,5 +1,22 @@
 import TagInput from './TagInput'
 
+function formatCreatedAt(value) {
+  if (!value) {
+    return 'Unknown'
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Unknown'
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
 export default function InspectorPanel({
   availableTags,
   busy,
@@ -122,6 +139,10 @@ export default function InspectorPanel({
               <div className="settings-panel__meta-row">
                 <span>Node Owner</span>
                 <strong>{selectedNode.ownerUsername || 'Unknown'}</strong>
+              </div>
+              <div className="settings-panel__meta-row">
+                <span>Date Added</span>
+                <strong>{formatCreatedAt(selectedNode.added_at || selectedNode.created_at)}</strong>
               </div>
               <div className="settings-panel__meta-row">
                 <span>Node ID</span>

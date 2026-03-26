@@ -12,7 +12,13 @@ export default function CameraPanel({
   setSelectedCameraId,
   setSelectedCameraTemplateId,
 }) {
-  async function handleCapture() {
+  async function handleAddPhotoNode() {
+    await captureFullCameraFrame('child', {
+      templateId: selectedCameraTemplateId || null,
+    })
+  }
+
+  async function handleAddPhoto() {
     await captureFullCameraFrame('variant', {
       templateId: selectedCameraTemplateId || null,
     })
@@ -52,7 +58,15 @@ export default function CameraPanel({
           <button
             className="primary-button wide"
             disabled={!selectedNode || busy}
-            onClick={() => void handleCapture()}
+            onClick={() => void handleAddPhotoNode()}
+            type="button"
+          >
+            Take Photo Node
+          </button>
+          <button
+            className="button wide"
+            disabled={!selectedNode || busy}
+            onClick={() => void handleAddPhoto()}
             type="button"
           >
             Add Photo

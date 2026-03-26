@@ -681,6 +681,36 @@ export function buildClientTree(project, rows) {
     }
   }
 
+  function compareChildren(left, right) {
+    const leftHasImage = Boolean(left?.hasImage)
+    const rightHasImage = Boolean(right?.hasImage)
+    if (leftHasImage !== rightHasImage) {
+      return leftHasImage ? 1 : -1
+    }
+
+    const nameComparison = String(left?.name || '').localeCompare(String(right?.name || ''), undefined, {
+      sensitivity: 'base',
+      numeric: true,
+    })
+    if (nameComparison !== 0) {
+      return nameComparison
+    }
+
+    return String(left?.id || '').localeCompare(String(right?.id || ''))
+  }
+
+  function sortBranch(node) {
+    if (!node) {
+      return
+    }
+    node.children.sort(compareChildren)
+    for (const child of node.children) {
+      sortBranch(child)
+    }
+  }
+
+  sortBranch(root)
+
   return {
     project,
     root,
