@@ -19,6 +19,8 @@
     "build": "npm run build:web",
     "build:web": "npm run build --workspace nodetrace-renderer",
     "preview:web": "npm run preview --workspace nodetrace-renderer",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "lint": "eslint .",
     "lint:server": "npm run lint --workspace nodetrace-server",
     "lint:renderer": "npm run lint --workspace nodetrace-renderer",

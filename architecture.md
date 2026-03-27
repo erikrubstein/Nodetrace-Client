@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Nodetrace is a collaborative visual documentation tool for hierarchical photo trees. It is built for workflows where the image set itself has structure: cabinet -> subassembly -> board -> component, with variants for alternate views of the same item.
+Nodetrace is a collaborative visual documentation tool for hierarchical photo trees. It is built for workflows where the image set itself has structure: cabinet -> subassembly -> board -> component, with each node optionally carrying attached photos.
 
 The app is optimized for:
 
@@ -116,11 +116,11 @@ Important durable entities:
 
 ### Nodes
 
-Node types are structural, not workflow-specific:
+The current product direction is a single logical `Node` with attached media:
 
-- folder
-- photo
-- variant
+- a node may have no photo
+- a node may have one main photo
+- a node may have additional attached photos
 
 Important node properties include:
 
@@ -128,12 +128,21 @@ Important node properties include:
 - node owner
 - name
 - notes
+- tags
 - child relationships
-- variant relationships
+- review status
 - optional identification data
-- optional non-destructive preview edits
+- added/created timestamps
 
-Do not create new node types casually. Most new behavior should compose on top of existing nodes.
+Important media properties include:
+
+- media ID
+- owning node ID
+- main-photo ordering
+- original and preview file paths
+- non-destructive image edits
+
+The codebase still contains compatibility logic for older `folder/photo/variant` storage, but that should be treated as migration debt rather than the target product model.
 
 ### Templates and Data
 
@@ -155,8 +164,8 @@ A field defines:
 
 Node data uses templates to provide structure. The current model is:
 
-- Inspector: template assignment / bulk actions
-- Data panel: single-node field editing and AI fill
+- Inspector: node metadata and review status
+- Data panel: template assignment, bulk template actions, single-node field editing, and AI fill
 
 ### Ownership and Collaboration
 

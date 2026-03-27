@@ -52,6 +52,25 @@ The compatibility layer can be removed only after all of the following are true:
 4. Media primary-selection logic no longer relies on legacy node image columns.
 5. Existing projects have been migrated or archived so variant-node-only metadata is no longer needed for rollback.
 
+## Active Cleanup Checklist
+
+- [ ] Rename remaining API/workflow semantics that still say `variant` when they now mean `additional photo`.
+- [ ] Remove live renderer dependencies on `isVariant` and `variant_of_id` outside migration-only compatibility paths.
+- [ ] Rework upload and mobile-capture flows so attached-photo creation no longer relies on legacy variant-node creation under the hood.
+- [ ] Update import/export formats to serialize node media as first-class attached photos instead of visible variant nodes.
+- [ ] Remove legacy variant move/promote endpoints once all visible workflows are migrated.
+- [ ] Remove legacy node image columns as source-of-truth fields once project migration is complete.
+- [ ] Delete compatibility filtering in the renderer after legacy variant rows are no longer produced or needed.
+- [ ] Rewrite public docs and architecture notes whenever a checklist item changes the visible model.
+
+## Suggested Removal Order
+
+1. API/workflow terminology cleanup
+2. upload and capture flow cleanup
+3. renderer dependency cleanup
+4. import/export format cleanup
+5. endpoint and schema cleanup
+
 ## Final Cleanup Targets
 
 Once the criteria above are met, remove or rewrite:

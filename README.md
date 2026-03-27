@@ -12,8 +12,8 @@ It is built for workflows where a flat folder of images is not enough: cabinet t
 
 Nodetrace lets you:
 
-- organize photos and folders into a true node tree
-- keep alternate views of the same item as variants
+- organize work into a true node tree
+- attach zero, one, or many photos to each node
 - collaborate with other users on the same project
 - assign structured identification templates to nodes
 - review field values one field at a time
@@ -26,20 +26,23 @@ Nodetrace lets you:
 
 - `Project`
   A complete job with its own hierarchy, templates, settings, collaborators, and media.
-- `Folder`
-  A structural node for grouping other nodes.
-- `Photo`
-  A node backed by an image. Photos can also have children.
-- `Variant`
-  An alternate view of the same item. Variants are lateral to a main node rather than children.
+- `Node`
+  The primary structural item in the tree. A node may have no photo, one main photo, or additional attached photos.
 
 Every node also has:
 
 - a unique node ID
 - an owner user
 - notes
+- tags
+- review status
 - optional structured identification data
-- optional non-destructive image edits if it is backed by a photo
+
+Every attached photo can also carry:
+
+- original and preview files
+- non-destructive image edits
+- main-photo ordering within the node
 
 ## Major Features
 
@@ -54,10 +57,11 @@ Every node also has:
 
 ### Tree Editing
 
-- create folders, photos, and variant photos
+- create empty nodes and photo nodes
+- add additional photos to existing nodes
 - drag-and-drop reparenting
-- convert between variants and structural children
-- promote a variant to become the main node
+- convert a node into an additional photo on another node
+- convert an attached photo into its own sibling photo node
 - collapse and expand branches
 - multi-select nodes for bulk operations
 - right-drag marquee selection on the canvas
@@ -99,6 +103,8 @@ The Search panel supports:
 - filter by notes presence
 - filter by one or more owners
 - filter by one or more templates
+- filter by photo presence
+- filter by pinned selection scope
 - batch-select all results
 - isolate search results on the canvas
 - show completed nodes with a visual checkmark in the results list
@@ -169,9 +175,9 @@ These edits do not modify the original uploaded file.
 
 #### Desktop
 
-- add folders and photos directly in the app
+- add empty nodes, photo nodes, and additional photos directly in the app
 - drag image files into the tree
-- use the Camera panel for live capture and crop
+- use the Camera panel for live capture
 
 #### Mobile
 
@@ -179,8 +185,9 @@ Nodetrace exposes a `/capture` page for phone uploads tied to the current deskto
 
 - connect a phone to the active desktop session
 - capture photos directly on the phone
-- upload normal photos or variants
-- send them straight into the selected node context
+- create a new photo node under the selected node
+- add an additional photo to the selected node
+- choose existing photos for either path
 
 ## Storage
 
@@ -214,6 +221,10 @@ Includes:
 ### Export Media Tree
 
 Creates a normal folder-based `.zip` that mirrors the project structure for users who do not use Nodetrace.
+
+## Transition Note
+
+Nodetrace is currently in the final stages of moving from an older `folder/photo/variant` storage model to a simpler `node + attached media` model. The visible app already behaves primarily through the newer model, but some compatibility logic still exists internally so older projects can be preserved safely during migration.
 
 ## Tech Stack
 
