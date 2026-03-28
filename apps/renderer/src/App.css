@@ -117,14 +117,14 @@ select {
   display: block;
 }
 
-.panel-window-shell {
+.sidebar-shell--window {
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   background: var(--panel);
 }
 
-.panel-window-shell__titlebar {
+.sidebar-shell--window .sidebar-shell__titlebar {
   min-height: 40px;
   padding: 10px 10px 0 10px;
   border-bottom: 1px solid var(--border);
@@ -132,22 +132,18 @@ select {
   -webkit-app-region: drag;
 }
 
-.panel-window-shell__title {
-  min-width: 0;
-}
-
-.panel-window-shell__controls,
-.panel-window-shell__controls * {
+.sidebar-shell--window .sidebar-shell__actions,
+.sidebar-shell--window .sidebar-shell__actions * {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-.panel-window-shell__body {
+.sidebar-shell--window .sidebar-shell__body {
   min-height: 0;
   overflow-y: auto;
 }
 
-.panel-window-shell__empty {
+.sidebar-shell--window.sidebar-shell--empty {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -319,13 +315,9 @@ select {
   padding-right: 0;
 }
 
-.panel-window-shell__controls .desktop-window-controls__button {
+.sidebar-shell--window .desktop-window-controls__button {
   width: 24px;
   height: 24px;
-}
-
-.panel-window-shell__body > * {
-  min-height: 100%;
 }
 
 .topbar__presence-list {
@@ -514,6 +506,10 @@ select {
   gap: 10px;
   overflow-y: auto;
   min-width: 0;
+}
+
+.sidebar-shell__body > * {
+  min-height: 100%;
 }
 
 .sidebar-shell__resize {
@@ -1453,10 +1449,10 @@ select {
 .sidebar-shell__body > .account-panel > .inspector__footer,
 .sidebar-shell__body > .fields-panel > .inspector__footer,
 .sidebar-shell__body > .templates-panel > .inspector__footer,
-.panel-window-shell__body > .settings-panel > .inspector__footer,
-.panel-window-shell__body > .account-panel > .inspector__footer,
-.panel-window-shell__body > .fields-panel > .inspector__footer,
-.panel-window-shell__body > .templates-panel > .inspector__footer {
+.sidebar-shell--window .sidebar-shell__body > .settings-panel > .inspector__footer,
+.sidebar-shell--window .sidebar-shell__body > .account-panel > .inspector__footer,
+.sidebar-shell--window .sidebar-shell__body > .fields-panel > .inspector__footer,
+.sidebar-shell--window .sidebar-shell__body > .templates-panel > .inspector__footer {
   margin-top: auto;
 }
 

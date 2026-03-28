@@ -9,6 +9,7 @@ import CollaboratorsPanel from './components/CollaboratorsPanel'
 import DockedSidebar from './components/DockedSidebar'
 import FieldsPanel from './components/FieldsPanel'
 import InspectorPanel from './components/InspectorPanel'
+import PanelShell from './components/PanelShell'
 import PreviewPanel from './components/PreviewPanel'
 import SearchPanel from './components/SearchPanel'
 import SidebarRail from './components/SidebarRail'
@@ -273,6 +274,27 @@ function App() {
     setRightActivePanel(panelId)
     setRightSidebarOpen(true)
   }
+
+  const dockPanelIntoSidebar = useCallback((panelId) => {
+    if (!panelId) {
+      return
+    }
+
+    setPoppedOutPanelIds((current) => current.filter((id) => id !== panelId))
+    const side = panelDock[panelId]
+    const minWidth = getPanelMinWidth(panelId)
+
+    if (side === 'left') {
+      setLeftSidebarWidth((current) => Math.max(current, minWidth))
+      setLeftActivePanel(panelId)
+      setLeftSidebarOpen(true)
+      return
+    }
+
+    setRightSidebarWidth((current) => Math.max(current, minWidth))
+    setRightActivePanel(panelId)
+    setRightSidebarOpen(true)
+  }, [panelDock])
 
   function openSidebarContextMenu(event) {
     setContextMenu(null)
@@ -3480,6 +3502,10 @@ function App() {
       if (message.type === 'panel-close') {
         syncPoppedPanel(message.panelId, false)
       }
+      if (message.type === 'panel-dock' && !isPanelWindow) {
+        syncPoppedPanel(message.panelId, false)
+        dockPanelIntoSidebar(message.panelId)
+      }
     }
 
     if (isPanelWindow && panelWindowId) {
@@ -3498,7 +3524,7 @@ function App() {
     return () => {
       channel.close()
     }
-  }, [isPanelWindow, panelWindowId])
+  }, [dockPanelIntoSidebar, isPanelWindow, panelWindowId])
 
   useLayoutEffect(() => {
     if (!pendingFocusNodeIdRef.current || pendingFocusNodeIdRef.current !== selectedNodeId) {
@@ -3767,48 +3793,31 @@ function App() {
   }
 
   if (isPanelWindow) {
+    const dockBackIntoSidebar = () => {
+      if (!panelWindowId || typeof BroadcastChannel === 'undefined') {
+        void closeDesktopWindow()
+        return
+      }
+
+      const channel = new BroadcastChannel(DESKTOP_PANEL_SYNC_CHANNEL)
+      channel.postMessage({ type: 'panel-dock', panelId: panelWindowId })
+      channel.close()
+      void closeDesktopWindow()
+    }
+
     return (
       <div className="app-shell app-shell--panel-window" data-theme={theme}>
-        <div className="panel-window-shell">
-          {windowPanel ? (
-            <>
-              <div className="sidebar-shell__titlebar panel-window-shell__titlebar">
-                <span className="sidebar-shell__title panel-window-shell__title">{windowPanel.title}</span>
-                {isDesktopEnvironment() ? (
-                  <div className="sidebar-shell__actions panel-window-shell__controls">
-                    <button
-                      aria-label="Minimize window"
-                      className="sidebar-shell__action desktop-window-controls__button"
-                      onClick={() => void minimizeDesktopWindow()}
-                      type="button"
-                    >
-                      <i aria-hidden="true" className="fa-solid fa-minus" />
-                    </button>
-                    <button
-                      aria-label={desktopWindowMaximized ? 'Restore window' : 'Maximize window'}
-                      className="sidebar-shell__action desktop-window-controls__button"
-                      onClick={() => void toggleMaximizeDesktopWindow()}
-                      type="button"
-                    >
-                      <i aria-hidden="true" className={`fa-regular ${desktopWindowMaximized ? 'fa-clone' : 'fa-square'}`} />
-                    </button>
-                    <button
-                      aria-label="Close window"
-                      className="sidebar-shell__action desktop-window-controls__button desktop-window-controls__button--close"
-                      onClick={() => void closeDesktopWindow()}
-                      type="button"
-                    >
-                      <i aria-hidden="true" className="fa-solid fa-xmark" />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <div className="sidebar-shell__body panel-window-shell__body">{windowPanel.content}</div>
-            </>
-          ) : (
-            <div className="panel-window-shell__empty">Panel not found.</div>
-          )}
-        </div>
+        <PanelShell
+          activePanel={windowPanel}
+          canDockBack={Boolean(windowPanel)}
+          desktopWindowMaximized={desktopWindowMaximized}
+          onDesktopClose={() => void closeDesktopWindow()}
+          onDesktopMinimize={() => void minimizeDesktopWindow()}
+          onDesktopToggleMaximize={() => void toggleMaximizeDesktopWindow()}
+          onDockBack={dockBackIntoSidebar}
+          visible
+          windowMode
+        />
       </div>
     )
   }
