@@ -251,10 +251,10 @@ export default function CanvasWorkspace({
         {layout.nodes.map((item) => {
           const remoteSelections = remoteSelectionsByNodeId?.get(item.id) || []
           const isSearchMuted = Boolean(searchResultNodeIdSet && !searchResultNodeIdSet.has(item.id))
-          const visualSize = item.node.isVariant ? 78 : 112
-          const visualOffsetX = item.node.isVariant ? 17 : 0
-          const visualOffsetY = item.node.isVariant ? 17 : 0
-          const visualRadius = item.node.isVariant ? 5 : 6
+          const visualSize = 112
+          const visualOffsetX = 0
+          const visualOffsetY = 0
+          const visualRadius = 6
           const remoteRingBaseOffset =
             selectedNodeId === item.id || multiSelectedNodeIds.includes(item.id) ? 7 : 4
           return (
@@ -267,9 +267,7 @@ export default function CanvasWorkspace({
               dragHoverNodeId === item.id ? 'drop-target' : ''
             } ${projectSettings.imageMode === 'square' ? 'image-square' : 'image-original'} ${
               item.node.type === 'photo' ? 'photo-node' : 'folder-node'
-            } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''} ${
-              item.node.isVariant ? 'variant-node' : ''
-            } ${isSearchMuted ? 'graph-node--search-muted' : ''
+            } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''} ${isSearchMuted ? 'graph-node--search-muted' : ''
             }`}
             onContextMenu={(event) => {
               if (item.node.type === 'collapsed-group') {
@@ -289,7 +287,7 @@ export default function CanvasWorkspace({
                 return
               }
               if (event.ctrlKey || event.metaKey) {
-                if (!focusPathMode && !item.node.isVariant) {
+                if (!focusPathMode) {
                   void setCollapsed(item.id, !item.node.collapsed)
                 }
                 return
@@ -453,57 +451,50 @@ export default function CanvasWorkspace({
           }}
           style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
         >
-          {!contextMenuNode?.isVariant ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setContextMenu(null)
-                openNewFolderDialog(contextMenu.nodeId)
-              }}
-              type="button"
-            >
-              Add Node
-            </button>
-          ) : null}
-          {!contextMenuNode?.isVariant ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setPendingUploadParentId(contextMenu.nodeId)
-                setPendingUploadMode('photo_node')
-                setContextMenu(null)
-                fileInputRef.current?.click()
-              }}
-              type="button"
-            >
-              Add Photo Node
-            </button>
-          ) : null}
-          {!contextMenuNode?.isVariant ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setPendingUploadParentId(contextMenu.nodeId)
-                setPendingUploadMode('additional_photo')
-                setContextMenu(null)
-                fileInputRef.current?.click()
-              }}
-              type="button"
-            >
-              Add Photo
-            </button>
-          ) : null}
+          <button
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={() => {
+              setContextMenu(null)
+              openNewFolderDialog(contextMenu.nodeId)
+            }}
+            type="button"
+          >
+            Add Node
+          </button>
+          <button
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={() => {
+              setPendingUploadParentId(contextMenu.nodeId)
+              setPendingUploadMode('photo_node')
+              setContextMenu(null)
+              fileInputRef.current?.click()
+            }}
+            type="button"
+          >
+            Add Photo Node
+          </button>
+          <button
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={() => {
+              setPendingUploadParentId(contextMenu.nodeId)
+              setPendingUploadMode('additional_photo')
+              setContextMenu(null)
+              fileInputRef.current?.click()
+            }}
+            type="button"
+          >
+            Add Photo
+          </button>
           {!focusPathMode &&
-          !contextMenuNode?.isVariant &&
           (contextMenuNode?.children?.length || contextMenuNode?.collapsed) ? (
             <button
               onPointerDown={(event) => {

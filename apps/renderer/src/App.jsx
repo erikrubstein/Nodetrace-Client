@@ -495,7 +495,7 @@ function App() {
   )
   const bulkSelectionCount = effectiveSelectedNodeIds.length
   const hasBulkSelection = bulkSelectionCount > 1
-  const hasLockedSelectionRoot = explicitSelectedNodes.some((node) => node.parent_id == null && !node.isVariant)
+  const hasLockedSelectionRoot = explicitSelectedNodes.some((node) => node.parent_id == null)
   const selectionNodesWithTemplates = useMemo(
     () => explicitSelectedNodes.filter((node) => node.identification),
     [explicitSelectedNodes],
@@ -1647,7 +1647,7 @@ function App() {
     }
 
     const collapsibleIds = tree.nodes
-      .filter((node) => !node.isVariant && (node.children?.length || node.collapsed))
+      .filter((node) => node.children?.length || node.collapsed)
       .map((node) => node.id)
 
     if (collapsibleIds.length === 0) {
@@ -3187,7 +3187,7 @@ function App() {
       if (!parent) {
         break
       }
-      if (!parent.isVariant && parent.collapsed) {
+      if (parent.collapsed) {
         ancestorsToExpand.unshift(parent.id)
       }
       current = parent
@@ -3266,7 +3266,7 @@ function App() {
       }
 
       if (event.key === ' ' && selectedNode && !isTypingTarget && !focusPathMode) {
-        if (!selectedNode.isVariant && (selectedNode.children?.length || selectedNode.collapsed)) {
+        if (selectedNode.children?.length || selectedNode.collapsed) {
           event.preventDefault()
           void setCollapsed(selectedNode.id, !selectedNode.collapsed)
         }

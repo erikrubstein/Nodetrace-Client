@@ -36,7 +36,6 @@ export function registerNodeRoutes(app, ctx) {
     moveNode,
     ensureCanHaveChildren,
     ensureNoCycle,
-    promoteVariantToMain,
     deleteNodeRecursive,
     updateNodeMediaEdits,
     removeNodeMedia,
@@ -417,32 +416,6 @@ export function registerNodeRoutes(app, ctx) {
 
       broadcastProjectEvent(node.project_id)
       res.json(serializeNodeForUser(assertNode(node.id), req.user.id))
-    } catch (error) {
-      next(error)
-    }
-  })
-
-  app.post('/api/nodes/:id/promote-variant', requireAuth, (req, res, next) => {
-    try {
-      const node = assertNodeAccess(req.params.id, req.user.id)
-      if (!node.variant_of_id) {
-        return res.status(400).json({ error: 'Only additional photos can be promoted to primary' })
-      }
-
-      const anchorNode = assertNode(node.variant_of_id)
-      ensureNodeBelongsToProject(anchorNode, node.project_id)
-
-      promoteVariantToMain({
-        variantId: node.id,
-        projectId: node.project_id,
-      })
-
-      broadcastProjectEvent(node.project_id)
-      res.json({
-        ok: true,
-        promotedNode: serializeNodeForUser(assertNode(node.id), req.user.id),
-        previousAnchorNode: serializeNodeForUser(assertNode(anchorNode.id), req.user.id),
-      })
     } catch (error) {
       next(error)
     }

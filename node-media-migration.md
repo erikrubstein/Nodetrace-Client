@@ -57,10 +57,14 @@ The compatibility layer can be removed only after all of the following are true:
 - [~] Rename remaining API/workflow semantics that still say `variant` when they now mean `additional photo`.
   - Renderer uploads, camera capture, mobile capture, and move payloads now speak in `photo_node` / `additional_photo`.
   - Legacy route names and storage fields still remain underneath for rollback compatibility.
-- [ ] Remove live renderer dependencies on `isVariant` and `variant_of_id` outside migration-only compatibility paths.
+- [~] Remove live renderer dependencies on `isVariant` and `variant_of_id` outside migration-only compatibility paths.
+  - Visible canvas and selection flows no longer branch on `isVariant`.
+  - Tree shaping and archive compatibility still retain legacy `variant_of_id` handling underneath.
 - [ ] Rework upload and mobile-capture flows so attached-photo creation no longer relies on legacy variant-node creation under the hood.
 - [ ] Update import/export formats to serialize node media as first-class attached photos instead of visible variant nodes.
-- [ ] Remove legacy variant move/promote endpoints once all visible workflows are migrated.
+- [~] Remove legacy variant move/promote endpoints once all visible workflows are migrated.
+  - Dead `POST /api/nodes/:id/promote-variant` route removed from the live API.
+  - Legacy move/storage compatibility still remains under `variant_of_id`.
 - [ ] Remove legacy node image columns as source-of-truth fields once project migration is complete.
 - [ ] Delete compatibility filtering in the renderer after legacy variant rows are no longer produced or needed.
 - [ ] Rewrite public docs and architecture notes whenever a checklist item changes the visible model.

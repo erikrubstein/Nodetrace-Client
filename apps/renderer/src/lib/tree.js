@@ -582,7 +582,7 @@ export function collectParentOptions(root, blockedIds) {
   const options = []
 
   function walk(node, depth) {
-    if (!blockedIds.has(node.id) && !node.isVariant) {
+    if (!blockedIds.has(node.id)) {
       options.push({
         id: node.id,
         label: `${'  '.repeat(depth)}${node.name}`,

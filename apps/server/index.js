@@ -733,17 +733,6 @@ const hasChildNodeStmt = db.prepare(`
   LIMIT 1
 `)
 const getNodeChildren = db.prepare(`SELECT id FROM nodes WHERE parent_id = ? OR variant_of_id = ?`)
-const listDirectChildNodesStmt = db.prepare(`
-  SELECT id
-  FROM nodes
-  WHERE parent_id = ?
-    AND variant_of_id IS NULL
-`)
-const listDirectVariantsStmt = db.prepare(`
-  SELECT id
-  FROM nodes
-  WHERE variant_of_id = ?
-`)
 const listCollapsibleNodeIdsByProject = db.prepare(`
   SELECT DISTINCT parent.id
   FROM nodes child
@@ -806,11 +795,6 @@ const updateNodeParentStmt = db.prepare(`
   WHERE id = @id
 `)
 const deleteNodeStmt = db.prepare(`DELETE FROM nodes WHERE id = ?`)
-const listNodeCollapsePrefsByNodeStmt = db.prepare(`
-  SELECT *
-  FROM user_node_collapse_preferences
-  WHERE node_id = ?
-`)
 
 function resequenceNodeMedia(nodeId) {
   if (!nodeId) {
@@ -1110,82 +1094,6 @@ const moveNode = db.transaction(({ id, project_id, parent_id, variant_of_id }) =
   })
   syncLegacyNodeMedia(id)
   updateProjectTimestamp.run(now, project_id)
-})
-
-const promoteVariantToMain = db.transaction(({ variantId, projectId }) => {
-  const now = new Date().toISOString()
-  const variantNode = assertNode(variantId)
-  if (!variantNode.variant_of_id) {
-    const error = new Error('Only variant nodes can be promoted')
-    error.status = 400
-    throw error
-  }
-  if (variantNode.project_id !== projectId) {
-    const error = new Error('Node does not belong to project')
-    error.status = 400
-    throw error
-  }
-
-  const currentAnchor = assertNode(variantNode.variant_of_id)
-  const parentId = currentAnchor.parent_id
-  const directChildren = listDirectChildNodesStmt.all(currentAnchor.id).map((row) => row.id)
-  const siblingVariants = listDirectVariantsStmt
-    .all(currentAnchor.id)
-    .map((row) => row.id)
-    .filter((id) => id !== variantNode.id)
-  const collapsePrefs = listNodeCollapsePrefsByNodeStmt.all(currentAnchor.id)
-
-  updateNodeParentStmt.run({
-    id: variantNode.id,
-    parent_id: parentId,
-    variant_of_id: null,
-    updated_at: now,
-  })
-
-  for (const childId of directChildren) {
-    updateNodeParentStmt.run({
-      id: childId,
-      parent_id: variantNode.id,
-      variant_of_id: null,
-      updated_at: now,
-    })
-  }
-
-  updateNodeParentStmt.run({
-    id: currentAnchor.id,
-    parent_id: parentId,
-    variant_of_id: variantNode.id,
-    updated_at: now,
-  })
-
-  for (const siblingVariantId of siblingVariants) {
-    updateNodeParentStmt.run({
-      id: siblingVariantId,
-      parent_id: parentId,
-      variant_of_id: variantNode.id,
-      updated_at: now,
-    })
-  }
-
-  syncLegacyNodeMedia(variantNode.id)
-  syncLegacyNodeMedia(currentAnchor.id)
-  for (const siblingVariantId of siblingVariants) {
-    syncLegacyNodeMedia(siblingVariantId)
-  }
-
-  deleteNodeCollapsePrefsByNodeStmt.run(currentAnchor.id)
-  for (const preference of collapsePrefs) {
-    upsertUserNodeCollapsePreference.run({
-      user_id: preference.user_id,
-      project_id: preference.project_id,
-      node_id: variantNode.id,
-      collapsed: preference.collapsed,
-      created_at: preference.created_at || now,
-      updated_at: now,
-    })
-  }
-
-  updateProjectTimestamp.run(now, projectId)
 })
 
 const setProjectCollapsedState = db.transaction(({ userId, projectId, collapsed }) => {
@@ -3462,7 +3370,6 @@ const serverContext = {
   parseTags,
   path,
   projectEventClients,
-  promoteVariantToMain,
   reassignNodeOwnersByUserStmt,
   renderMobileCapturePage,
   renameProjectAndRoot,
