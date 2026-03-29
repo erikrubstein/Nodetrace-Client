@@ -1,4 +1,5 @@
 import TagInput from './TagInput'
+import PanelSection from './PanelSection'
 
 function formatCreatedAt(value) {
   if (!value) {
@@ -38,26 +39,26 @@ export default function InspectorPanel({
 
   return (
     <>
-      <div className="inspector__section">
-        <div className="inspector__title">
-          {hasBulkSelection
+      <PanelSection
+        title={
+          hasBulkSelection
             ? 'Selection'
             : selectedNode
             ? 'Node'
-            : 'Selection'}
-        </div>
+            : 'Selection'
+        }
+      >
         {selectedNode ? (
           <div className="inspector__name">{hasBulkSelection ? `${bulkSelectionCount} Nodes Selected` : selectedNode.name}</div>
         ) : (
           <div className="inspector__empty">Select a node.</div>
         )}
-      </div>
+      </PanelSection>
 
       {selectedNode ? (
         <>
           {!hasBulkSelection ? (
-            <div className="inspector__section field-stack">
-              <div className="inspector__title">Details</div>
+            <PanelSection className="field-stack" title="Details">
               <label>
                 <span>Name</span>
                 <input
@@ -92,17 +93,15 @@ export default function InspectorPanel({
                   value={editForm.tags}
                 />
               </label>
-            </div>
+            </PanelSection>
           ) : (
-            <div className="inspector__section field-stack">
-              <div className="inspector__title">Status</div>
+            <PanelSection className="field-stack" title="Status">
               <div className="inspector__notice">{bulkSelectionCount} nodes selected.</div>
-            </div>
+            </PanelSection>
           )}
 
           {!hasBulkSelection ? (
-            <div className="inspector__section field-stack">
-              <div className="inspector__title">Status</div>
+            <PanelSection className="field-stack" title="Status">
               <label>
                 <span>Review Status</span>
                 <select
@@ -116,10 +115,10 @@ export default function InspectorPanel({
                   <option value="reviewed">Reviewed</option>
                 </select>
               </label>
-            </div>
+            </PanelSection>
           ) : null}
 
-          <div className="inspector__section field-stack">
+          <PanelSection className="field-stack">
             <button
               className="danger-button wide"
               disabled={hasLockedSelectionRoot || busy}
@@ -128,10 +127,10 @@ export default function InspectorPanel({
             >
               {hasBulkSelection ? `Delete ${bulkSelectionCount} Nodes` : 'Delete Node'}
             </button>
-          </div>
+          </PanelSection>
 
           {!hasBulkSelection ? (
-            <div className="inspector__section inspector__footer">
+            <PanelSection className="inspector__footer">
               <div className="settings-panel__meta-row">
                 <span>Photos</span>
                 <strong>{Math.max(0, Number(selectedNode.mediaCount || 0))}</strong>
@@ -148,7 +147,7 @@ export default function InspectorPanel({
                 <span>Node ID</span>
                 <strong>{selectedNode.id}</strong>
               </div>
-            </div>
+            </PanelSection>
           ) : null}
         </>
       ) : null}

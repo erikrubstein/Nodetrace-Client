@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 
 export default function AppDialogs({
   accountDialog,
@@ -572,15 +573,18 @@ export default function AppDialogs({
 
       {showProjectDialog === 'delete' ? (
         <div className="dialog-backdrop" onClick={() => setShowProjectDialog(null)} role="presentation">
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Delete Project"
+            confirmTone="danger"
+            disabled={deleteProjectText !== tree?.project?.name}
+            onCancel={() => setShowProjectDialog(null)}
+            onConfirm={deleteProject}
             onKeyDown={(event) =>
               handleDialogEnter(event, deleteProject, deleteProjectText === tree?.project?.name && !busy)
             }
-            role="dialog"
+            title="Delete Project"
           >
-            <div className="dialog__title">Delete Project</div>
             <div className="inspector__notice">
               Type <strong>{tree?.project?.name}</strong> to permanently delete this project.
             </div>
@@ -590,32 +594,21 @@ export default function AppDialogs({
               value={deleteProjectText}
               onChange={(event) => setDeleteProjectText(event.target.value)}
             />
-            <div className="dialog__actions">
-              <button className="ghost-button" onClick={() => setShowProjectDialog(null)} type="button">
-                Cancel
-              </button>
-              <button
-                className="danger-button"
-                disabled={busy || deleteProjectText !== tree?.project?.name}
-                onClick={deleteProject}
-                type="button"
-              >
-                Delete Project
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
       {deleteNodeOpen ? (
         <div className="dialog-backdrop" onClick={() => setDeleteNodeOpen(false)} role="presentation">
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Delete Node"
+            confirmTone="danger"
+            onCancel={() => setDeleteNodeOpen(false)}
+            onConfirm={deleteNode}
             onKeyDown={(event) => handleDialogEnter(event, deleteNode, !busy)}
-            role="dialog"
+            title="Delete Node"
           >
-            <div className="dialog__title">Delete Node</div>
             <div className="inspector__notice">
               {hasBulkSelection ? (
                 <>Delete <strong>{bulkSelectionCount} selected nodes</strong> and all child nodes?</>
@@ -623,15 +616,7 @@ export default function AppDialogs({
                 <>Delete <strong>{selectedNode?.name}</strong> and all child nodes?</>
               )}
             </div>
-            <div className="dialog__actions">
-              <button className="ghost-button" onClick={() => setDeleteNodeOpen(false)} type="button">
-                Cancel
-              </button>
-              <button className="danger-button" disabled={busy} onClick={deleteNode} type="button">
-                Delete Node
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
@@ -641,13 +626,15 @@ export default function AppDialogs({
           onClick={() => !busy && setIdentificationTemplateRemovalNodeId(null)}
           role="presentation"
         >
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Remove Template"
+            confirmTone="danger"
+            onCancel={() => setIdentificationTemplateRemovalNodeId(null)}
+            onConfirm={confirmRemoveIdentificationTemplate}
             onKeyDown={(event) => handleDialogEnter(event, confirmRemoveIdentificationTemplate, !busy)}
-            role="dialog"
+            title="Remove Template"
           >
-            <div className="dialog__title">Remove Template</div>
             <div className="inspector__notice">
               {identificationTemplateRemovalCount > 1 ? (
                 <>
@@ -661,25 +648,7 @@ export default function AppDialogs({
                 </>
               )}
             </div>
-            <div className="dialog__actions">
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => setIdentificationTemplateRemovalNodeId(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="danger-button"
-                disabled={busy}
-                onClick={confirmRemoveIdentificationTemplate}
-                type="button"
-              >
-                Remove Template
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
@@ -721,13 +690,15 @@ export default function AppDialogs({
           onClick={() => !busy && setApplyTemplateConfirmation(null)}
           role="presentation"
         >
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Apply Template"
+            disabled={false}
+            onCancel={() => setApplyTemplateConfirmation(null)}
+            onConfirm={confirmApplyTemplateSelection}
             onKeyDown={(event) => handleDialogEnter(event, confirmApplyTemplateSelection, !busy)}
-            role="dialog"
+            title="Apply Template"
           >
-            <div className="dialog__title">Apply Template</div>
             <div className="inspector__notice">
               {hasBulkSelection ? (
                 <>
@@ -744,25 +715,7 @@ export default function AppDialogs({
               )}
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
-            <div className="dialog__actions">
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => setApplyTemplateConfirmation(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="primary-button"
-                disabled={busy}
-                onClick={confirmApplyTemplateSelection}
-                type="button"
-              >
-                Apply Template
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
@@ -772,13 +725,15 @@ export default function AppDialogs({
           onClick={() => !busy && setMergePhotoConfirmation(null)}
           role="presentation"
         >
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Convert Photo"
+            confirmTone="danger"
+            onCancel={() => setMergePhotoConfirmation(null)}
+            onConfirm={confirmMergeNodeIntoPhoto}
             onKeyDown={(event) => handleDialogEnter(event, confirmMergeNodeIntoPhoto, !busy)}
-            role="dialog"
+            title="Convert To Additional Photo"
           >
-            <div className="dialog__title">Convert To Additional Photo</div>
             <div className="inspector__notice">
               Move the main photo from <strong>{mergePhotoConfirmation.sourceNodeName}</strong> onto{' '}
               <strong>{mergePhotoConfirmation.targetNodeName}</strong> as an additional photo?
@@ -787,37 +742,21 @@ export default function AppDialogs({
               This will delete the source node data and preserve only its main photo.
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
-            <div className="dialog__actions">
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => setMergePhotoConfirmation(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="danger-button"
-                disabled={busy}
-                onClick={confirmMergeNodeIntoPhoto}
-                type="button"
-              >
-                Convert Photo
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
       {templateDialog?.mode === 'delete' ? (
         <div className="dialog-backdrop" onClick={() => !busy && setTemplateDialog(null)} role="presentation">
-          <div
-            className="dialog"
-            onClick={(event) => event.stopPropagation()}
+          <ConfirmDialog
+            busy={busy}
+            confirmLabel="Delete Template"
+            confirmTone="danger"
+            onCancel={() => setTemplateDialog(null)}
+            onConfirm={deleteTemplate}
             onKeyDown={(event) => handleDialogEnter(event, deleteTemplate, !busy)}
-            role="dialog"
+            title="Delete Template"
           >
-            <div className="dialog__title">Delete Template</div>
             <div className="inspector__notice">
               {templateDialog.affectsData ? (
                 <>
@@ -831,15 +770,7 @@ export default function AppDialogs({
               )}
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
-            <div className="dialog__actions">
-              <button className="ghost-button" disabled={busy} onClick={() => setTemplateDialog(null)} type="button">
-                Cancel
-              </button>
-              <button className="danger-button" disabled={busy} onClick={deleteTemplate} type="button">
-                Delete Template
-              </button>
-            </div>
-          </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 

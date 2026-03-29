@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PanelSection from './PanelSection'
 
 function formatFieldDraft(field) {
   if (!field) {
@@ -104,9 +105,9 @@ export default function FieldsPanel({
   if (!selectedNode) {
     return (
       <div className="fields-panel">
-        <div className="inspector__section">
+        <PanelSection>
           <div className="inspector__empty">Select a node.</div>
-        </div>
+        </PanelSection>
       </div>
     )
   }
@@ -114,8 +115,7 @@ export default function FieldsPanel({
   if (hasBulkSelection) {
     return (
       <div className="fields-panel">
-        <div className="inspector__section field-stack">
-          <div className="inspector__title">Template</div>
+        <PanelSection className="field-stack" title="Template">
           <div className="inspector__notice">{bulkSelectionCount} nodes selected.</div>
           <button
             className="ghost-button wide"
@@ -133,7 +133,7 @@ export default function FieldsPanel({
           >
             Clear Template
           </button>
-        </div>
+        </PanelSection>
       </div>
     )
   }
@@ -141,8 +141,7 @@ export default function FieldsPanel({
   return (
     <div className="fields-panel">
       {!identification ? (
-        <div className="inspector__section field-stack">
-          <div className="inspector__title">Template</div>
+        <PanelSection className="field-stack" title="Template">
           <button
             className="ghost-button wide"
             disabled={!hasIdentificationTemplates || busy}
@@ -152,9 +151,9 @@ export default function FieldsPanel({
             Apply Template
           </button>
           <div className="inspector__empty">Apply a template to work with structured data.</div>
-        </div>
+        </PanelSection>
       ) : (
-        <div className="inspector__section field-stack">
+        <PanelSection className="field-stack">
           <div className="identification-template__row">
             <span className="identification-template__name">{identification.templateName}</span>
             <div className="identification-template__actions">
@@ -241,7 +240,7 @@ export default function FieldsPanel({
               )
             })}
           </div>
-        </div>
+        </PanelSection>
       )}
     </div>
   )
