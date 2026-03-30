@@ -2281,6 +2281,7 @@ function serializeNodeForUser(row, userId) {
 }
 
 function buildTree(project, rows, userId = null) {
+  const visibleRows = rows.filter((row) => row.variant_of_id == null)
   const templateRowsById = new Map(
     listIdentificationTemplatesByProject.all(project.id)
       .map(serializeIdentificationTemplate)
@@ -2308,7 +2309,7 @@ function buildTree(project, rows, userId = null) {
           .map((row) => [row.node_id, Boolean(row.collapsed)]),
       )
     : null
-  const nodes = rows.map((row) =>
+  const nodes = visibleRows.map((row) =>
     serializeNode(
       row,
       collapsedMap,
@@ -2316,18 +2317,10 @@ function buildTree(project, rows, userId = null) {
       mediaRowsByNodeId.get(row.id) || [],
     ),
   )
-  const byId = new Map(nodes.map((node) => [node.id, { ...node, children: [], variants: [] }]))
+  const byId = new Map(nodes.map((node) => [node.id, { ...node, children: [] }]))
   let root = null
 
   for (const node of byId.values()) {
-    if (node.variant_of_id != null) {
-      const anchor = byId.get(node.variant_of_id)
-      if (anchor) {
-        anchor.variants.push(node)
-      }
-      continue
-    }
-
     if (node.parent_id == null) {
       root = node
       continue
@@ -2340,7 +2333,7 @@ function buildTree(project, rows, userId = null) {
   }
 
   for (const node of byId.values()) {
-    if (node.variant_of_id != null || (node.children?.length || 0) === 0) {
+    if ((node.children?.length || 0) === 0) {
       node.collapsed = false
       continue
     }

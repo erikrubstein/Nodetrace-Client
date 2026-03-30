@@ -14,7 +14,7 @@ The app now behaves primarily through the node-media model, but legacy variant r
 
 - Server schema includes `node_media`.
 - Existing node image fields and variant nodes are mirrored into `node_media`.
-- Renderer normalizes server trees and hides legacy variant rows from the visible app model.
+- Visible tree payloads now exclude hidden variant rows, and the renderer no longer carries a separate `variants[]` compatibility shape.
 - Photo actions now target the selected node as attached media.
 - Preview works against individual `media[]` entries.
 
@@ -40,9 +40,6 @@ These areas still exist only to preserve legacy data during migration:
   - photo-node creation still uses legacy node records plus dual-write compatibility
   - additional-photo upload is direct `node_media`, but archive/subtree restore may still recreate hidden variant rows when preserving old per-photo metadata
 
-- [`apps/renderer/src/lib/tree.js`](C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/tree.js)
-  - `normalizeServerTree(...)` filters legacy variant rows out of the visible tree
-
 ## Cleanup Criteria
 
 The compatibility layer can be removed only after all of the following are true:
@@ -58,9 +55,9 @@ The compatibility layer can be removed only after all of the following are true:
 - [~] Rename remaining API/workflow semantics that still say `variant` when they now mean `additional photo`.
   - Renderer uploads, camera capture, mobile capture, and move payloads now speak in `photo_node` / `additional_photo`.
   - Legacy route names and storage fields still remain underneath for rollback compatibility.
-- [~] Remove live renderer dependencies on `isVariant` and `variant_of_id` outside migration-only compatibility paths.
-  - Visible canvas and selection flows no longer branch on `isVariant`.
-  - Tree shaping and archive compatibility still retain legacy `variant_of_id` handling underneath.
+- [x] Remove live renderer dependencies on `isVariant` and `variant_of_id` outside migration-only compatibility paths.
+  - Visible renderer tree/layout/selection code now uses a children-only node model.
+  - Hidden legacy rows remain a server-side compatibility detail only.
 - [~] Rework upload and mobile-capture flows so attached-photo creation no longer relies on legacy variant-node creation under the hood.
   - Additional-photo uploads in the app and mobile capture now create `node_media` rows directly.
   - Photo-node creation still uses the legacy node record shape and dual-write compatibility layer.
@@ -71,7 +68,7 @@ The compatibility layer can be removed only after all of the following are true:
   - Dead `POST /api/nodes/:id/promote-variant` route removed from the live API.
   - Legacy move/storage compatibility still remains under `variant_of_id`.
 - [ ] Remove legacy node image columns as source-of-truth fields once project migration is complete.
-- [ ] Delete compatibility filtering in the renderer after legacy variant rows are no longer produced or needed.
+- [x] Delete compatibility filtering in the renderer after legacy variant rows are no longer produced or needed.
 - [ ] Rewrite public docs and architecture notes whenever a checklist item changes the visible model.
 
 ## Suggested Removal Order

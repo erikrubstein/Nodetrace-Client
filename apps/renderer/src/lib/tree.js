@@ -1,7 +1,6 @@
 import {
   NODE_HEIGHT,
   NODE_WIDTH,
-  VARIANT_VISUAL_OFFSET,
 } from './constants'
 
 export function countDescendants(node) {
@@ -10,8 +9,7 @@ export function countDescendants(node) {
   }
 
   const childCount = (node.children || []).reduce((total, child) => total + 1 + countDescendants(child), 0)
-  const variantCount = (node.variants || []).length
-  return childCount + variantCount
+  return childCount
 }
 
 export function buildFocusPathContext(nodes, selectedNodeId) {
@@ -32,15 +30,10 @@ export function buildFocusPathContext(nodes, selectedNodeId) {
     }
     const current = byId.get(currentId)
     previousId = currentId
-    currentId = current?.variant_of_id ?? current?.parent_id ?? null
+    currentId = current?.parent_id ?? null
   }
 
   return { pathIds, nextById }
-}
-
-function countBranchItems(children = [], variants = []) {
-  const childItems = children.reduce((total, child) => total + 1 + countDescendants(child), 0)
-  return childItems + variants.length
 }
 
 export function formatItemCountLabel(count) {
@@ -66,18 +59,6 @@ export function collectCollapsedPreviewItems(node, limit = 9, items = []) {
     collectCollapsedPreviewItems(child, limit, items)
   }
 
-  for (const variant of node.variants || []) {
-    if (items.length >= limit) {
-      break
-    }
-
-    items.push({
-      id: variant.id,
-      imageUrl: variant.previewUrl || variant.imageUrl || null,
-      type: variant.type,
-    })
-  }
-
   return items
 }
 
@@ -96,11 +77,9 @@ function buildCollapsedPreviewNode(node) {
               totalItems: countDescendants(node),
               previewItems: collectCollapsedPreviewItems(node),
               children: [],
-              variants: [],
             },
           ]
         : (node.children || []).map((child) => buildCollapsedPreviewNode(child)),
-    variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
   }
 }
 
@@ -120,21 +99,14 @@ export function buildVisibleTree(node, options = {}) {
     return {
       ...node,
       children: (node.children || []).map((child) => buildCollapsedPreviewNode(child)),
-      variants: (node.variants || []).map((variant) => ({
-        ...variant,
-        children: [],
-        variants: [],
-      })),
     }
   }
 
   if (focusFilteringActive && inFocusPath) {
     const nextFocusId = focusNextById?.get(node.id) ?? null
     const focusedChildren = (node.children || []).filter((child) => child.id === nextFocusId)
-    const focusedVariants = (node.variants || []).filter((variant) => variant.id === nextFocusId)
     const hiddenChildren = (node.children || []).filter((child) => child.id !== nextFocusId)
-    const hiddenVariants = (node.variants || []).filter((variant) => variant.id !== nextFocusId)
-    const hiddenItemCount = countBranchItems(hiddenChildren, hiddenVariants)
+    const hiddenItemCount = hiddenChildren.reduce((total, child) => total + 1 + countDescendants(child), 0)
 
     const visibleChildren = focusedChildren.map((child) => {
       const visibleChild = buildVisibleTree(child, options)
@@ -146,20 +118,9 @@ export function buildVisibleTree(node, options = {}) {
         : visibleChild
     })
 
-    const visibleVariants = focusedVariants.map((variant) => {
-      const visibleVariant = buildVisibleTree(variant, options)
-      return hiddenItemCount > 0
-        ? {
-            ...visibleVariant,
-            hiddenSiblingCount: (visibleVariant.hiddenSiblingCount || 0) + hiddenItemCount,
-          }
-        : visibleVariant
-    })
-
     return {
       ...node,
       children: visibleChildren,
-      variants: visibleVariants,
     }
   }
 
@@ -178,17 +139,14 @@ export function buildVisibleTree(node, options = {}) {
           totalItems: countDescendants(node),
           previewItems: collectCollapsedPreviewItems(node),
           children: [],
-          variants: [],
         },
       ],
-      variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
     }
   }
 
   return {
     ...node,
     children: (node.children || []).map((child) => buildVisibleTree(child, options)),
-    variants: (node.variants || []).map((variant) => ({ ...variant, children: [], variants: [] })),
   }
 }
 
@@ -203,14 +161,13 @@ export function buildLayout(root, settings) {
 
   function countLeaves(node) {
     const childCount = node?.children?.length || 0
-    const variantCount = node?.variants?.length || 0
 
-    if (!childCount && !variantCount) {
+    if (!childCount) {
       return 1
     }
 
     const childLeaves = (node.children || []).reduce((total, child) => total + countLeaves(child), 0)
-    return Math.max(childLeaves, 1 + variantCount)
+    return Math.max(childLeaves, 1)
   }
 
   function finalizeLayout(baseNodes, baseLinks) {
@@ -242,12 +199,10 @@ export function buildLayout(root, settings) {
     function place(node, depth, left, top) {
       const leaves = countLeaves(node)
       const childLeaves = (node.children || []).reduce((total, child) => total + countLeaves(child), 0)
-      const variantCount = node.variants?.length || 0
-      const ownLeaves = 1 + variantCount
 
       const branchHeight = leaves * spanY
       const x = depth * spanX
-      const ownHeight = ownLeaves * spanY
+      const ownHeight = spanY
       const childHeight = Math.max(childLeaves, 1) * spanY
       const ownTop = top + (branchHeight - ownHeight) / 2
       const childTopBase = top + (branchHeight - childHeight) / 2
@@ -261,30 +216,13 @@ export function buildLayout(root, settings) {
         place(child, depth + 1, left, cursorTop)
         cursorTop += childLeafCount * spanY
       }
-
-      let variantTop = ownTop + spanY
-      for (const variant of node.variants || []) {
-        const variantY = variantTop + spanY / 2 - NODE_HEIGHT / 2
-        nodes.push({ id: variant.id, node: variant, x, y: variantY, variantOf: node.id })
-        links.push({
-          key: `${node.id}-${variant.id}-variant`,
-          sourceId: node.id,
-          targetId: variant.id,
-          x1: x + NODE_WIDTH / 2,
-          y1: y + NODE_HEIGHT,
-          x2: x + NODE_WIDTH / 2,
-          y2: variantY + VARIANT_VISUAL_OFFSET,
-          dashed: true,
-        })
-        variantTop += spanY
-      }
     }
 
     place(rootNode, 0, 0, 0)
 
     const byId = new Map(nodes.map((item) => [item.id, item]))
     for (const item of nodes) {
-      if (item.node.parent_id == null || item.node.variant_of_id != null) {
+      if (item.node.parent_id == null) {
         continue
       }
 
@@ -348,7 +286,7 @@ export function buildLayout(root, settings) {
   }
 
   function buildPrimarySubtree(node) {
-    const ownBlockHeight = (1 + (node.variants?.length || 0)) * spanY
+    const ownBlockHeight = spanY
     const childLayouts = (node.children || []).map((child) => buildPrimarySubtree(child))
 
     let childProfile = []
@@ -389,23 +327,6 @@ export function buildLayout(root, settings) {
     const links = []
     const rootY = 0
     nodes.push({ id: node.id, node, x: 0, y: rootY })
-
-    let variantTop = spanY
-    for (const variant of node.variants || []) {
-      const variantY = variantTop + spanY / 2 - NODE_HEIGHT / 2
-      nodes.push({ id: variant.id, node: variant, x: 0, y: variantY, variantOf: node.id })
-      links.push({
-        key: `${node.id}-${variant.id}-variant`,
-        sourceId: node.id,
-        targetId: variant.id,
-        x1: NODE_WIDTH / 2,
-        y1: rootY + NODE_HEIGHT,
-        x2: NODE_WIDTH / 2,
-        y2: variantY + VARIANT_VISUAL_OFFSET,
-        dashed: true,
-      })
-      variantTop += spanY
-    }
 
     for (const placement of childPlacements) {
       for (const childNode of placement.layout.nodes) {
@@ -490,13 +411,6 @@ export function findNode(node, targetId) {
     }
   }
 
-  for (const variant of node.variants || []) {
-    const match = findNode(variant, targetId)
-    if (match) {
-      return match
-    }
-  }
-
   return null
 }
 
@@ -507,9 +421,6 @@ export function collectDescendantIds(node) {
     ids.add(current.id)
     for (const child of current.children || []) {
       walk(child)
-    }
-    for (const variant of current.variants || []) {
-      walk(variant)
     }
   }
 
@@ -543,13 +454,13 @@ export function getSelectionRootIds(root, nodeIds) {
       return false
     }
 
-    let ancestorId = node.variant_of_id ?? node.parent_id
+    let ancestorId = node.parent_id
     while (ancestorId != null) {
       if (selectedSet.has(ancestorId)) {
         return false
       }
       const ancestor = findNode(root, ancestorId)
-      ancestorId = ancestor ? ancestor.variant_of_id ?? ancestor.parent_id : null
+      ancestorId = ancestor ? ancestor.parent_id : null
     }
 
     return true
@@ -561,16 +472,12 @@ export function flattenSubtreeNodes(node, items = []) {
     return items
   }
 
-  const { children = [], variants = [], ...rest } = node
+  const { children = [], ...rest } = node
   items.push({ ...rest })
 
   for (const child of children) {
     flattenSubtreeNodes(child, items)
   }
-  for (const variant of variants) {
-    flattenSubtreeNodes(variant, items)
-  }
-
   return items
 }
 
@@ -612,7 +519,7 @@ export function buildNodePath(nodes, selectedNodeId) {
     seen.add(currentId)
     const current = byId.get(currentId)
     path.push(current.name)
-    currentId = current.variant_of_id ?? current.parent_id ?? null
+    currentId = current.parent_id ?? null
   }
 
   return path.reverse()
@@ -635,7 +542,7 @@ export function buildNodePathEntries(nodes, selectedNodeId) {
       id: current.id,
       name: current.name,
     })
-    currentId = current.variant_of_id ?? current.parent_id ?? null
+    currentId = current.parent_id ?? null
   }
 
   return path.reverse()
@@ -665,8 +572,8 @@ export function compactNodePath(path, options = {}) {
 }
 
 export function buildClientTree(project, rows) {
-  const normalizedRows = (rows || []).filter((node) => !node?.isVariant && node?.variant_of_id == null)
-  const byId = new Map(normalizedRows.map((node) => [node.id, { ...node, children: [], variants: [] }]))
+  const normalizedRows = rows || []
+  const byId = new Map(normalizedRows.map((node) => [node.id, { ...node, children: [] }]))
   let root = null
 
   for (const node of byId.values()) {

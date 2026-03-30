@@ -266,7 +266,7 @@ export default function CanvasWorkspace({
             } ${
               dragHoverNodeId === item.id ? 'drop-target' : ''
             } ${projectSettings.imageMode === 'square' ? 'image-square' : 'image-original'} ${
-              item.node.type === 'photo' ? 'photo-node' : 'folder-node'
+              item.node.hasImage ? 'node-with-photo' : 'node-without-photo'
             } ${item.node.type === 'collapsed-group' ? 'collapsed-node' : ''} ${isSearchMuted ? 'graph-node--search-muted' : ''
             }`}
             onContextMenu={(event) => {

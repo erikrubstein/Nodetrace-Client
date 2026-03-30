@@ -785,7 +785,7 @@ select {
   margin-top: 17px;
 }
 
-.graph-node.folder-node .graph-node__visual {
+.graph-node.node-without-photo .graph-node__visual {
   background: var(--folder-surface);
 }
 

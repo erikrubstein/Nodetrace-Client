@@ -35,7 +35,7 @@ export default function InspectorPanel({
   setEditForm,
   status,
 }) {
-  const isRootNode = Boolean(selectedNode && selectedNode.parent_id == null && !selectedNode.isVariant)
+  const isRootNode = Boolean(selectedNode && selectedNode.parent_id == null)
 
   return (
     <>

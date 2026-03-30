@@ -550,7 +550,7 @@ function App() {
     const ids = []
     for (const nodeId of nodeIds || []) {
       const node = findTreeNodeById(nodeId)
-      const parentId = node?.variant_of_id ?? node?.parent_id ?? null
+      const parentId = node?.parent_id ?? null
       if (parentId) {
         ids.push(parentId)
       }
@@ -1733,10 +1733,7 @@ function App() {
           return
         }
 
-        const beforePayload =
-          node.variant_of_id != null
-            ? { additionalPhotoOfId: node.variant_of_id }
-            : { parentId: node.parent_id, additionalPhotoOfId: null }
+        const beforePayload = { parentId: node.parent_id, additionalPhotoOfId: null }
         const afterPayload = { parentId, additionalPhotoOfId: null }
         const rollbackLocalEvent = beginLocalEventExpectation()
         let updatedNode = null
@@ -3331,7 +3328,7 @@ function App() {
       for (const node of deletableNodes) {
         const subtreeNode = findNode(tree?.root, node.id)
         const subtreeIds = Array.from(
-          collectDescendantIds(subtreeNode || { id: node.id, children: [], variants: [] }),
+          collectDescendantIds(subtreeNode || { id: node.id, children: [] }),
         )
         deleteEntries.push({
           node,
@@ -3398,7 +3395,7 @@ function App() {
               const currentTree = treeRef.current
               const currentSubtreeNode = findNode(currentTree?.root, entry.currentRootId)
               const currentSubtreeIds = Array.from(
-                collectDescendantIds(currentSubtreeNode || { id: entry.currentRootId, children: [], variants: [] }),
+                collectDescendantIds(currentSubtreeNode || { id: entry.currentRootId, children: [] }),
               )
               currentSubtreeIds.forEach((id) => removedAgainIds.add(id))
             }
