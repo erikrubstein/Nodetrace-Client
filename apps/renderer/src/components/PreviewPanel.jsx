@@ -49,6 +49,7 @@ export default function PreviewPanel({
   const pendingFitAfterCropRef = useRef(false)
   const saveTimerRef = useRef(null)
   const saveSequenceRef = useRef(0)
+  const viewportResizeTimerRef = useRef(null)
   const syncedNodeIdRef = useRef(null)
   const syncedEditSignatureRef = useRef(JSON.stringify(defaultImageEdits))
   const viewportSizeRef = useRef({ width: 0, height: 0 })
@@ -304,11 +305,17 @@ export default function PreviewPanel({
       if (!entry) {
         return
       }
-      syncViewportSize(entry.contentRect.width, entry.contentRect.height)
+      window.clearTimeout(viewportResizeTimerRef.current)
+      viewportResizeTimerRef.current = window.setTimeout(() => {
+        syncViewportSize(entry.contentRect.width, entry.contentRect.height)
+      }, 40)
     })
 
     observer.observe(viewport)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(viewportResizeTimerRef.current)
+    }
   }, [previewViewportRef, setPreviewTransform])
 
   function resetCrop() {

@@ -296,8 +296,8 @@ export default function CanvasWorkspace({
                 toggleMultiSelection(item.id)
                 return
               }
-              void saveNodeDraft(editTargetNode, editForm)
               setEffectiveSelection([item.id], item.id)
+              void saveNodeDraft(editTargetNode, editForm)
             }}
             onPointerDown={(event) => {
               event.preventDefault()

@@ -230,9 +230,17 @@ Nodetrace is currently in the final stages of moving from an older `folder/photo
 
 - React
 - Vite
+- Electron desktop shell
 - Express
 - SQLite via `better-sqlite3`
 - local filesystem media storage
+
+Repo layout:
+
+- `apps/server` - Express + SQLite backend
+- `apps/renderer` - React + Vite UI
+- `apps/desktop` - Electron shell and panel-window orchestration
+- `packages/shared` - shared defaults and sizing metadata
 
 ## Development
 
@@ -248,6 +256,12 @@ Run the normal development setup:
 npm run dev
 ```
 
+Run desktop development:
+
+```bash
+npm run dev:desktop
+```
+
 By default:
 
 - dev frontend: `http://localhost:5173`
@@ -255,40 +269,18 @@ By default:
 
 Release-oriented manual verification lives in [QA_CHECKLIST.md](C:/SolaSec/Tools/Nodetrace/QA_CHECKLIST.md).
 
-### Shared Backend Workflow
+Useful root scripts:
 
-If you want other users on the stable built frontend while you continue working on a separate dev frontend against the same backend data:
-
-1. Build the frontend when you want to publish a stable UI snapshot:
-
-```bash
-npm run build
-```
-
-2. Run the shared backend, which also serves the built frontend:
-
-```bash
-npm run serve:shared
-```
-
-Users can then stay on:
-
-- `http://<host>:3001`
-
-3. In another terminal, run only the Vite frontend:
-
-```bash
-npm run dev:client
-```
-
-You can then work from:
-
-- `http://<host>:5173`
-
-Important:
-
-- this isolates frontend work, not backend changes
-- if you restart or change the backend, everyone sharing that backend feels it immediately
+- `npm run dev` - backend + renderer web dev
+- `npm run dev:desktop` - renderer + Electron desktop dev
+- `npm run dev:server` - backend only
+- `npm run dev:renderer` - renderer only
+- `npm run start:server` - backend only, non-watch
+- `npm run start:desktop` - Electron app
+- `npm run build` - build the renderer into `dist`
+- `npm run preview:web` - preview the built renderer
+- `npm run lint` - lint the whole repo
+- `npm run test:e2e` - Playwright smoke test
 
 ## Environment Notes
 

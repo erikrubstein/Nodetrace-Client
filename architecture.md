@@ -37,11 +37,11 @@ When adding a feature, decide first which layer owns it:
 
 ### Backend
 
-The backend is a single Express + SQLite server:
+The backend app lives in:
 
-- [server/index.js](/C:/SolaSec/Tools/Nodetrace/server/index.js)
+- [apps/server/index.js](/C:/SolaSec/Tools/Nodetrace/apps/server/index.js)
 
-It is intentionally monolithic right now. That file handles:
+It is still orchestration-heavy. That entrypoint and its route modules handle:
 
 - auth and sessions
 - project and node CRUD
@@ -62,9 +62,9 @@ Local storage layout:
 
 ### Frontend
 
-The frontend is a React app with one orchestration component:
+The renderer app lives in:
 
-- [src/App.jsx](/C:/SolaSec/Tools/Nodetrace/src/App.jsx)
+- [apps/renderer/src/App.jsx](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/App.jsx)
 
 `App.jsx` wires together:
 
@@ -84,23 +84,37 @@ This file is large on purpose. It is the app shell, not a dumping ground. Comple
 
 Pure helpers live in:
 
-- [src/lib/api.js](/C:/SolaSec/Tools/Nodetrace/src/lib/api.js)
-- [src/lib/constants.js](/C:/SolaSec/Tools/Nodetrace/src/lib/constants.js)
-- [src/lib/debug.js](/C:/SolaSec/Tools/Nodetrace/src/lib/debug.js)
-- [src/lib/image.js](/C:/SolaSec/Tools/Nodetrace/src/lib/image.js)
-- [src/lib/tree.js](/C:/SolaSec/Tools/Nodetrace/src/lib/tree.js)
-- [src/lib/urlState.js](/C:/SolaSec/Tools/Nodetrace/src/lib/urlState.js)
+- [apps/renderer/src/lib/api.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/api.js)
+- [apps/renderer/src/lib/constants.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/constants.js)
+- [apps/renderer/src/lib/debug.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/debug.js)
+- [apps/renderer/src/lib/image.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/image.js)
+- [apps/renderer/src/lib/tree.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/tree.js)
+- [apps/renderer/src/lib/urlState.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/urlState.js)
 
 Stateful workflow hooks live in:
 
-- [src/hooks/useProjectSync.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useProjectSync.js)
-- [src/hooks/useNodeEditing.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useNodeEditing.js)
-- [src/hooks/useUndoRedo.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useUndoRedo.js)
-- [src/hooks/useWorkspaceInteractions.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useWorkspaceInteractions.js)
+- [apps/renderer/src/hooks/useProjectSync.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useProjectSync.js)
+- [apps/renderer/src/hooks/useNodeEditing.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useNodeEditing.js)
+- [apps/renderer/src/hooks/useUndoRedo.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useUndoRedo.js)
+- [apps/renderer/src/hooks/useWorkspaceInteractions.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useWorkspaceInteractions.js)
 
 Panels and presentational pieces live in:
 
-- [src/components](/C:/SolaSec/Tools/Nodetrace/src/components)
+- [apps/renderer/src/components](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/components)
+
+### Desktop Shell
+
+Desktop-specific orchestration lives in:
+
+- [apps/desktop/main.js](/C:/SolaSec/Tools/Nodetrace/apps/desktop/main.js)
+- [apps/desktop/preload.cjs](/C:/SolaSec/Tools/Nodetrace/apps/desktop/preload.cjs)
+
+The Electron layer owns:
+
+- desktop window creation
+- custom title bar controls
+- popped-out panel windows
+- local backend process startup in desktop mode
 
 ## Domain Model
 
@@ -191,7 +205,7 @@ The app uses left and right docked sidebars with one active panel per side.
 
 Panel IDs currently live in:
 
-- [src/lib/constants.js](/C:/SolaSec/Tools/Nodetrace/src/lib/constants.js)
+- [apps/renderer/src/lib/constants.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/lib/constants.js)
 
 Current panels:
 
@@ -215,7 +229,7 @@ If you add a panel:
 
 1. Add a stable panel ID in `constants.js`
 2. Add a default dock side
-3. Add corresponding server defaults in `server/index.js`
+3. Add corresponding server defaults in `apps/server/index.js`
 4. Render it through `DockedSidebar` in `App.jsx`
 5. Add an icon in the rails
 
@@ -223,7 +237,7 @@ If you add a panel:
 
 The canvas renderer is:
 
-- [src/components/CanvasWorkspace.jsx](/C:/SolaSec/Tools/Nodetrace/src/components/CanvasWorkspace.jsx)
+- [apps/renderer/src/components/CanvasWorkspace.jsx](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/components/CanvasWorkspace.jsx)
 
 Important behaviors:
 
@@ -242,12 +256,12 @@ The canvas should stay fast. Features that only affect presentation should usual
 
 The preview renderer is:
 
-- [src/components/PreviewPanel.jsx](/C:/SolaSec/Tools/Nodetrace/src/components/PreviewPanel.jsx)
+- [apps/renderer/src/components/PreviewPanel.jsx](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/components/PreviewPanel.jsx)
 
 Preview edits are:
 
 - non-destructive
-- per-node
+- per-photo/media
 - server-persisted
 
 Current edits include crop, rotate, brightness, contrast, exposure, sharpness, denoise, and invert. The original uploaded file is never modified.
@@ -303,7 +317,7 @@ When touching startup behavior, be careful. Selection, URL sync, project load, t
 
 Location:
 
-- [src/hooks/useProjectSync.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useProjectSync.js)
+- [apps/renderer/src/hooks/useProjectSync.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useProjectSync.js)
 
 Responsibilities:
 
@@ -323,7 +337,7 @@ When adding new background loads, follow that pattern. Do not let older response
 
 Location:
 
-- [src/hooks/useWorkspaceInteractions.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useWorkspaceInteractions.js)
+- [apps/renderer/src/hooks/useWorkspaceInteractions.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useWorkspaceInteractions.js)
 
 Responsibilities:
 
@@ -340,7 +354,7 @@ This hook is where pointer-heavy behavior belongs. Avoid spreading low-level poi
 
 Location:
 
-- [src/hooks/useNodeEditing.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useNodeEditing.js)
+- [apps/renderer/src/hooks/useNodeEditing.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useNodeEditing.js)
 
 Responsibilities:
 
@@ -357,7 +371,7 @@ Pattern:
 
 Location:
 
-- [src/hooks/useUndoRedo.js](/C:/SolaSec/Tools/Nodetrace/src/hooks/useUndoRedo.js)
+- [apps/renderer/src/hooks/useUndoRedo.js](/C:/SolaSec/Tools/Nodetrace/apps/renderer/src/hooks/useUndoRedo.js)
 
 Responsibilities:
 
@@ -377,6 +391,7 @@ Typical feature flow looks like this:
 4. `App.jsx` reconciles state.
 5. `tree.js` derives render data.
 6. Panels/canvas render from that derived state.
+7. In desktop mode, Electron may mirror that state into panel windows through the desktop bridge.
 
 For visual-only features, skip step 1 and keep it client-side.
 
@@ -486,19 +501,26 @@ Current development workflow intentionally treats builds as a release step, not 
 
 Useful scripts:
 
-- `npm run dev` - backend + Vite dev frontend
-- `npm run dev:client` - dev frontend only
-- `npm run serve:shared` - backend serving the built frontend from `dist`
+- `npm run dev` - backend + renderer web dev
+- `npm run dev:desktop` - renderer + Electron desktop dev
+- `npm run dev:server` - backend only
+- `npm run dev:renderer` - renderer only
+- `npm run start:server` - backend only, non-watch
+- `npm run start:desktop` - Electron app
+- `npm run build` - build the renderer
+- `npm run preview:web` - preview the built renderer
+- `npm run test:e2e` - Playwright smoke test
 
 ## Recommended Contribution Style
 
 When contributing, prefer these boundaries:
 
-- `server/index.js`: persistence, permissions, serialization, shared business rules
-- `App.jsx`: orchestration and cross-panel coordination
-- `hooks`: reusable stateful workflows
-- `lib`: pure transformations and helpers
-- `components`: rendering and narrow UI interactions
+- `apps/server/index.js` and `apps/server/routes`: persistence, permissions, serialization, shared business rules
+- `apps/renderer/src/App.jsx`: orchestration and cross-panel coordination
+- `apps/renderer/src/hooks`: reusable stateful workflows
+- `apps/renderer/src/lib`: pure transformations and helpers
+- `apps/renderer/src/components`: rendering and narrow UI interactions
+- `apps/desktop`: desktop-specific shell and window management
 
 If a change feels like it is fighting that split, stop and reassess before adding more code.
 
@@ -506,9 +528,10 @@ If a change feels like it is fighting that split, stop and reassess before addin
 
 A contributor should know these up front:
 
-- `server/index.js` is large and central
+- `apps/server/index.js` is still large and central even after route extraction
 - `App.jsx` is orchestration-heavy and can be easy to destabilize
 - AI workflows are intentionally in flux and should be treated as assistive, not final
 - multi-tab behavior is not fully isolated; per-user/project preferences can still interact across tabs in some cases
+- some storage-level migration debt still exists under the current node-media model
 
 That is not a reason to avoid working in these areas. It is a reason to change them carefully and in small, coherent steps.

@@ -520,6 +520,7 @@ function App() {
       preferredPrimaryId && validIds.includes(preferredPrimaryId)
         ? preferredPrimaryId
         : validIds[0] || null
+    selectedNodeIdRef.current = nextPrimaryId
     setSelectedNodeId(nextPrimaryId)
     setMultiSelectedNodeIds(validIds.filter((nodeId) => nodeId !== nextPrimaryId))
   }, [tree?.nodes])
@@ -822,6 +823,7 @@ function App() {
     selectedNode,
     selectedNodeIdRef,
     selectedProjectId,
+    treeProjectId: tree?.project?.id || null,
     setError,
     setMobileConnectionCount,
     setProjects,
@@ -3198,8 +3200,8 @@ function App() {
       return
     }
 
+    setEffectiveSelection([nodeId], nodeId)
     void saveNodeDraft(editTargetNode, editForm)
-    setMultiSelectedNodeIds([])
 
     const nodeMap = new Map(tree.nodes.map((node) => [node.id, node]))
     const ancestorsToExpand = []
@@ -3230,7 +3232,6 @@ function App() {
       })
       channel.close()
     }
-    setEffectiveSelection([nodeId], nodeId)
   }, [editForm, editTargetNode, saveNodeDraft, selectedProjectId, setCollapsed, setEffectiveSelection, tree?.nodes])
 
   const bulkSelectSearchResults = useCallback((nodeIds) => {

@@ -13,6 +13,7 @@ export default function useProjectSync({
   selectedNode,
   selectedNodeIdRef,
   selectedProjectId,
+  treeProjectId,
   setError,
   setMobileConnectionCount,
   setProjects,
@@ -177,7 +178,7 @@ export default function useProjectSync({
   }, [currentUser, loadTree, onAuthLost, selectedProjectId, setError])
 
   useEffect(() => {
-    if (!captureSessionId || !selectedProjectId || !selectedNode?.id) {
+    if (!captureSessionId || !selectedProjectId || !selectedNode?.id || treeProjectId !== selectedProjectId) {
       return undefined
     }
 
@@ -214,7 +215,7 @@ export default function useProjectSync({
       cancelled = true
       window.clearInterval(heartbeat)
     }
-  }, [captureSessionId, onAuthLost, selectedNode?.id, selectedProjectId, setError, setMobileConnectionCount])
+  }, [captureSessionId, onAuthLost, selectedNode?.id, selectedProjectId, setError, setMobileConnectionCount, treeProjectId])
 
   useEffect(() => {
     if (!captureSessionId || !selectedProjectId) {
