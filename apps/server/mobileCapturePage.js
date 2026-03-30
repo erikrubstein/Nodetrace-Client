@@ -114,6 +114,7 @@ export function renderMobileCapturePage() {
         display: grid;
         gap: 10px;
         grid-template-columns: 1fr;
+        min-height: 0;
       }
 
       .capture-shell {
@@ -200,9 +201,8 @@ export function renderMobileCapturePage() {
         min-height: 1.2em;
         color: var(--muted);
         font-size: 0.76rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .status.error {
@@ -211,6 +211,69 @@ export function renderMobileCapturePage() {
 
       .hidden {
         display: none !important;
+      }
+
+      @media (orientation: landscape) and (max-height: 560px) {
+        .shell {
+          padding: 10px;
+          gap: 8px;
+        }
+
+        .shell.connect-only {
+          align-items: center;
+          justify-content: center;
+        }
+
+        #connectPanel {
+          width: min(520px, 100%);
+        }
+
+        .shell.connected {
+          justify-content: stretch;
+        }
+
+        .capture-shell {
+          display: grid;
+          grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.95fr);
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas:
+            "primary panel"
+            "primary secondary";
+          align-items: stretch;
+        }
+
+        .capture-shell > .panel {
+          grid-area: panel;
+        }
+
+        .capture-primary {
+          grid-area: primary;
+          min-height: 0;
+        }
+
+        .capture-secondary-row {
+          grid-area: secondary;
+          display: flex;
+        }
+
+        .capture-card--primary,
+        .capture-card--secondary {
+          min-height: 0;
+          height: 100%;
+        }
+
+        .capture-card--secondary {
+          flex: 1;
+        }
+
+        .capture-button {
+          padding: 18px;
+          font-size: 0.98rem;
+        }
+
+        .capture-button--secondary {
+          padding-right: 54px;
+        }
       }
     </style>
   </head>

@@ -9,6 +9,7 @@ import CollaboratorsPanel from './components/CollaboratorsPanel'
 import DockedSidebar from './components/DockedSidebar'
 import FieldsPanel from './components/FieldsPanel'
 import InspectorPanel from './components/InspectorPanel'
+import MobileEntryScreen from './components/MobileEntryScreen'
 import PanelShell from './components/PanelShell'
 import PreviewPanel from './components/PreviewPanel'
 import SearchPanel from './components/SearchPanel'
@@ -62,6 +63,18 @@ import {
 const PRESENCE_COLORS = ['#6f9cff', '#5fc9a8', '#d48cff', '#f0a35b', '#58c5d8', '#d86f9f', '#a6c95b', '#c27cff']
 const DESKTOP_SELECTION_SYNC_CHANNEL = 'nodetrace-desktop-selection'
 const DESKTOP_PANEL_SYNC_CHANNEL = 'nodetrace-desktop-panels'
+
+function shouldShowMobileEntryPrompt() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches ?? false
+  const narrowViewport = window.matchMedia?.('(max-width: 920px)')?.matches ?? false
+  const mobileUserAgent = /android|iphone|ipad|ipod|mobile/i.test(window.navigator.userAgent || '')
+
+  return window.location.pathname === '/' && (mobileUserAgent || (coarsePointer && narrowViewport))
+}
 
 function getPresenceColor(id) {
   const value = String(id || '')
@@ -149,7 +162,7 @@ function App() {
   const [loadedImages, setLoadedImages] = useState({})
   const [projectPresenceUsers, setProjectPresenceUsers] = useState([])
   const [searchResultNodeIds, setSearchResultNodeIds] = useState([])
-  const [hideNonResultNodes, setHideNonResultNodes] = useState(false)
+  const [canvasIsolationMode, setCanvasIsolationMode] = useState('none')
   const [draggingPanelId, setDraggingPanelId] = useState(null)
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
   const [mobileConnectionCount, setMobileConnectionCount] = useState(0)
@@ -170,6 +183,9 @@ function App() {
     childDepth: 0,
     fields: [],
   })
+  const [showMobileEntryPrompt, setShowMobileEntryPrompt] = useState(
+    () => !isPanelWindow && !isDesktopEnvironment() && shouldShowMobileEntryPrompt(),
+  )
   const fileInputRef = useRef(null)
   const importInputRef = useRef(null)
   const pendingLocalEventsRef = useRef(0)
@@ -689,6 +705,20 @@ function App() {
     () => buildNodePathEntries(tree?.nodes, selectedNodeId),
     [selectedNodeId, tree?.nodes],
   )
+  const selectedNodePathIds = useMemo(
+    () => selectedNodePath.map((entry) => entry.id),
+    [selectedNodePath],
+  )
+
+  useEffect(() => {
+    if (canvasIsolationMode === 'search' && !searchResultNodeIds.length) {
+      setCanvasIsolationMode('none')
+      return
+    }
+    if (canvasIsolationMode === 'path' && !selectedNodePathIds.length) {
+      setCanvasIsolationMode('none')
+    }
+  }, [canvasIsolationMode, searchResultNodeIds.length, selectedNodePathIds.length])
 
   useLayoutEffect(() => {
     const currentLayoutNode = selectedNodeId ? layout.nodes.find((item) => item.id === selectedNodeId) : null
@@ -934,7 +964,7 @@ function App() {
   useEffect(() => {
     setMultiSelectedNodeIds([])
     setSearchResultNodeIds([])
-    setHideNonResultNodes(false)
+    setCanvasIsolationMode('none')
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = ''
     sidebarUiSignatureRef.current = ''
@@ -3798,7 +3828,28 @@ function App() {
   }
 
   if (!authReady) {
+    if (showMobileEntryPrompt) {
+      return (
+        <div className="app-shell app-shell--auth" data-theme={theme}>
+          <MobileEntryScreen
+            onContinueToProject={() => setShowMobileEntryPrompt(false)}
+            onOpenCapture={() => window.location.assign('/capture')}
+          />
+        </div>
+      )
+    }
     return <div className="app-shell app-shell--loading" data-theme={theme}>Loading...</div>
+  }
+
+  if (showMobileEntryPrompt) {
+    return (
+      <div className="app-shell app-shell--auth" data-theme={theme}>
+        <MobileEntryScreen
+          onContinueToProject={() => setShowMobileEntryPrompt(false)}
+          onOpenCapture={() => window.location.assign('/capture')}
+        />
+      </div>
+    )
   }
 
   if (!currentUser) {
@@ -3950,6 +4001,7 @@ function App() {
           beginNodeDrag={beginNodeDrag}
           beginCanvasPointerDown={beginCanvasPointerDown}
           busy={busy}
+          canvasIsolationMode={canvasIsolationMode}
           canvasMarqueeRect={canvasMarqueeRect}
           contextMenu={contextMenu}
           contextMenuNode={contextMenuNode}
@@ -3973,10 +4025,10 @@ function App() {
           triggerAddPhotoNode={triggerAddPhotoNode}
           projectSettings={projectSettings}
           remoteSelectionsByNodeId={remoteSelectionsByNodeId}
-          hideNonResultNodes={hideNonResultNodes}
           searchResultNodeIds={searchResultNodeIds}
           selectRootNode={selectRootNode}
           selectedNodePath={selectedNodePath}
+          selectedNodePathIds={selectedNodePathIds}
           selectNodeFromPath={selectNodeAndFocus}
           saveNodeDraft={saveNodeDraft}
           selectedNode={selectedNode}
@@ -3990,7 +4042,12 @@ function App() {
           setEffectiveSelection={setEffectiveSelection}
           showGrid={showGrid}
           stopPanning={stopPanning}
-          toggleHideNonResults={() => setHideNonResultNodes((current) => !current)}
+          togglePathIsolation={() =>
+            setCanvasIsolationMode((current) => (current === 'path' ? 'none' : 'path'))
+          }
+          toggleSearchIsolation={() =>
+            setCanvasIsolationMode((current) => (current === 'search' ? 'none' : 'search'))
+          }
           toggleGrid={toggleGridPreference}
           toggleMultiSelection={toggleMultiSelection}
           transform={transform}

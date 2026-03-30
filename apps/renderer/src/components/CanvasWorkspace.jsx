@@ -1,12 +1,13 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import IconButton from './IconButton'
-import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, RootNodeIcon } from './icons'
+import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, PathIcon, RootNodeIcon } from './icons'
 
 export default function CanvasWorkspace({
   beginNodeDrag,
   beginCanvasPointerDown,
   busy,
+  canvasIsolationMode,
   canvasMarqueeRect,
   contextMenu,
   contextMenuNode,
@@ -21,7 +22,6 @@ export default function CanvasWorkspace({
   focusPathMode,
   handleCanvasContextMenu,
   handleCanvasPointerMove,
-  hideNonResultNodes,
   layout,
   loadedImages,
   markImageLoaded,
@@ -32,6 +32,7 @@ export default function CanvasWorkspace({
   searchResultNodeIds,
   selectRootNode,
   selectedNodePath,
+  selectedNodePathIds,
   selectNodeFromPath,
   saveNodeDraft,
   selectedNode,
@@ -45,7 +46,8 @@ export default function CanvasWorkspace({
   setEffectiveSelection,
   showGrid,
   stopPanning,
-  toggleHideNonResults,
+  togglePathIsolation,
+  toggleSearchIsolation,
   toggleGrid,
   toggleMultiSelection,
   triggerAddPhoto,
@@ -55,7 +57,15 @@ export default function CanvasWorkspace({
   uploadFiles,
   viewportRef,
 }) {
-  const searchResultNodeIdSet = hideNonResultNodes ? new Set(searchResultNodeIds || []) : null
+  const isolatedNodeIdSet = useMemo(() => {
+    if (canvasIsolationMode === 'search') {
+      return new Set(searchResultNodeIds || [])
+    }
+    if (canvasIsolationMode === 'path') {
+      return new Set(selectedNodePathIds || [])
+    }
+    return null
+  }, [canvasIsolationMode, searchResultNodeIds, selectedNodePathIds])
   const pathContainerRef = useRef(null)
   const pathMeasureRef = useRef(null)
   const [visiblePathStart, setVisiblePathStart] = useState(0)
@@ -215,13 +225,22 @@ export default function CanvasWorkspace({
           <GridIcon />
         </IconButton>
         <IconButton
-          aria-label={hideNonResultNodes ? 'Show all nodes' : 'Show search results only'}
-          className={`canvas-tool-button ${hideNonResultNodes ? 'is-active' : ''}`}
-          disabled={!searchResultNodeIds?.length && !hideNonResultNodes}
-          onClick={toggleHideNonResults}
-          tooltip={hideNonResultNodes ? 'Show All Nodes' : 'Show Results Only'}
+          aria-label={canvasIsolationMode === 'search' ? 'Show all nodes' : 'Show search results only'}
+          className={`canvas-tool-button ${canvasIsolationMode === 'search' ? 'is-active' : ''}`}
+          disabled={!searchResultNodeIds?.length && canvasIsolationMode !== 'search'}
+          onClick={toggleSearchIsolation}
+          tooltip={canvasIsolationMode === 'search' ? 'Show All Nodes' : 'Show Results Only'}
         >
           <EyeLowVisionIcon />
+        </IconButton>
+        <IconButton
+          aria-label={canvasIsolationMode === 'path' ? 'Show all nodes' : 'Show selected path only'}
+          className={`canvas-tool-button ${canvasIsolationMode === 'path' ? 'is-active' : ''}`}
+          disabled={!selectedNodePathIds?.length && canvasIsolationMode !== 'path'}
+          onClick={togglePathIsolation}
+          tooltip={canvasIsolationMode === 'path' ? 'Show All Nodes' : 'Show Ancestors Only'}
+        >
+          <PathIcon />
         </IconButton>
       </div>
       <div
@@ -250,7 +269,15 @@ export default function CanvasWorkspace({
 
         {layout.nodes.map((item) => {
           const remoteSelections = remoteSelectionsByNodeId?.get(item.id) || []
-          const isSearchMuted = Boolean(searchResultNodeIdSet && !searchResultNodeIdSet.has(item.id))
+          const collapsedGroupVisibleByParent =
+            item.node.type === 'collapsed-group' &&
+            item.node.parent_id != null &&
+            isolatedNodeIdSet?.has(item.node.parent_id)
+          const isSearchMuted = Boolean(
+            isolatedNodeIdSet &&
+            !isolatedNodeIdSet.has(item.id) &&
+            !collapsedGroupVisibleByParent,
+          )
           const visualSize = 112
           const visualOffsetX = 0
           const visualOffsetY = 0

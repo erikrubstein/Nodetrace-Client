@@ -85,3 +85,7 @@ export function PencilIcon() {
 export function EyeLowVisionIcon() {
   return <i aria-hidden="true" className="fa-solid fa-eye-low-vision" />
 }
+
+export function PathIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-route" />
+}
