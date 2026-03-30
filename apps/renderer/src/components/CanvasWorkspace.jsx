@@ -26,7 +26,7 @@ export default function CanvasWorkspace({
   loadedImages,
   markImageLoaded,
   multiSelectedNodeIds,
-  openNewFolderDialog,
+  openNewNodeDialog,
   projectSettings,
   remoteSelectionsByNodeId,
   searchResultNodeIds,
@@ -181,7 +181,7 @@ export default function CanvasWorkspace({
           aria-label="Add node"
           className="canvas-tool-button"
           disabled={!selectedNode || busy}
-          onClick={() => openNewFolderDialog()}
+          onClick={() => openNewNodeDialog()}
           tooltip="Add Node"
         >
           <AddFolderIcon />
@@ -458,7 +458,7 @@ export default function CanvasWorkspace({
             }}
             onClick={() => {
               setContextMenu(null)
-              openNewFolderDialog(contextMenu.nodeId)
+              openNewNodeDialog(contextMenu.nodeId)
             }}
             type="button"
           >

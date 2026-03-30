@@ -338,8 +338,8 @@ export default function useWorkspaceInteractions({
   }
 
   useEffect(() => {
-    async function handleMove(nodeId, parentId, asVariant = false) {
-      await moveDraggedNode(nodeId, parentId, asVariant)
+    async function handleMove(nodeId, parentId, asAdditionalPhoto = false) {
+      await moveDraggedNode(nodeId, parentId, asAdditionalPhoto)
     }
 
     function handlePointerMove(event) {

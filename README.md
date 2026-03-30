@@ -145,14 +145,14 @@ Current behavior:
 - reviewed fields are never overwritten
 - reviewed field values are still used as trusted context
 - scoped node text is provided before images
-- variants are always included for in-scope nodes
+- attached photos are always included for in-scope nodes
 - template-level instructions guide how AI uses bounded context
 
 AI assistance is meant to provide a starting point, not final truth. Human review is still the workflow.
 
 ### Preview and Image Enhancement
 
-The Preview panel supports non-destructive, per-node image adjustments:
+The Preview panel supports non-destructive, per-photo image adjustments:
 
 - zoom and pan
 - fit view

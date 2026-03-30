@@ -246,8 +246,8 @@ export function renderMobileCapturePage() {
 
         <div class="capture-secondary-row">
           <div class="capture-card capture-card--secondary">
-            <button id="variantButton" class="capture-button capture-button--secondary" type="button">Take Additional Photo</button>
-            <button id="chooseVariantButton" class="capture-tool-button" type="button" aria-label="Choose existing additional photo">+</button>
+            <button id="additionalPhotoButton" class="capture-button capture-button--secondary" type="button">Take Additional Photo</button>
+            <button id="chooseAdditionalPhotoButton" class="capture-tool-button" type="button" aria-label="Choose existing additional photo">+</button>
           </div>
         </div>
       </section>
@@ -261,9 +261,9 @@ export function renderMobileCapturePage() {
       const connectButton = document.getElementById('connectButton')
       const captureInput = document.getElementById('captureInput')
       const captureButton = document.querySelector('.capture-button')
-      const variantButton = document.getElementById('variantButton')
+      const additionalPhotoButton = document.getElementById('additionalPhotoButton')
       const chooseChildButton = document.getElementById('chooseChildButton')
-      const chooseVariantButton = document.getElementById('chooseVariantButton')
+      const chooseAdditionalPhotoButton = document.getElementById('chooseAdditionalPhotoButton')
       const disconnectButton = document.getElementById('disconnectButton')
       const sessionReadout = document.getElementById('sessionReadout')
       const statusEl = document.getElementById('status')
@@ -293,9 +293,9 @@ export function renderMobileCapturePage() {
 
       function setCaptureEnabled(enabled) {
         captureButton.classList.toggle('disabled', !enabled)
-        variantButton.disabled = !enabled
+        additionalPhotoButton.disabled = !enabled
         chooseChildButton.disabled = !enabled
-        chooseVariantButton.disabled = !enabled
+        chooseAdditionalPhotoButton.disabled = !enabled
       }
 
       function setStatus(message, isError = false) {
@@ -497,7 +497,7 @@ export function renderMobileCapturePage() {
         uploadSelectedFiles(Array.from(captureInput.files || []))
       })
 
-      variantButton.addEventListener('click', () => {
+      additionalPhotoButton.addEventListener('click', () => {
         uploadMode = 'additional_photo'
         captureInput.setAttribute('capture', 'environment')
         captureInput.click()
@@ -512,7 +512,7 @@ export function renderMobileCapturePage() {
         }, 0)
       })
 
-      chooseVariantButton.addEventListener('click', () => {
+      chooseAdditionalPhotoButton.addEventListener('click', () => {
         uploadMode = 'additional_photo'
         captureInput.removeAttribute('capture')
         captureInput.click()

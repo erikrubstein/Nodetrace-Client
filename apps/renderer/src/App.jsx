@@ -112,8 +112,8 @@ function App() {
   const [selectedTemplateEditorId, setSelectedTemplateEditorId] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [projectApiKeyInput, setProjectApiKeyInput] = useState('')
-  const [newFolderDialog, setNewFolderDialog] = useState(null)
-  const [newFolderName, setNewFolderName] = useState('New Node')
+  const [newNodeDialog, setNewNodeDialog] = useState(null)
+  const [newNodeName, setNewNodeName] = useState('New Node')
   const [exportFileName, setExportFileName] = useState('')
   const [importProjectName, setImportProjectName] = useState('')
   const [importArchiveFile, setImportArchiveFile] = useState(null)
@@ -1712,7 +1712,7 @@ function App() {
   }
 
   const moveDraggedNode = useCallback(
-    async (nodeId, parentId, asVariant = false) => {
+    async (nodeId, parentId, asAdditionalPhoto = false) => {
       setBusy(true)
       setError('')
 
@@ -1722,7 +1722,7 @@ function App() {
           return
         }
 
-        if (asVariant) {
+        if (asAdditionalPhoto) {
           const targetNode = tree?.nodes.find((item) => item.id === parentId)
           setMergePhotoConfirmation({
             sourceNodeId: nodeId,
@@ -2968,7 +2968,7 @@ function App() {
     }
   }
 
-  async function addFolder(parentId = selectedNode?.id) {
+  async function addNode(parentId = selectedNode?.id) {
     if (!parentId || !selectedProjectId) {
       return
     }
@@ -2982,7 +2982,7 @@ function App() {
         const rollbackLocalEvent = beginLocalEventExpectation()
         let created = null
         try {
-          created = await createNodeRequest(selectedProjectId, parentId, { name: newFolderName.trim() || 'New Node' })
+          created = await createNodeRequest(selectedProjectId, parentId, { name: newNodeName.trim() || 'New Node' })
         } catch (error) {
           rollbackLocalEvent()
           throw error
@@ -3021,23 +3021,23 @@ function App() {
     }
   }
 
-  function openNewFolderDialog(parentId = selectedNode?.id) {
+  function openNewNodeDialog(parentId = selectedNode?.id) {
     if (!parentId || !selectedProjectId) {
       return
     }
 
-    setNewFolderName('New Node')
-    setNewFolderDialog({ parentId })
+    setNewNodeName('New Node')
+    setNewNodeDialog({ parentId })
   }
 
-  async function submitNewFolder() {
-    if (!newFolderDialog?.parentId) {
+  async function submitNewNode() {
+    if (!newNodeDialog?.parentId) {
       return
     }
 
-    await addFolder(newFolderDialog.parentId)
-    setNewFolderDialog(null)
-    setNewFolderName('New Node')
+    await addNode(newNodeDialog.parentId)
+    setNewNodeDialog(null)
+    setNewNodeName('New Node')
   }
 
   function triggerAddPhotoNode() {
@@ -3879,7 +3879,7 @@ function App() {
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
         selectionCount={effectiveSelectedNodeIds.length}
-        openNewFolderDialog={openNewFolderDialog}
+        openNewNodeDialog={openNewNodeDialog}
         setAllNodesCollapsed={setAllNodesCollapsed}
         setDeleteNodeOpen={setDeleteNodeOpen}
         setDeleteProjectText={setDeleteProjectText}
@@ -3967,7 +3967,7 @@ function App() {
           loadedImages={loadedImages}
           markImageLoaded={markImageLoaded}
           multiSelectedNodeIds={multiSelectedNodeIds}
-          openNewFolderDialog={openNewFolderDialog}
+          openNewNodeDialog={openNewNodeDialog}
           triggerAddPhoto={triggerAddPhoto}
           triggerAddPhotoNode={triggerAddPhotoNode}
           projectSettings={projectSettings}
@@ -4084,8 +4084,8 @@ function App() {
         identificationTemplateRemovalNodes={identificationTemplateRemovalNodes}
         mergePhotoConfirmation={mergePhotoConfirmation}
         mobileConnectionCount={mobileConnectionCount}
-        newFolderDialog={newFolderDialog}
-        newFolderName={newFolderName}
+        newNodeDialog={newNodeDialog}
+        newNodeName={newNodeName}
         projectName={projectName}
         projects={projects}
         renameProject={renameProject}
@@ -4108,8 +4108,8 @@ function App() {
         }}
         setImportProjectName={setImportProjectName}
         setImportTemplateDialog={setImportTemplateDialog}
-        setNewFolderDialog={setNewFolderDialog}
-        setNewFolderName={setNewFolderName}
+        setNewNodeDialog={setNewNodeDialog}
+        setNewNodeName={setNewNodeName}
         setProjectApiKeyInput={setProjectApiKeyInput}
         setProjectName={setProjectName}
         setSessionDialogOpen={setSessionDialogOpen}
@@ -4118,7 +4118,7 @@ function App() {
         setTemplateDialog={setTemplateDialog}
         setMergePhotoConfirmation={setMergePhotoConfirmation}
         showProjectDialog={showProjectDialog}
-        submitNewFolder={submitNewFolder}
+        submitNewNode={submitNewNode}
         submitTemplateDialog={submitTemplateDialog}
         templateDialog={templateDialog}
         transferProgress={transferProgress}

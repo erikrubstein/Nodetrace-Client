@@ -15,7 +15,7 @@ export default function TopBar({
   importInputRef,
   importProjectName,
   mobileConnectionCount,
-  openNewFolderDialog,
+  openNewNodeDialog,
   openMenu,
   pendingUploadMode,
   pendingUploadParentId,
@@ -180,7 +180,7 @@ export default function TopBar({
                 disabled={!selectedNode || busy}
                 onClick={() => {
                   setOpenMenu(null)
-                  openNewFolderDialog()
+                  openNewNodeDialog()
                 }}
                 type="button"
               >

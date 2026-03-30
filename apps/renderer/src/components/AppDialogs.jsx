@@ -40,8 +40,8 @@ export default function AppDialogs({
   identificationTemplateRemovalNodes,
   mergePhotoConfirmation,
   mobileConnectionCount,
-  newFolderDialog,
-  newFolderName,
+  newNodeDialog,
+  newNodeName,
   projects,
   renameProject,
   saveProjectOpenAiKey,
@@ -57,8 +57,8 @@ export default function AppDialogs({
   setIdentificationTemplateRemovalNodeId,
   setImportProjectName,
   setImportTemplateDialog,
-  setNewFolderDialog,
-  setNewFolderName,
+  setNewNodeDialog,
+  setNewNodeName,
   setProjectApiKeyInput,
   setSessionDialogOpen,
   setShowProjectDialog,
@@ -67,7 +67,7 @@ export default function AppDialogs({
   setProjectName,
   setMergePhotoConfirmation,
   showProjectDialog,
-  submitNewFolder,
+  submitNewNode,
   submitTemplateDialog,
   transferProgress,
   tree,
@@ -424,8 +424,8 @@ export default function AppDialogs({
         </div>
       ) : null}
 
-      {newFolderDialog ? (
-        <div className="dialog-backdrop" onClick={() => !busy && setNewFolderDialog(null)} role="presentation">
+      {newNodeDialog ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setNewNodeDialog(null)} role="presentation">
           <div
             className="dialog"
             onClick={(event) => event.stopPropagation()}
@@ -433,9 +433,9 @@ export default function AppDialogs({
               handleDialogEnter(
                 event,
                 () => {
-                  void submitNewFolder()
+                  void submitNewNode()
                 },
-                Boolean(newFolderName.trim()) && !busy,
+                Boolean(newNodeName.trim()) && !busy,
               )
             }
             role="dialog"
@@ -444,17 +444,17 @@ export default function AppDialogs({
             <input
               autoFocus
               placeholder="Node name"
-              value={newFolderName}
-              onChange={(event) => setNewFolderName(event.target.value)}
+              value={newNodeName}
+              onChange={(event) => setNewNodeName(event.target.value)}
             />
             <div className="dialog__actions">
-              <button className="ghost-button" disabled={busy} onClick={() => setNewFolderDialog(null)} type="button">
+              <button className="ghost-button" disabled={busy} onClick={() => setNewNodeDialog(null)} type="button">
                 Cancel
               </button>
               <button
                 className="primary-button"
-                disabled={busy || !newFolderName.trim()}
-                onClick={submitNewFolder}
+                disabled={busy || !newNodeName.trim()}
+                onClick={submitNewNode}
                 type="button"
               >
                 Create
