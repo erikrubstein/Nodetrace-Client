@@ -253,6 +253,8 @@ By default:
 - dev frontend: `http://localhost:5173`
 - backend/API: `http://localhost:3001`
 
+Release-oriented manual verification lives in [QA_CHECKLIST.md](C:/SolaSec/Tools/Nodetrace/QA_CHECKLIST.md).
+
 ### Shared Backend Workflow
 
 If you want other users on the stable built frontend while you continue working on a separate dev frontend against the same backend data:
