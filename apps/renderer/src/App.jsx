@@ -1561,26 +1561,39 @@ function App() {
     let fileIndex = 0
 
     async function walk(current) {
-      const imageFileKey = current.imageUrl ? `image-${fileIndex++}` : null
-      const previewFileKey = current.previewUrl ? `preview-${fileIndex++}` : null
+      const mediaEntries = []
+      for (const mediaItem of current.media || []) {
+        const imageFileKey = mediaItem.imageUrl ? `image-${fileIndex++}` : null
+        const previewFileKey = mediaItem.previewUrl ? `preview-${fileIndex++}` : null
 
-      if (imageFileKey) {
-        const imageBlob = await blobFromUrl(current.imageUrl)
-        files.push({
-          key: imageFileKey,
-          file: new File([imageBlob], current.original_filename || `${current.name}.jpg`, {
-            type: imageBlob.type || 'image/jpeg',
-          }),
-        })
-      }
+        if (imageFileKey) {
+          const imageBlob = await blobFromUrl(mediaItem.imageUrl)
+          files.push({
+            key: imageFileKey,
+            file: new File([imageBlob], mediaItem.originalFilename || `${current.name}.jpg`, {
+              type: imageBlob.type || 'image/jpeg',
+            }),
+          })
+        }
 
-      if (previewFileKey) {
-        const previewBlob = await blobFromUrl(current.previewUrl)
-        files.push({
-          key: previewFileKey,
-          file: new File([previewBlob], `${current.name}-preview.jpg`, {
-            type: previewBlob.type || 'image/jpeg',
-          }),
+        if (previewFileKey) {
+          const previewBlob = await blobFromUrl(mediaItem.previewUrl)
+          files.push({
+            key: previewFileKey,
+            file: new File([previewBlob], `${current.name}-preview.jpg`, {
+              type: previewBlob.type || 'image/jpeg',
+            }),
+          })
+        }
+
+        mediaEntries.push({
+          id: mediaItem.id,
+          is_primary: Boolean(mediaItem.isPrimary),
+          sort_order: Number(mediaItem.sortOrder || 0),
+          original_filename: mediaItem.originalFilename || null,
+          image_edits: mediaItem.imageEdits || null,
+          image_file_key: imageFileKey,
+          preview_file_key: previewFileKey,
         })
       }
 
@@ -1588,16 +1601,12 @@ function App() {
         id: current.id,
         owner_user_id: current.ownerUserId || null,
         parent_id: current.childrenParentOverride ?? current.parent_id,
-        variant_of_id: current.variant_of_id,
-        type: current.type,
         name: current.name,
         notes: current.notes || '',
         tags: current.tags || [],
-        needs_attention: current.needsAttention ? 1 : 0,
-        image_edits: current.imageEdits || null,
-        original_filename: current.original_filename || null,
-        image_file_key: imageFileKey,
-        preview_file_key: previewFileKey,
+        review_status: current.reviewStatus || 'new',
+        added_at: current.added_at || current.created_at || null,
+        media: mediaEntries,
         identification: current.identification
           ? {
               template_id: current.identification.templateId,
@@ -1617,17 +1626,14 @@ function App() {
       for (const child of current.children || []) {
         await walk(child)
       }
-      for (const variant of current.variants || []) {
-        await walk(variant)
-      }
     }
 
     await walk(node)
     return {
       manifest: {
+        version: 2,
         root_id: node.id,
         root_parent_id: node.parent_id,
-        root_variant_of_id: node.variant_of_id,
         nodes,
       },
       files,

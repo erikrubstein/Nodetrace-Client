@@ -2601,40 +2601,52 @@ function ensureUniquePath(targetPath, suffix = '') {
 function exportProjectMediaArchive(projectId) {
   const project = assertProject(projectId)
   const rows = getProjectNodes.all(projectId)
-  const tree = buildTree(project, rows)
+  const tree = buildTree(project, rows.filter((row) => row.variant_of_id == null))
   const rowById = new Map(rows.map((row) => [row.id, row]))
   const workDir = makeTempDir(`export-media-${projectId}`)
   const rootDir = path.join(workDir, sanitizeFilesystemName(project.name || `project-${projectId}`))
   fs.mkdirSync(rootDir, { recursive: true })
 
-  function copyImageFile(row, destinationDir, requestedName) {
-    if (!row?.image_path) {
+  function copyMediaFile(media, destinationDir, requestedName) {
+    if (!media?.imageUrl) {
       return
     }
-    const sourcePath = path.join(uploadsDir, row.image_path)
+    const relativeImagePath = decodeURIComponent(String(media.imageUrl).replace('/uploads/', ''))
+    const sourcePath = path.join(uploadsDir, relativeImagePath)
     if (!fs.existsSync(sourcePath)) {
       return
     }
 
     const ext =
-      path.extname(row.original_filename || '') ||
-      path.extname(row.image_path || '') ||
+      path.extname(media.originalFilename || '') ||
+      path.extname(relativeImagePath || '') ||
       '.jpg'
-    const baseName = sanitizeFilesystemName(requestedName || row.name || 'photo')
+    const baseName = sanitizeFilesystemName(requestedName || 'photo')
     const initialPath = path.join(destinationDir, `${baseName}${ext}`)
     const destinationPath = ensureUniquePath(initialPath)
     fs.copyFileSync(sourcePath, destinationPath)
   }
 
-  function exportVariants(anchorNode, destinationDir) {
-    if (!anchorNode?.variants?.length) {
+  function exportAttachedPhotos(node, destinationDir) {
+    if (!node?.media?.length) {
+      return
+    }
+    const [primaryMedia, ...additionalMedia] = node.media
+    if (primaryMedia) {
+      copyMediaFile(primaryMedia, destinationDir, '_photo')
+    }
+    if (!additionalMedia.length) {
       return
     }
 
-    const variantsDir = path.join(destinationDir, '_variants')
-    fs.mkdirSync(variantsDir, { recursive: true })
-    for (const variant of anchorNode.variants) {
-      exportNode(variant, variantsDir)
+    const photosDir = path.join(destinationDir, '_photos')
+    fs.mkdirSync(photosDir, { recursive: true })
+    for (const [index, media] of additionalMedia.entries()) {
+      copyMediaFile(
+        media,
+        photosDir,
+        `${String(index + 1).padStart(2, '0')}-${media.originalFilename || 'photo'}`,
+      )
     }
   }
 
@@ -2645,33 +2657,23 @@ function exportProjectMediaArchive(projectId) {
   }
 
   function exportNode(node, destinationDir) {
-    const row = rowById.get(node.id)
-    const hasNestedContent = (node.children?.length || 0) > 0 || (node.variants?.length || 0) > 0
-    const safeNodeName = sanitizeFilesystemName(node.name || node.type || 'node')
+    const safeNodeName = sanitizeFilesystemName(node.name || rowById.get(node.id)?.type || 'node')
+    const hasChildren = (node.children?.length || 0) > 0
+    const mediaCount = node.media?.length || 0
 
-    if (node.type === 'folder') {
-      const folderDir = ensureUniquePath(path.join(destinationDir, safeNodeName), '')
-      fs.mkdirSync(folderDir, { recursive: true })
-      exportChildren(node, folderDir)
-      exportVariants(node, folderDir)
+    if (!hasChildren && mediaCount === 1) {
+      copyMediaFile(node.media[0], destinationDir, safeNodeName)
       return
     }
 
-    if (!hasNestedContent) {
-      copyImageFile(row, destinationDir, safeNodeName)
-      return
-    }
-
-    const photoDir = ensureUniquePath(path.join(destinationDir, safeNodeName), '')
-    fs.mkdirSync(photoDir, { recursive: true })
-    copyImageFile(row, photoDir, '_photo')
-    exportChildren(node, photoDir)
-    exportVariants(node, photoDir)
+    const nodeDir = ensureUniquePath(path.join(destinationDir, safeNodeName), '')
+    fs.mkdirSync(nodeDir, { recursive: true })
+    exportAttachedPhotos(node, nodeDir)
+    exportChildren(node, nodeDir)
   }
 
   if (tree.root) {
     exportChildren(tree.root, rootDir)
-    exportVariants(tree.root, rootDir)
   }
 
   const archivePath = path.join(tempDir, `media-${projectId}-${Date.now()}.zip`)
@@ -2680,22 +2682,78 @@ function exportProjectMediaArchive(projectId) {
   return archivePath
 }
 
-function writeProjectManifest(project, rows, workDir) {
-  const filesDir = path.join(workDir, 'files')
-  fs.mkdirSync(filesDir, { recursive: true })
-  const templateRows = listIdentificationTemplatesByProject.all(project.id).map(serializeIdentificationTemplate)
+function buildProjectArchiveData(projectId) {
+  const templateRows = listIdentificationTemplatesByProject.all(projectId).map(serializeIdentificationTemplate)
   const identificationsByNodeId = new Map(
-    listNodeIdentificationsByProject.all(project.id).map((row) => [row.node_id, row]),
+    listNodeIdentificationsByProject.all(projectId).map((row) => [row.node_id, row]),
   )
   const fieldValuesByNodeId = new Map()
-  for (const row of listNodeIdentificationFieldValuesByProject.all(project.id)) {
+  for (const row of listNodeIdentificationFieldValuesByProject.all(projectId)) {
     const items = fieldValuesByNodeId.get(row.node_id) || []
     items.push(row)
     fieldValuesByNodeId.set(row.node_id, items)
   }
+  const mediaRowsByNodeId = new Map()
+  for (const mediaRow of listNodeMediaByProjectStmt.all(projectId)) {
+    const items = mediaRowsByNodeId.get(mediaRow.node_id) || []
+    items.push(mediaRow)
+    mediaRowsByNodeId.set(mediaRow.node_id, items)
+  }
+
+  return {
+    templateRows,
+    identificationsByNodeId,
+    fieldValuesByNodeId,
+    mediaRowsByNodeId,
+  }
+}
+
+function serializeArchiveIdentification(nodeId, identificationsByNodeId, fieldValuesByNodeId) {
+  const identification = identificationsByNodeId.get(nodeId)
+  if (!identification) {
+    return null
+  }
+
+  return {
+    template_id: identification.template_id,
+    created_by_user_id: identification.created_by_user_id || null,
+    created_at: identification.created_at,
+    updated_at: identification.updated_at,
+    fields: (fieldValuesByNodeId.get(nodeId) || []).map((fieldRow) => ({
+      key: fieldRow.field_key,
+      value: JSON.parse(fieldRow.value_json || 'null'),
+      reviewed: Boolean(fieldRow.reviewed),
+      reviewed_by_user_id: fieldRow.reviewed_by_user_id || null,
+      reviewed_at: fieldRow.reviewed_at || null,
+      source: fieldRow.source || 'manual',
+      ai_suggestion: fieldRow.ai_suggestion_json ? JSON.parse(fieldRow.ai_suggestion_json) : null,
+    })),
+  }
+}
+
+function copyProjectFileIntoArchive(workDir, sourceRelativePath, outputRelativePath) {
+  if (!sourceRelativePath) {
+    return null
+  }
+  const sourcePath = path.join(uploadsDir, sourceRelativePath)
+  if (!fs.existsSync(sourcePath)) {
+    return null
+  }
+  const targetPath = path.join(workDir, outputRelativePath)
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true })
+  fs.copyFileSync(sourcePath, targetPath)
+  return outputRelativePath.replaceAll('\\', '/')
+}
+
+function writeProjectManifest(project, rows, workDir) {
+  const filesDir = path.join(workDir, 'files')
+  fs.mkdirSync(filesDir, { recursive: true })
+  const { templateRows, identificationsByNodeId, fieldValuesByNodeId, mediaRowsByNodeId } =
+    buildProjectArchiveData(project.id)
+  const rowsById = new Map(rows.map((row) => [row.id, row]))
 
   const manifest = {
-    version: 2,
+    version: 3,
     exported_at: new Date().toISOString(),
     project: {
       name: project.name,
@@ -2703,59 +2761,197 @@ function writeProjectManifest(project, rows, workDir) {
       settings: normalizeProjectSettings(JSON.parse(project.settings_json || '{}')),
       identification_templates: templateRows,
     },
-    nodes: rows.map((row) => {
-      const imageFile = row.image_path
-        ? `files/${row.id}-image${path.extname(row.image_path) || path.extname(row.original_filename || '') || '.jpg'}`
-        : null
-      const previewFile = row.preview_path
-        ? `files/${row.id}-preview${path.extname(row.preview_path) || '.jpg'}`
-        : null
-
-      if (row.image_path) {
-        fs.copyFileSync(path.join(uploadsDir, row.image_path), path.join(workDir, imageFile))
-      }
-      if (row.preview_path) {
-        fs.copyFileSync(path.join(uploadsDir, row.preview_path), path.join(workDir, previewFile))
-      }
-
-      const identification = identificationsByNodeId.get(row.id)
-      const identificationFields = (fieldValuesByNodeId.get(row.id) || []).map((fieldRow) => ({
-        key: fieldRow.field_key,
-        value: JSON.parse(fieldRow.value_json || 'null'),
-        reviewed: Boolean(fieldRow.reviewed),
-        reviewed_by_user_id: fieldRow.reviewed_by_user_id || null,
-        reviewed_at: fieldRow.reviewed_at || null,
-        source: fieldRow.source || 'manual',
-        ai_suggestion: fieldRow.ai_suggestion_json ? JSON.parse(fieldRow.ai_suggestion_json) : null,
-      }))
-
-      return {
+    nodes: rows
+      .filter((row) => row.variant_of_id == null)
+      .map((row) => ({
         id: row.id,
         owner_user_id: row.owner_user_id || null,
         parent_id: row.parent_id,
-        variant_of_id: row.variant_of_id,
-        type: row.type,
         name: row.name,
         notes: row.notes || '',
         tags: JSON.parse(row.tags_json || '[]'),
-        image_edits: normalizeNodeImageEdits(JSON.parse(row.image_edits_json || '{}')),
-        original_filename: row.original_filename,
-        image_file: imageFile,
-        preview_file: previewFile,
-        identification: identification
-          ? {
-              template_id: identification.template_id,
-              created_by_user_id: identification.created_by_user_id || null,
-              created_at: identification.created_at,
-              updated_at: identification.updated_at,
-              fields: identificationFields,
-            }
-          : null,
-      }
-    }),
+        review_status: normalizeNodeReviewStatus(
+          row.review_status || (row.needs_attention ? 'needs_attention' : 'new'),
+        ),
+        added_at: row.added_at || row.created_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        identification: serializeArchiveIdentification(row.id, identificationsByNodeId, fieldValuesByNodeId),
+        media: (mediaRowsByNodeId.get(row.id) || []).map((mediaRow, index) => {
+          const imageFile = copyProjectFileIntoArchive(
+            workDir,
+            mediaRow.image_path,
+            `files/${row.id}-media-${String(index + 1).padStart(2, '0')}-${mediaRow.id}-image${
+              path.extname(mediaRow.image_path || '') || path.extname(mediaRow.original_filename || '') || '.jpg'
+            }`,
+          )
+          const previewFile = copyProjectFileIntoArchive(
+            workDir,
+            mediaRow.preview_path,
+            `files/${row.id}-media-${String(index + 1).padStart(2, '0')}-${mediaRow.id}-preview${
+              path.extname(mediaRow.preview_path || '') || '.jpg'
+            }`,
+          )
+          const legacyNode =
+            mediaRow.legacy_source_node_id && mediaRow.legacy_source_node_id !== row.id
+              ? rowsById.get(mediaRow.legacy_source_node_id)
+              : null
+
+          return {
+            id: mediaRow.id,
+            is_primary: Boolean(mediaRow.is_primary),
+            sort_order: Number(mediaRow.sort_order || 0),
+            original_filename: mediaRow.original_filename || null,
+            image_edits: normalizeNodeImageEdits(JSON.parse(mediaRow.image_edits_json || '{}')),
+            created_at: mediaRow.created_at,
+            updated_at: mediaRow.updated_at,
+            image_file: imageFile,
+            preview_file: previewFile,
+            legacy_node: legacyNode
+              ? {
+                  id: legacyNode.id,
+                  owner_user_id: legacyNode.owner_user_id || null,
+                  name: legacyNode.name,
+                  notes: legacyNode.notes || '',
+                  tags: JSON.parse(legacyNode.tags_json || '[]'),
+                  review_status: normalizeNodeReviewStatus(
+                    legacyNode.review_status || (legacyNode.needs_attention ? 'needs_attention' : 'new'),
+                  ),
+                  added_at: legacyNode.added_at || legacyNode.created_at,
+                  created_at: legacyNode.created_at,
+                  updated_at: legacyNode.updated_at,
+                  identification: serializeArchiveIdentification(
+                    legacyNode.id,
+                    identificationsByNodeId,
+                    fieldValuesByNodeId,
+                  ),
+                }
+              : null,
+          }
+        }),
+      })),
   }
 
   fs.writeFileSync(path.join(workDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
+}
+
+function sortArchiveMediaEntries(entries = []) {
+  return [...entries].sort((left, right) => {
+    if (Boolean(left.is_primary) !== Boolean(right.is_primary)) {
+      return left.is_primary ? -1 : 1
+    }
+    const leftSort = Number(left.sort_order ?? Number.MAX_SAFE_INTEGER)
+    const rightSort = Number(right.sort_order ?? Number.MAX_SAFE_INTEGER)
+    if (leftSort !== rightSort) {
+      return leftSort - rightSort
+    }
+    return String(left.id || '').localeCompare(String(right.id || ''))
+  })
+}
+
+function copyImportedArchiveFile(extractDir, projectId, relativeFilePath) {
+  if (!relativeFilePath) {
+    return null
+  }
+  const importedFilePath = path.join(extractDir, relativeFilePath)
+  if (!fs.existsSync(importedFilePath)) {
+    return null
+  }
+  const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const relativeUploadPath = path.join(String(projectId), `${uniqueToken}-${path.basename(importedFilePath)}`)
+  const absoluteUploadPath = path.join(uploadsDir, relativeUploadPath)
+  fs.mkdirSync(path.dirname(absoluteUploadPath), { recursive: true })
+  fs.copyFileSync(importedFilePath, absoluteUploadPath)
+  return relativeUploadPath
+}
+
+function restoreNodeMediaFromArchive({
+  projectId,
+  nodeId,
+  ownerUserId = null,
+  extractDir = null,
+  uploadedFileMap = null,
+  mediaEntries = [],
+  templateIdMap = new Map(),
+}) {
+  for (const entry of sortArchiveMediaEntries(mediaEntries)) {
+    const imagePath = extractDir
+      ? copyImportedArchiveFile(extractDir, projectId, entry.image_file)
+      : entry.image_file_key
+        ? (() => {
+            const file = uploadedFileMap?.get(entry.image_file_key) || null
+            if (!file?.buffer) {
+              return null
+            }
+            const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+            const safeName = sanitizeUploadName(file.originalname, 'image.jpg')
+            const relativeUploadPath = path.join(String(projectId), `${uniqueToken}-${safeName}`)
+            const absoluteUploadPath = path.join(uploadsDir, relativeUploadPath)
+            fs.mkdirSync(path.dirname(absoluteUploadPath), { recursive: true })
+            fs.writeFileSync(absoluteUploadPath, file.buffer)
+            return relativeUploadPath
+          })()
+        : null
+    const previewPath = extractDir
+      ? copyImportedArchiveFile(extractDir, projectId, entry.preview_file)
+      : entry.preview_file_key
+        ? (() => {
+            const file = uploadedFileMap?.get(entry.preview_file_key) || null
+            if (!file?.buffer) {
+              return null
+            }
+            const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+            const safeName = sanitizeUploadName(file.originalname, 'preview.jpg')
+            const relativeUploadPath = path.join(String(projectId), `${uniqueToken}-${safeName}`)
+            const absoluteUploadPath = path.join(uploadsDir, relativeUploadPath)
+            fs.mkdirSync(path.dirname(absoluteUploadPath), { recursive: true })
+            fs.writeFileSync(absoluteUploadPath, file.buffer)
+            return relativeUploadPath
+          })()
+        : null
+
+    const legacyNode = entry.legacy_node || null
+    if (legacyNode && !entry.is_primary) {
+      const variantNodeId = createNode({
+        project_id: projectId,
+        owner_user_id: legacyNode.owner_user_id || ownerUserId || null,
+        parent_id: null,
+        variant_of_id: nodeId,
+        type: 'photo',
+        name: legacyNode.name || createUntitledName(projectId),
+        notes: legacyNode.notes || '',
+        tags: Array.isArray(legacyNode.tags) ? legacyNode.tags : [],
+        review_status: legacyNode.review_status || 'new',
+        image_edits: entry.image_edits,
+        image_path: imagePath,
+        preview_path: previewPath,
+        original_filename: entry.original_filename || null,
+        added_at: legacyNode.added_at || legacyNode.created_at || new Date().toISOString(),
+      })
+
+      if (legacyNode.identification?.template_id) {
+        const mappedTemplateId = templateIdMap.get(String(legacyNode.identification.template_id))
+        if (mappedTemplateId) {
+          upsertNodeIdentificationData({
+            nodeId: variantNodeId,
+            templateId: mappedTemplateId,
+            createdByUserId: legacyNode.identification.created_by_user_id || null,
+            fields: Array.isArray(legacyNode.identification.fields) ? legacyNode.identification.fields : [],
+          })
+        }
+      }
+      continue
+    }
+
+    addNodeMedia({
+      nodeId,
+      projectId,
+      imagePath,
+      previewPath,
+      originalFilename: entry.original_filename || null,
+      imageEdits: entry.image_edits,
+    })
+  }
 }
 
 function restoreProjectFromArchive(projectId, archivePath) {
@@ -2772,7 +2968,15 @@ function restoreProjectFromArchive(projectId, archivePath) {
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     const importedRows = Array.isArray(manifest.nodes) ? manifest.nodes : []
-    const rootRow = importedRows.find((node) => (node.parent_id ?? node.parent_old_id) == null && (node.variant_of_id ?? node.variant_of_old_id) == null)
+    const mediaFirstArchive =
+      Number(manifest.version || 0) >= 3 || importedRows.some((node) => Array.isArray(node.media))
+    const rootRow = mediaFirstArchive
+      ? importedRows.find((node) => (node.parent_id ?? node.parent_old_id) == null)
+      : importedRows.find(
+          (node) =>
+            (node.parent_id ?? node.parent_old_id) == null &&
+            (node.variant_of_id ?? node.variant_of_old_id) == null,
+        )
     if (!rootRow) {
       const error = new Error('Invalid project archive: root node missing')
       error.status = 400
@@ -2822,12 +3026,20 @@ function restoreProjectFromArchive(projectId, archivePath) {
           : assertProject(projectId).owner_user_id || null,
       parent_id: null,
       variant_of_id: null,
-      type: 'folder',
+      type: Array.isArray(rootRow.media) && rootRow.media.length ? 'photo' : 'folder',
       name: rootRow.name || 'Root',
       notes: rootRow.notes || '',
       tags_json: JSON.stringify(Array.isArray(rootRow.tags) ? rootRow.tags : []),
-      needs_attention: Number(rootRow.needs_attention || 0),
-      image_edits_json: JSON.stringify(normalizeNodeImageEdits(rootRow.image_edits)),
+      review_status: normalizeNodeReviewStatus(
+        rootRow.review_status || (rootRow.needs_attention ? 'needs_attention' : 'new'),
+      ),
+      needs_attention:
+        normalizeNodeReviewStatus(
+          rootRow.review_status || (rootRow.needs_attention ? 'needs_attention' : 'new'),
+        ) === 'needs_attention'
+          ? 1
+          : 0,
+      image_edits_json: JSON.stringify(normalizeNodeImageEdits(rootRow.image_edits || {})),
       image_path: null,
       preview_path: null,
       original_filename: null,
@@ -2838,6 +3050,16 @@ function restoreProjectFromArchive(projectId, archivePath) {
 
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     const oldToNew = new Map([[rootManifestId, rootId]])
+    if (Array.isArray(rootRow.media)) {
+      restoreNodeMediaFromArchive({
+        projectId,
+        nodeId: rootId,
+        ownerUserId: rootRow.owner_user_id || assertProject(projectId).owner_user_id || null,
+        extractDir,
+        mediaEntries: rootRow.media,
+        templateIdMap,
+      })
+    }
     if (rootRow.identification?.template_id) {
       const mappedTemplateId = templateIdMap.get(String(rootRow.identification.template_id))
       if (mappedTemplateId) {
@@ -2858,7 +3080,7 @@ function restoreProjectFromArchive(projectId, archivePath) {
         const row = pendingRows[index]
         const rowId = String(row.id ?? row.old_id)
         const parentRef = row.parent_id ?? row.parent_old_id ?? null
-        const variantRef = row.variant_of_id ?? row.variant_of_old_id ?? null
+        const variantRef = mediaFirstArchive ? null : row.variant_of_id ?? row.variant_of_old_id ?? null
         const parentId = parentRef != null ? oldToNew.get(String(parentRef)) : null
         const variantOfId = variantRef != null ? oldToNew.get(String(variantRef)) : null
         if (
@@ -2868,39 +3090,49 @@ function restoreProjectFromArchive(projectId, archivePath) {
           continue
         }
 
-        const importedImagePath = row.image_file ? path.join(extractDir, row.image_file) : null
-        const importedPreviewPath = row.preview_file ? path.join(extractDir, row.preview_file) : null
-        const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const relativeImagePath = importedImagePath
-          ? path.join(String(projectId), `${uniqueToken}-${path.basename(importedImagePath)}`)
-          : null
-        const relativePreviewPath = importedPreviewPath
-          ? path.join(String(projectId), `${uniqueToken}-${path.basename(importedPreviewPath)}`)
-          : null
-
-        if (importedImagePath && fs.existsSync(importedImagePath)) {
-          fs.copyFileSync(importedImagePath, path.join(uploadsDir, relativeImagePath))
-        }
-        if (importedPreviewPath && fs.existsSync(importedPreviewPath)) {
-          fs.copyFileSync(importedPreviewPath, path.join(uploadsDir, relativePreviewPath))
-        }
+        const relativeImagePath =
+          !mediaFirstArchive && row.image_file
+            ? copyImportedArchiveFile(extractDir, projectId, row.image_file)
+            : null
+        const relativePreviewPath =
+          !mediaFirstArchive && row.preview_file
+            ? copyImportedArchiveFile(extractDir, projectId, row.preview_file)
+            : null
 
         const nodeId = createNode({
           project_id: projectId,
           owner_user_id: row.owner_user_id || assertProject(projectId).owner_user_id || null,
           parent_id: parentId,
           variant_of_id: variantOfId,
-          type: row.type === 'photo' ? 'photo' : 'folder',
-          name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
+          type:
+            row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+              ? 'photo'
+              : 'folder',
+          name:
+            row.name ||
+            (row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+              ? createUntitledName(projectId)
+              : 'Restored Node'),
           notes: row.notes || '',
           tags: Array.isArray(row.tags) ? row.tags : [],
-          needs_attention: Boolean(row.needs_attention),
+          review_status: row.review_status || (row.needs_attention ? 'needs_attention' : 'new'),
           image_edits: row.image_edits,
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
           added_at: row.added_at || row.created_at || now,
         })
+
+        if (Array.isArray(row.media)) {
+          restoreNodeMediaFromArchive({
+            projectId,
+            nodeId,
+            ownerUserId: row.owner_user_id || assertProject(projectId).owner_user_id || null,
+            extractDir,
+            mediaEntries: row.media,
+            templateIdMap,
+          })
+        }
 
         if (row.identification?.template_id) {
           const mappedTemplateId = templateIdMap.get(String(row.identification.template_id))
@@ -2938,6 +3170,8 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
 
   const rows = Array.isArray(manifest?.nodes) ? manifest.nodes : []
   const manifestRootId = String(manifest.root_id)
+  const mediaFirstPayload =
+    Number(manifest?.version || 0) >= 2 || rows.some((row) => Array.isArray(row.media))
   const rootRow = rows.find((row) => String(row.id ?? row.old_id) === manifestRootId)
   if (!rootRow) {
     const error = new Error('Invalid subtree payload: root node missing')
@@ -2961,21 +3195,29 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
         : row.parent_id != null || row.parent_old_id != null
           ? oldToNew.get(String(row.parent_id ?? row.parent_old_id))
           : null
-      const variantOfId = isRoot
-        ? manifest.root_variant_of_id
-        : row.variant_of_id != null || row.variant_of_old_id != null
-          ? oldToNew.get(String(row.variant_of_id ?? row.variant_of_old_id))
-          : null
+      const variantOfId =
+        !mediaFirstPayload && isRoot
+          ? manifest.root_variant_of_id
+          : !mediaFirstPayload &&
+              (row.variant_of_id != null || row.variant_of_old_id != null)
+            ? oldToNew.get(String(row.variant_of_id ?? row.variant_of_old_id))
+            : null
 
       if (!isRoot && (row.parent_id != null || row.parent_old_id != null) && !parentId) {
         continue
       }
-      if (!isRoot && (row.variant_of_id != null || row.variant_of_old_id != null) && !variantOfId) {
+      if (
+        !mediaFirstPayload &&
+        !isRoot &&
+        (row.variant_of_id != null || row.variant_of_old_id != null) &&
+        !variantOfId
+      ) {
         continue
       }
 
-      const imageFile = row.image_file_key ? fileMap.get(row.image_file_key) : null
-      const previewFile = row.preview_file_key ? fileMap.get(row.preview_file_key) : null
+      const imageFile = !mediaFirstPayload && row.image_file_key ? fileMap.get(row.image_file_key) : null
+      const previewFile =
+        !mediaFirstPayload && row.preview_file_key ? fileMap.get(row.preview_file_key) : null
       const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const safeImageName = imageFile ? sanitizeUploadName(imageFile.originalname, 'image.jpg') : null
       const safePreviewName = previewFile ? sanitizeUploadName(previewFile.originalname, 'preview.jpg') : null
@@ -3002,15 +3244,34 @@ function restoreSubtreeFromPayload(projectId, manifest, uploadedFiles) {
         owner_user_id: row.owner_user_id || assertProject(projectId).owner_user_id || null,
         parent_id: parentId,
         variant_of_id: variantOfId,
-        type: row.type === 'photo' ? 'photo' : 'folder',
-        name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Restored Folder'),
+        type:
+          row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+            ? 'photo'
+            : 'folder',
+        name:
+          row.name ||
+          (row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+            ? createUntitledName(projectId)
+            : 'Restored Node'),
         notes: row.notes || '',
         tags: Array.isArray(row.tags) ? row.tags : [],
+        review_status: row.review_status || (row.needs_attention ? 'needs_attention' : 'new'),
         image_edits: row.image_edits,
         image_path: relativeImagePath,
         preview_path: relativePreviewPath,
         original_filename: row.original_filename || null,
+        added_at: row.added_at || row.created_at || new Date().toISOString(),
       })
+
+      if (Array.isArray(row.media)) {
+        restoreNodeMediaFromArchive({
+          projectId,
+          nodeId,
+          ownerUserId: row.owner_user_id || assertProject(projectId).owner_user_id || null,
+          uploadedFileMap: fileMap,
+          mediaEntries: row.media,
+        })
+      }
 
       if (row.identification?.template_id) {
         const template = getIdentificationTemplate.get(String(row.identification.template_id))
@@ -3054,6 +3315,9 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
     }
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    const importedRows = Array.isArray(manifest.nodes) ? manifest.nodes : []
+    const mediaFirstArchive =
+      Number(manifest.version || 0) >= 3 || importedRows.some((node) => Array.isArray(node.media))
     projectId = createProjectWithRoot({
       name:
         String(projectNameOverride || manifest.project?.name || 'Imported Project').trim() ||
@@ -3092,10 +3356,15 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
       templateIdMap.set(String(template.id ?? template.old_id ?? newTemplateId), newTemplateId)
     }
 
-    const importedRows = Array.isArray(manifest.nodes) ? manifest.nodes : []
     const oldToNew = new Map()
     const createdRoot = getProjectNodes.all(projectId).find((node) => node.parent_id == null)
-    const rootRow = importedRows.find((node) => (node.parent_id ?? node.parent_old_id) == null)
+    const rootRow = mediaFirstArchive
+      ? importedRows.find((node) => (node.parent_id ?? node.parent_old_id) == null)
+      : importedRows.find(
+          (node) =>
+            (node.parent_id ?? node.parent_old_id) == null &&
+            (node.variant_of_id ?? node.variant_of_old_id) == null,
+        )
 
     if (!createdRoot || !rootRow) {
       const error = new Error('Invalid project archive: root node missing')
@@ -3109,10 +3378,21 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
       name: rootRow.name || createdRoot.name,
       notes: rootRow.notes || '',
       tags: Array.isArray(rootRow.tags) ? rootRow.tags : [],
-      image_edits: rootRow.image_edits,
+      review_status: rootRow.review_status || (rootRow.needs_attention ? 'needs_attention' : 'new'),
+      image_edits: rootRow.image_edits || {},
     })
     const rootManifestId = String(rootRow.id ?? rootRow.old_id)
     oldToNew.set(rootManifestId, createdRoot.id)
+    if (Array.isArray(rootRow.media)) {
+      restoreNodeMediaFromArchive({
+        projectId,
+        nodeId: createdRoot.id,
+        ownerUserId: rootRow.owner_user_id || ownerUserId || null,
+        extractDir,
+        mediaEntries: rootRow.media,
+        templateIdMap,
+      })
+    }
     if (rootRow.identification?.template_id) {
       const mappedTemplateId = templateIdMap.get(String(rootRow.identification.template_id))
       if (mappedTemplateId) {
@@ -3139,45 +3419,60 @@ function importProjectArchive(archivePath, projectNameOverride = '', ownerUserId
             ? oldToNew.get(String(row.parent_id ?? row.parent_old_id))
             : null
         const variantOfId =
-          row.variant_of_id != null || row.variant_of_old_id != null ? oldToNew.get(String(row.variant_of_id ?? row.variant_of_old_id)) : null
+          !mediaFirstArchive && (row.variant_of_id != null || row.variant_of_old_id != null)
+            ? oldToNew.get(String(row.variant_of_id ?? row.variant_of_old_id))
+            : null
         if (
           ((row.parent_id != null || row.parent_old_id != null) && !parentId) ||
-          ((row.variant_of_id != null || row.variant_of_old_id != null) && !variantOfId)
+          (!mediaFirstArchive &&
+            (row.variant_of_id != null || row.variant_of_old_id != null) &&
+            !variantOfId)
         ) {
           continue
         }
 
-        const importedImagePath = row.image_file ? path.join(extractDir, row.image_file) : null
-        const importedPreviewPath = row.preview_file ? path.join(extractDir, row.preview_file) : null
-        const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const relativeImagePath = importedImagePath
-          ? path.join(String(projectId), `${uniqueToken}-${path.basename(importedImagePath)}`)
-          : null
-        const relativePreviewPath = importedPreviewPath
-          ? path.join(String(projectId), `${uniqueToken}-${path.basename(importedPreviewPath)}`)
-          : null
-
-        if (importedImagePath && fs.existsSync(importedImagePath)) {
-          fs.copyFileSync(importedImagePath, path.join(uploadsDir, relativeImagePath))
-        }
-        if (importedPreviewPath && fs.existsSync(importedPreviewPath)) {
-          fs.copyFileSync(importedPreviewPath, path.join(uploadsDir, relativePreviewPath))
-        }
+        const relativeImagePath =
+          !mediaFirstArchive && row.image_file
+            ? copyImportedArchiveFile(extractDir, projectId, row.image_file)
+            : null
+        const relativePreviewPath =
+          !mediaFirstArchive && row.preview_file
+            ? copyImportedArchiveFile(extractDir, projectId, row.preview_file)
+            : null
 
         const nodeId = createNode({
           project_id: projectId,
           owner_user_id: row.owner_user_id || ownerUserId || null,
           parent_id: parentId,
           variant_of_id: variantOfId,
-          type: row.type === 'photo' ? 'photo' : 'folder',
-          name: row.name || (row.type === 'photo' ? createUntitledName(projectId) : 'Imported Folder'),
+          type:
+            row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+              ? 'photo'
+              : 'folder',
+          name:
+            row.name ||
+            (row.type === 'photo' || (Array.isArray(row.media) && row.media.length)
+              ? createUntitledName(projectId)
+              : 'Imported Node'),
           notes: row.notes || '',
           tags: Array.isArray(row.tags) ? row.tags : [],
+          review_status: row.review_status || (row.needs_attention ? 'needs_attention' : 'new'),
           image_edits: row.image_edits,
           image_path: relativeImagePath,
           preview_path: relativePreviewPath,
           original_filename: row.original_filename || null,
         })
+
+        if (Array.isArray(row.media)) {
+          restoreNodeMediaFromArchive({
+            projectId,
+            nodeId,
+            ownerUserId: row.owner_user_id || ownerUserId || null,
+            extractDir,
+            mediaEntries: row.media,
+            templateIdMap,
+          })
+        }
 
         if (row.identification?.template_id) {
           const mappedTemplateId = templateIdMap.get(String(row.identification.template_id))
