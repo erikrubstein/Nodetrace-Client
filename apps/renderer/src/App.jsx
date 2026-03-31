@@ -5,6 +5,7 @@ import AppDialogs from './components/AppDialogs'
 import AuthScreen from './components/AuthScreen'
 import CameraPanel from './components/CameraPanel'
 import CanvasWorkspace from './components/CanvasWorkspace'
+import CaptureScreen from './components/CaptureScreen'
 import CollaboratorsPanel from './components/CollaboratorsPanel'
 import DockedSidebar from './components/DockedSidebar'
 import FieldsPanel from './components/FieldsPanel'
@@ -99,7 +100,7 @@ function getPresenceInitials(username) {
   return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
 }
 
-function App() {
+function MainApp() {
   const { panelWindowId } = getUrlState()
   const isPanelWindow = Boolean(panelWindowId)
   const windowInstanceIdRef = useRef(`window-${Math.random().toString(36).slice(2, 10)}`)
@@ -4184,6 +4185,14 @@ function App() {
       />
     </div>
   )
+}
+
+function App() {
+  if (typeof window !== 'undefined' && window.location.pathname === '/capture') {
+    return <CaptureScreen />
+  }
+
+  return <MainApp />
 }
 
 export default App

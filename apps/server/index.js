@@ -6,7 +6,6 @@ import express from 'express'
 import multer from 'multer'
 import AdmZip from 'adm-zip'
 import { initializeDatabase } from './db/bootstrap.js'
-import { renderMobileCapturePage } from './mobileCapturePage.js'
 import { registerMediaAuthRoutes } from './routes/mediaAuthRoutes.js'
 import { registerNodeRoutes } from './routes/nodeRoutes.js'
 import { importRestorePayloadRoutes } from './routes/projectFileRoutes.js'
@@ -3653,6 +3652,7 @@ const serverContext = {
   createUntitledName,
   db,
   decryptProjectSecret,
+  distDir,
   deleteCollaboratorsByUserStmt,
   deleteIdentificationTemplateStmt,
   deleteNodeCollapsePrefsByUserStmt,
@@ -3721,7 +3721,6 @@ const serverContext = {
   path,
   projectEventClients,
   reassignNodeOwnersByUserStmt,
-  renderMobileCapturePage,
   renameProjectAndRoot,
   requireAuth,
   removeNodeMedia,
@@ -3762,7 +3761,7 @@ if (fs.existsSync(distDir)) {
   app.use(express.static(distDir))
 
   app.use((req, res, next) => {
-    if (req.path === '/capture' || req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
       return next()
     }
 

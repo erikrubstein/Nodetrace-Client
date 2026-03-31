@@ -175,7 +175,12 @@ select {
 }
 
 .mobile-entry-shell {
-  width: min(460px, 100%);
+  width: min(520px, 100%);
+}
+
+.mobile-entry-screen {
+  align-content: start;
+  padding-top: clamp(28px, 8svh, 60px);
 }
 
 .auth-brand {
@@ -205,32 +210,70 @@ select {
 }
 
 .mobile-entry-card {
-  gap: 16px;
+  gap: 12px;
 }
 
 .mobile-entry-card__eyebrow {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
 }
 
 .mobile-entry-card__title {
-  font-size: 1.08rem;
+  font-size: 1rem;
   text-align: center;
 }
 
-.mobile-entry-card__copy {
-  color: var(--muted);
-  font-size: 0.86rem;
-  text-align: center;
-  line-height: 1.6;
-}
-
-.mobile-entry-card__actions {
+.mobile-entry-card__grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.mobile-entry-card__option {
+  aspect-ratio: 0.92 / 1;
+  min-height: 152px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  background: var(--control-bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mobile-entry-card__option:hover:not(:disabled) {
+  background: var(--control-hover);
+}
+
+.mobile-entry-card__option--primary {
+  background: #111111;
+  color: #ffffff;
+}
+
+.mobile-entry-card__option--primary:hover:not(:disabled) {
+  background: #1b1b1b;
+}
+
+.mobile-entry-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.mobile-entry-card__option-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .auth-error {
@@ -240,6 +283,333 @@ select {
 .inspector__notice.auth-error {
   color: var(--danger);
   text-align: center;
+}
+
+.capture-screen {
+  min-height: 100dvh;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+html.capture-route,
+body.capture-route,
+body.capture-route #root {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: none;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.capture-shell-app {
+  min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.capture-shell-app.is-connect-only {
+  justify-content: stretch;
+}
+
+.capture-shell-app.is-connected {
+  justify-content: flex-start;
+}
+
+.capture-layout {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(132px, 0.46fr);
+  grid-template-areas:
+    'panel'
+    'primary'
+    'secondary';
+  gap: 10px;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+.capture-panel {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.capture-panel--session {
+  grid-area: panel;
+}
+
+.capture-panel--connect {
+  width: min(520px, 100%);
+  align-self: center;
+}
+
+.capture-connect-screen {
+  min-height: 100dvh;
+}
+
+.capture-connect-card {
+  gap: 14px;
+}
+
+.capture-connect-card .primary-button {
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 12px;
+}
+
+.capture-connect-card .primary-button:hover:not(:disabled) {
+  background: var(--control-hover);
+}
+
+.capture-title {
+  font-size: 0.92rem;
+}
+
+.capture-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.capture-input-field,
+.capture-action-button,
+.capture-secondary-button,
+.capture-primary-button,
+.capture-secondary-action,
+.capture-tool-button {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.capture-input-field {
+  background: var(--control-bg);
+  box-shadow: inset 0 0 0 1px var(--inner-stroke);
+  color: var(--text);
+  padding: 12px 10px;
+  font-size: 16px;
+  text-transform: lowercase;
+}
+
+.capture-input-field:focus,
+.capture-input-field:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--hover-stroke),
+    0 0 0 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.capture-status {
+  min-height: 1.2em;
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.capture-status.is-error {
+  color: var(--danger);
+}
+
+.capture-action-button,
+.capture-secondary-button,
+.capture-secondary-action {
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px 10px;
+}
+
+.capture-primary {
+  grid-area: primary;
+  min-height: 0;
+  position: relative;
+}
+
+.capture-secondary-row {
+  grid-area: secondary;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+
+.capture-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: 88px;
+  height: 100%;
+}
+
+.capture-card--primary {
+  min-height: 0;
+  flex: 1;
+}
+
+.capture-card--secondary {
+  min-height: 132px;
+}
+
+.capture-primary-button {
+  flex: 1;
+  min-height: 100%;
+  border-radius: 14px;
+  background: var(--selected);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 24px;
+}
+
+.capture-secondary-action {
+  flex: 1;
+  min-height: 100%;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.98rem;
+  font-weight: 600;
+  padding: 24px 58px 24px 24px;
+}
+
+.capture-tool-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.capture-native-input {
+  display: none;
+}
+
+.capture-primary .capture-tool-button {
+  background: transparent;
+  color: var(--bg);
+}
+
+.capture-secondary-row .capture-tool-button {
+  color: var(--text);
+}
+
+.capture-action-button:hover:not(:disabled),
+.capture-secondary-button:hover:not(:disabled),
+.capture-secondary-action:hover:not(:disabled),
+.capture-tool-button:hover:not(:disabled) {
+  background: transparent;
+}
+
+.capture-primary-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--selected) 88%, var(--bg));
+}
+
+.capture-action-button:disabled,
+.capture-secondary-button:disabled,
+.capture-primary-button:disabled,
+.capture-secondary-action:disabled,
+.capture-tool-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .capture-shell-app {
+    gap: 8px;
+  }
+
+  .capture-shell-app.is-connect-only {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .capture-panel--connect {
+    width: min(520px, 100%);
+  }
+
+  .capture-shell-app.is-connected {
+    justify-content: stretch;
+  }
+
+  .capture-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.95fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'primary panel'
+      'primary secondary';
+    align-items: stretch;
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .capture-panel--session {
+    grid-area: panel;
+  }
+
+  .capture-primary {
+    grid-area: primary;
+    min-height: 0;
+  }
+
+  .capture-secondary-row {
+    grid-area: secondary;
+    display: flex;
+  }
+
+  .capture-card--primary,
+  .capture-card--secondary {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .capture-card--secondary {
+    flex: 1;
+  }
+
+  .capture-primary-button {
+    min-height: 100%;
+    padding: 18px;
+    font-size: 0.98rem;
+  }
+
+  .capture-secondary-action {
+    min-height: 100%;
+    padding-right: 54px;
+  }
 }
 
 .auth-column {

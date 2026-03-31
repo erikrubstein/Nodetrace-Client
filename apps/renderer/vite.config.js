@@ -21,7 +21,6 @@ export default defineConfig({
     port,
     strictPort: true,
     proxy: {
-      '/capture': apiBaseUrl,
       '/api': apiBaseUrl,
       '/uploads': apiBaseUrl,
     },

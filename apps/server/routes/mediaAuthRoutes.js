@@ -1,10 +1,10 @@
 export function registerMediaAuthRoutes(app, ctx) {
   const {
+    distDir,
     fs,
     path,
     uploadsDir,
     assertProjectAccess,
-    renderMobileCapturePage,
     requireAuth,
     getRequestUser,
     normalizeUsername,
@@ -72,7 +72,14 @@ export function registerMediaAuthRoutes(app, ctx) {
   })
 
   app.get('/capture', (_req, res) => {
-    res.type('html').send(renderMobileCapturePage())
+    const frontendEntryPath = path.join(distDir, 'index.html')
+    if (fs.existsSync(frontendEntryPath)) {
+      return res.sendFile(frontendEntryPath)
+    }
+
+    return res
+      .status(503)
+      .json({ error: 'Capture frontend is not built yet. Start the renderer dev server or build the app first.' })
   })
 
   app.get('/api/auth/me', (req, res) => {

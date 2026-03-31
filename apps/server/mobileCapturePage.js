@@ -7,22 +7,12 @@ export function renderMobileCapturePage() {
     <title>Nodetrace Capture</title>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: dark;
         --bg: #121212;
         --panel: #1d1d1d;
         --surface: #262626;
         --text: #f4f4f0;
         --muted: #9a9a9a;
-      }
-
-      @media (prefers-color-scheme: light) {
-        :root {
-          --bg: #efefea;
-          --panel: #f7f7f2;
-          --surface: #ffffff;
-          --text: #161616;
-          --muted: #6f6f6a;
-        }
       }
 
       * {
