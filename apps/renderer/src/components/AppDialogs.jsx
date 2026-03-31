@@ -459,7 +459,7 @@ export default function AppDialogs({
             <div className="dialog__title">Open Project</div>
             <div className={`project-picker${desktopEnvironment ? ' project-picker--desktop' : ''}`}>
               {desktopEnvironment ? (
-                <div className="project-picker__servers">
+                <div className="project-picker__pane project-picker__pane--servers">
                   <div className="project-picker__section-title">Servers</div>
                   <div className="project-list">
                     {desktopServerProfiles.length ? (
@@ -490,7 +490,7 @@ export default function AppDialogs({
                 </div>
               ) : null}
 
-              <div className="project-picker__projects">
+              <div className="project-picker__pane project-picker__pane--projects">
                 <div className="project-picker__toolbar">
                   <input
                     autoFocus={!desktopEnvironment}

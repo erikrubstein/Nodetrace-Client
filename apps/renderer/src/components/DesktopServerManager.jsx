@@ -74,7 +74,7 @@ export default function DesktopServerManager({
   }
 
   return (
-    <div className="desktop-account-manager-screen">
+    <div className="dialog-backdrop desktop-account-manager-screen" role="presentation">
       <div className="dialog dialog--wide desktop-account-manager" role="dialog">
         {mode === 'list' ? (
           <>
@@ -85,20 +85,10 @@ export default function DesktopServerManager({
                   One server, one account session.
                 </div>
               </div>
-              <div className="desktop-account-manager__header-actions">
-                <button className="ghost-button" disabled={busy} onClick={openCreateMode} type="button">
-                  Add Server
-                </button>
-                {onClose ? (
-                  <button className="ghost-button" disabled={busy} onClick={onClose} type="button">
-                    Close
-                  </button>
-                ) : null}
-              </div>
             </div>
 
             <div className="project-picker project-picker--desktop">
-              <div className="project-picker__servers">
+              <div className="project-picker__pane project-picker__pane--servers">
                 <div className="project-picker__section-title">Servers</div>
                 <div className="project-list">
                   {profiles.length ? (
@@ -124,7 +114,7 @@ export default function DesktopServerManager({
                 </div>
               </div>
 
-              <div className="project-picker__projects">
+              <div className="project-picker__pane project-picker__pane--projects">
                 <div className="project-picker__section-title">Account</div>
                 {selectedProfile ? (
                   <div className="desktop-account-manager__detail-card">
@@ -219,6 +209,16 @@ export default function DesktopServerManager({
                   <div className="inspector__notice">Select a server to manage its account.</div>
                 )}
               </div>
+            </div>
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={openCreateMode} type="button">
+                Add Server
+              </button>
+              {onClose ? (
+                <button className="ghost-button" disabled={busy} onClick={onClose} type="button">
+                  Close
+                </button>
+              ) : null}
             </div>
           </>
         ) : (
