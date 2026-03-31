@@ -4001,6 +4001,26 @@ function MainApp() {
     setRightSidebarOpen(false)
   }
 
+  function renderDesktopServerManager(allowClose = true) {
+    return (
+      <DesktopServerManager
+        busy={busy}
+        currentUser={currentUser}
+        error={error}
+        onClose={allowClose ? () => setDesktopServerDialogOpen(false) : null}
+        onCreateProfile={createServerProfile}
+        onDeleteProfile={deleteServerProfile}
+        onLogout={logoutUser}
+        onOpenAccountDialog={openAccountDialog}
+        onSelectProfile={selectServerProfile}
+        onUpdateProfile={updateServerProfile}
+        onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
+        profiles={desktopServerState.profiles}
+        selectedProfileId={desktopServerState.selectedProfileId}
+      />
+    )
+  }
+
   if (!authReady) {
     if (showMobileEntryPrompt) {
       return (
@@ -4029,20 +4049,15 @@ function MainApp() {
   if (desktopServerSelectionRequired) {
     return (
       <div className="app-shell app-shell--auth" data-theme={theme}>
-        <DesktopServerManager
-          busy={busy}
-          currentUser={currentUser}
-          error={error}
-          onCreateProfile={createServerProfile}
-          onDeleteProfile={deleteServerProfile}
-          onLogout={logoutUser}
-          onOpenAccountDialog={openAccountDialog}
-          onSelectProfile={selectServerProfile}
-          onUpdateProfile={updateServerProfile}
-          onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
-          profiles={desktopServerState.profiles}
-          selectedProfileId={desktopServerState.selectedProfileId}
-        />
+        {renderDesktopServerManager(false)}
+      </div>
+    )
+  }
+
+  if (desktopEnvironment && desktopServerDialogOpen) {
+    return (
+      <div className="app-shell app-shell--auth" data-theme={theme}>
+        {renderDesktopServerManager(true)}
       </div>
     )
   }
@@ -4097,25 +4112,6 @@ function MainApp() {
 
   return (
     <div className="app-shell" data-theme={theme}>
-      {desktopEnvironment && desktopServerDialogOpen ? (
-        <div className="desktop-server-modal">
-          <DesktopServerManager
-            busy={busy}
-            currentUser={currentUser}
-            error={error}
-            onClose={() => setDesktopServerDialogOpen(false)}
-            onCreateProfile={createServerProfile}
-            onDeleteProfile={deleteServerProfile}
-            onLogout={logoutUser}
-            onOpenAccountDialog={openAccountDialog}
-            onSelectProfile={selectServerProfile}
-            onUpdateProfile={updateServerProfile}
-            onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
-            profiles={desktopServerState.profiles}
-            selectedProfileId={desktopServerState.selectedProfileId}
-          />
-        </div>
-      ) : null}
       <TopBar
         appendChildren={appendChildren}
         appendParents={appendParents}
