@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+
+const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
 function normalizeBaseUrlInput(value) {
   return String(value || '').trim()
@@ -44,7 +47,7 @@ export default function DesktopServerManager({
   return (
     <div className="auth-shell auth-shell--server-manager">
       <div className="auth-brand">
-        <img alt="Nodetrace" className="auth-brand__logo" src="/nodetrace.svg" />
+        <img alt="Nodetrace" className="auth-brand__logo" src={brandLogoUrl} />
         <div className="auth-title">Desktop Servers</div>
       </div>
       <div className="auth-card">

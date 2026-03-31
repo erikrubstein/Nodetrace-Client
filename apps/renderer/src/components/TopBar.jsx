@@ -1,9 +1,12 @@
 import IconButton from './IconButton'
+import { resolvePublicAssetUrl } from '../lib/runtimePaths'
 import {
   MoonIcon,
   PhoneIcon,
   SunIcon,
 } from './icons'
+
+const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
 export default function TopBar({
   busy,
@@ -60,7 +63,7 @@ export default function TopBar({
   return (
     <header className={`topbar ${showDesktopControls ? 'topbar--desktop' : ''}`} style={style}>
       <div className="topbar__left topbar__no-drag">
-        <img alt="Nodetrace" className="topbar__logo" src="/nodetrace.svg" />
+        <img alt="Nodetrace" className="topbar__logo" src={brandLogoUrl} />
         <div className="menu-wrap">
           <button
             className={`menu-trigger ${openMenu === 'file' ? 'active' : ''}`}

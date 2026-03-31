@@ -55,6 +55,7 @@ import {
 } from './lib/tree'
 import { getUrlState, updateUrlState } from './lib/urlState'
 import { debugEnabled, debugLog } from './lib/debug'
+import { isCaptureRoute, navigateToCapture } from './lib/runtimePaths'
 import {
   CameraIcon,
   GearIcon,
@@ -3983,7 +3984,7 @@ function MainApp() {
         <div className="app-shell app-shell--auth" data-theme={theme}>
           <MobileEntryScreen
             onContinueToProject={() => setShowMobileEntryPrompt(false)}
-            onOpenCapture={() => window.location.assign('/capture')}
+            onOpenCapture={navigateToCapture}
           />
         </div>
       )
@@ -3996,7 +3997,7 @@ function MainApp() {
       <div className="app-shell app-shell--auth" data-theme={theme}>
         <MobileEntryScreen
           onContinueToProject={() => setShowMobileEntryPrompt(false)}
-          onOpenCapture={() => window.location.assign('/capture')}
+          onOpenCapture={navigateToCapture}
         />
       </div>
     )
@@ -4367,7 +4368,7 @@ function MainApp() {
 }
 
 function App() {
-  if (typeof window !== 'undefined' && window.location.pathname === '/capture') {
+  if (isCaptureRoute()) {
     return <CaptureScreen />
   }
 

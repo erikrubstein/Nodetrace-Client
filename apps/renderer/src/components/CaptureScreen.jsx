@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
+import { api, resolveApiUrl } from '../lib/api'
 import { createPreviewFile } from '../lib/image'
+import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+
+const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
 function getInitialSessionId() {
   if (typeof window === 'undefined') {
@@ -119,7 +122,7 @@ export default function CaptureScreen() {
     window.clearInterval(pollHandleRef.current)
     pollHandleRef.current = null
     if (sessionId) {
-      await fetch(`/api/sessions/${sessionId}/connections/${connectionIdRef.current}`, {
+      await fetch(resolveApiUrl(`/api/sessions/${sessionId}/connections/${connectionIdRef.current}`), {
         method: 'DELETE',
       }).catch(() => {})
     }
@@ -137,7 +140,7 @@ export default function CaptureScreen() {
       return
     }
 
-    const url = `/api/sessions/${sessionId}/connections/${connectionIdRef.current}`
+    const url = resolveApiUrl(`/api/sessions/${sessionId}/connections/${connectionIdRef.current}`)
     if (navigator.sendBeacon) {
       const blob = new Blob([], { type: 'application/octet-stream' })
       navigator.sendBeacon(`${url}/release`, blob)
@@ -247,7 +250,7 @@ export default function CaptureScreen() {
           <div className="auth-screen mobile-entry-screen capture-connect-screen">
             <div className="auth-shell mobile-entry-shell">
               <div className="auth-brand">
-                <img alt="Nodetrace" className="auth-brand__logo" src="/nodetrace.svg" />
+                <img alt="Nodetrace" className="auth-brand__logo" src={brandLogoUrl} />
                 <div className="auth-title">Nodetrace</div>
               </div>
               <section className="auth-card mobile-entry-card capture-connect-card">
