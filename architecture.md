@@ -37,9 +37,11 @@ When adding a feature, decide first which layer owns it:
 
 ### Backend
 
-The backend app lives in:
+The backend lives in a separate `Nodetrace-Server` repo.
 
-- [apps/server/index.js](/C:/SolaSec/Tools/Nodetrace/apps/server/index.js)
+The current backend entrypoint lives there:
+
+- [index.js](/C:/SolaSec/Tools/Nodetrace/Nodetrace-Server/index.js)
 
 It is still orchestration-heavy. That entrypoint and its route modules handle:
 
@@ -114,7 +116,7 @@ The Electron layer owns:
 - desktop window creation
 - custom title bar controls
 - popped-out panel windows
-- local backend process startup in desktop mode
+- connecting to an external server in desktop mode
 
 ## Domain Model
 
@@ -229,7 +231,7 @@ If you add a panel:
 
 1. Add a stable panel ID in `constants.js`
 2. Add a default dock side
-3. Add corresponding server defaults in `apps/server/index.js`
+3. Add corresponding server defaults in `Nodetrace-Server/index.js`
 4. Render it through `DockedSidebar` in `App.jsx`
 5. Add an icon in the rails
 
@@ -501,11 +503,9 @@ Current development workflow intentionally treats builds as a release step, not 
 
 Useful scripts:
 
-- `npm run dev` - backend + renderer web dev
-- `npm run dev:desktop` - renderer + Electron desktop dev
-- `npm run dev:server` - backend only
+- `npm run dev` - renderer web dev
+- `npm run dev:desktop` - renderer + Electron desktop dev against a running server
 - `npm run dev:renderer` - renderer only
-- `npm run start:server` - backend only, non-watch
 - `npm run start:desktop` - Electron app
 - `npm run build` - build the renderer
 - `npm run preview:web` - preview the built renderer
@@ -515,7 +515,7 @@ Useful scripts:
 
 When contributing, prefer these boundaries:
 
-- `apps/server/index.js` and `apps/server/routes`: persistence, permissions, serialization, shared business rules
+- `Nodetrace-Server/index.js` and `Nodetrace-Server/routes`: persistence, permissions, serialization, shared business rules
 - `apps/renderer/src/App.jsx`: orchestration and cross-panel coordination
 - `apps/renderer/src/hooks`: reusable stateful workflows
 - `apps/renderer/src/lib`: pure transformations and helpers
@@ -528,7 +528,7 @@ If a change feels like it is fighting that split, stop and reassess before addin
 
 A contributor should know these up front:
 
-- `apps/server/index.js` is still large and central even after route extraction
+- `Nodetrace-Server/index.js` is still large and central even after route extraction
 - `App.jsx` is orchestration-heavy and can be easy to destabilize
 - AI workflows are intentionally in flux and should be treated as assistive, not final
 - multi-tab behavior is not fully isolated; per-user/project preferences can still interact across tabs in some cases

@@ -4,6 +4,7 @@ import process from 'node:process'
 const children = []
 let shuttingDown = false
 const npmExecPath = process.env.npm_execpath || null
+const e2eServerUrl = String(process.env.NODETRACE_E2E_SERVER_URL || 'http://127.0.0.1:3001').trim()
 
 function buildNpmInvocation(args) {
   if (npmExecPath) {
@@ -64,14 +65,6 @@ process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
 
 {
-  const npm = buildNpmInvocation(['run', 'start', '--workspace', 'nodetrace-server'])
-  start('server', npm.command, npm.args, {
-  HOST: '127.0.0.1',
-  PORT: '3101',
-  })
-}
-
-{
   const npm = buildNpmInvocation([
     'run',
     'dev',
@@ -82,9 +75,9 @@ process.on('SIGTERM', () => shutdown(0))
     '127.0.0.1',
   ])
   start('renderer', npm.command, npm.args, {
-  VITE_HOST: '127.0.0.1',
-  VITE_PORT: '4173',
-  VITE_API_BASE_URL: 'http://127.0.0.1:3101',
+    VITE_HOST: '127.0.0.1',
+    VITE_PORT: '4173',
+    VITE_API_BASE_URL: e2eServerUrl,
   })
 }
 

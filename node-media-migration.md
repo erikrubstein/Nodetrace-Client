@@ -22,21 +22,21 @@ The app now behaves primarily through the node-media model, but legacy variant r
 
 These areas still exist only to preserve legacy data during migration:
 
-- [`apps/server/db/bootstrap.js`](C:/SolaSec/Tools/Nodetrace/apps/server/db/bootstrap.js)
+- [`db/bootstrap.js`](C:/SolaSec/Tools/Nodetrace/Nodetrace-Server/db/bootstrap.js)
   - `ensureNodeMediaSchema(...)`
   - one-time backfill from legacy node image fields and variant rows into `node_media`
 
-- [`apps/server/index.js`](C:/SolaSec/Tools/Nodetrace/apps/server/index.js)
+- [`index.js`](C:/SolaSec/Tools/Nodetrace/Nodetrace-Server/index.js)
   - `syncLegacyNodeMedia(...)`
   - `resequenceNodeMedia(...)`
   - `assertNodeMedia(...)`
   - dual-write behavior between `nodes` image columns and `node_media`
   - delete/move/promote compatibility that still understands legacy variant rows
 
-- [`apps/server/routes/nodeRoutes.js`](C:/SolaSec/Tools/Nodetrace/apps/server/routes/nodeRoutes.js)
+- [`routes/nodeRoutes.js`](C:/SolaSec/Tools/Nodetrace/Nodetrace-Server/routes/nodeRoutes.js)
   - some legacy move/storage compatibility still remains for old hidden variant rows
 
-- [`apps/server/routes/projectFileRoutes.js`](C:/SolaSec/Tools/Nodetrace/apps/server/routes/projectFileRoutes.js)
+- [`routes/projectFileRoutes.js`](C:/SolaSec/Tools/Nodetrace/Nodetrace-Server/routes/projectFileRoutes.js)
   - photo-node creation still uses legacy node records plus dual-write compatibility
   - additional-photo upload is direct `node_media`, but archive/subtree restore may still recreate hidden variant rows when preserving old per-photo metadata
 

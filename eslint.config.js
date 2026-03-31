@@ -27,7 +27,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['apps/server/**/*.js', 'apps/desktop/**/*.js', 'apps/renderer/vite.config.js'],
+    files: ['apps/desktop/**/*.js', 'apps/renderer/vite.config.js', 'scripts/**/*.mjs'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2020,

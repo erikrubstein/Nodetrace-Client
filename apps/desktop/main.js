@@ -1,7 +1,6 @@
 import path from 'node:path'
 import process from 'node:process'
 import fs from 'node:fs'
-import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain } from 'electron'
@@ -9,18 +8,16 @@ import { getPanelInitialWidth, getPanelMinWidth } from '../../packages/shared/sr
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRootDir = path.resolve(desktopDir, '../..')
-const serverEntryPath = path.join(repoRootDir, 'apps/server/index.js')
 const preloadPath = path.join(desktopDir, 'preload.cjs')
-const desktopLogPath = path.join(repoRootDir, 'data', 'tmp', 'desktop.log')
+const desktopLogPath = path.join(repoRootDir, 'logs', 'desktop.log')
 const appIconPath = path.join(repoRootDir, 'apps', 'renderer', 'public', 'nodetrace.svg')
-const serverBindHost = '0.0.0.0'
 const desktopHost = '127.0.0.1'
-const desktopPort = Number(process.env.PORT || 3001)
-const desktopBaseUrl = `http://${desktopHost}:${desktopPort}`
+const configuredServerUrl = String(process.env.NODETRACE_SERVER_URL || '')
+  .trim()
+  .replace(/\/+$/, '')
+const desktopBaseUrl = configuredServerUrl || `http://${desktopHost}:3001`
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
-const serverNodeExecPath = process.env.npm_node_execpath || process.env.NODE || 'node'
 
-let serverProcess = null
 let mainWindow = null
 const panelWindows = new Map()
 
@@ -81,38 +78,6 @@ function attachWindowStateListeners(window, label) {
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     logDesktop(`${label} failed load: ${errorCode} ${errorDescription}`)
   })
-}
-
-function pipeChildLogs(child) {
-  child.stdout?.on('data', (chunk) => {
-    process.stdout.write(String(chunk))
-  })
-  child.stderr?.on('data', (chunk) => {
-    process.stderr.write(String(chunk))
-  })
-}
-
-function ensureServerProcess() {
-  if (serverProcess && !serverProcess.killed) {
-    return
-  }
-
-  serverProcess = spawn(serverNodeExecPath, [serverEntryPath], {
-    cwd: repoRootDir,
-    env: {
-      ...process.env,
-      HOST: serverBindHost,
-      PORT: String(desktopPort),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-
-  pipeChildLogs(serverProcess)
-  serverProcess.on('exit', () => {
-    logDesktop('Server child process exited')
-    serverProcess = null
-  })
-  logDesktop(`Spawned server process with ${serverNodeExecPath} on http://${serverBindHost}:${desktopPort}`)
 }
 
 async function waitForServerReady() {
@@ -198,15 +163,6 @@ function openPanelWindow(options = {}) {
   return { ok: true, panelId }
 }
 
-function stopServerProcess() {
-  if (!serverProcess || serverProcess.killed) {
-    return
-  }
-  serverProcess.kill()
-  logDesktop('Stopped server child process')
-  serverProcess = null
-}
-
 function getEventWindow(event) {
   return BrowserWindow.fromWebContents(event.sender)
 }
@@ -241,10 +197,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  stopServerProcess()
-})
-
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createMainWindow()
@@ -252,6 +204,5 @@ app.on('activate', () => {
 })
 
 await app.whenReady()
-logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''}`)
-ensureServerProcess()
+logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''} against ${desktopBaseUrl}`)
 createMainWindow()

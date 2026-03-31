@@ -9,12 +9,10 @@
   ],
   "scripts": {
     "dev": "npm run dev:web",
-    "dev:web": "concurrently \"npm run dev --workspace nodetrace-server\" \"npm run dev --workspace nodetrace-renderer\"",
+    "dev:web": "npm run dev --workspace nodetrace-renderer",
     "dev:desktop": "concurrently \"npm run dev:renderer\" \"electron apps/desktop --dev-url=http://127.0.0.1:5173\"",
-    "dev:server": "npm run dev --workspace nodetrace-server",
     "dev:renderer": "npm run dev --workspace nodetrace-renderer",
-    "start": "npm run start:server",
-    "start:server": "npm run start --workspace nodetrace-server",
+    "start": "npm run preview:web",
     "start:desktop": "electron apps/desktop",
     "build": "npm run build:web",
     "build:web": "npm run build --workspace nodetrace-renderer",
@@ -22,15 +20,10 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "lint": "eslint .",
-    "lint:server": "npm run lint --workspace nodetrace-server",
     "lint:renderer": "npm run lint --workspace nodetrace-renderer",
     "lint:desktop": "npm run lint --workspace nodetrace-desktop"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "better-sqlite3": "^12.6.2",
-    "express": "^5.2.1",
-    "multer": "^2.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

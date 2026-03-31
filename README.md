@@ -231,16 +231,12 @@ Nodetrace is currently in the final stages of moving from an older `folder/photo
 - React
 - Vite
 - Electron desktop shell
-- Express
-- SQLite via `better-sqlite3`
-- local filesystem media storage
 
 Repo layout:
 
-- `apps/server` - Express + SQLite backend
 - `apps/renderer` - React + Vite UI
 - `apps/desktop` - Electron shell and panel-window orchestration
-- `packages/shared` - shared defaults and sizing metadata
+- `packages/shared` - shared defaults and sizing metadata used by the client runtimes
 
 ## Development
 
@@ -265,36 +261,26 @@ npm run dev:desktop
 By default:
 
 - dev frontend: `http://localhost:5173`
-- backend/API: `http://localhost:3001`
+- expected backend/API: `http://localhost:3001`
+
+The client repo does not start or manage the server. Run the backend separately.
 
 Release-oriented manual verification lives in [QA_CHECKLIST.md](C:/SolaSec/Tools/Nodetrace/QA_CHECKLIST.md).
 
 Useful root scripts:
 
-- `npm run dev` - backend + renderer web dev
-- `npm run dev:desktop` - renderer + Electron desktop dev
-- `npm run dev:server` - backend only
+- `npm run dev` - renderer web dev
+- `npm run dev:desktop` - renderer + Electron desktop dev against a running server
 - `npm run dev:renderer` - renderer only
-- `npm run start:server` - backend only, non-watch
 - `npm run start:desktop` - Electron app
 - `npm run build` - build the renderer into `dist`
 - `npm run preview:web` - preview the built renderer
 - `npm run lint` - lint the whole repo
-- `npm run test:e2e` - Playwright smoke test
+- `$env:NODETRACE_E2E_SERVER_URL='http://127.0.0.1:3001'; npm run test:e2e` - Playwright smoke test against a running server in PowerShell
 
 ## Environment Notes
 
-Normal local use does not require much configuration, but AI key storage does.
-
-Nodetrace reads `.env` automatically on server startup.
-
-For project-scoped OpenAI API key storage, define:
-
-```env
-NODETRACE_SECRET_KEY=replace-this-with-a-long-random-secret
-```
-
-That key is used only to encrypt stored project API keys on the server.
+Normal local use does not require much configuration on the client side. The backend has its own `.env` and runtime configuration in the separate server repo.
 
 ## Contributor Notes
 
