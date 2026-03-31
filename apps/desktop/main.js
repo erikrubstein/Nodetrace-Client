@@ -26,6 +26,7 @@ let desktopState = {
   selectedProfileId: null,
   sessionCookiesByProfileId: {},
 }
+let desktopProfileAuthStateById = {}
 
 function logDesktop(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`
@@ -141,9 +142,22 @@ function getSelectedServerProfile() {
   return desktopState.profiles.find((profile) => profile.id === desktopState.selectedProfileId) || null
 }
 
+function getProfileAuthState(profileId) {
+  return desktopProfileAuthStateById[profileId] || {
+    authenticated: false,
+    userId: null,
+    username: '',
+    captureSessionId: '',
+    error: '',
+  }
+}
+
 function getDesktopServerState() {
   return {
-    profiles: desktopState.profiles.map((profile) => ({ ...profile })),
+    profiles: desktopState.profiles.map((profile) => ({
+      ...profile,
+      ...getProfileAuthState(profile.id),
+    })),
     selectedProfileId: desktopState.selectedProfileId,
     proxyBaseUrl: desktopProxyBaseUrl,
   }
@@ -168,6 +182,102 @@ function setCorsHeaders(req, res) {
 
 function getStoredCookieHeader(profileId) {
   return String(desktopState.sessionCookiesByProfileId?.[profileId] || '').trim()
+}
+
+function requestJson(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const transport = url.protocol === 'https:' ? https : http
+    const request = transport.request(
+      url,
+      {
+        method: options.method || 'GET',
+        headers: options.headers || {},
+      },
+      (response) => {
+        const chunks = []
+        response.on('data', (chunk) => chunks.push(chunk))
+        response.on('end', () => {
+          const rawBody = Buffer.concat(chunks).toString('utf8')
+          let payload = null
+          try {
+            payload = rawBody ? JSON.parse(rawBody) : null
+          } catch {
+            payload = null
+          }
+          resolve({
+            ok: response.statusCode >= 200 && response.statusCode < 300,
+            statusCode: response.statusCode || 0,
+            payload,
+          })
+        })
+      },
+    )
+
+    request.on('error', reject)
+    request.end(options.body || null)
+  })
+}
+
+async function fetchProfileAuthState(profile) {
+  try {
+    const targetUrl = new URL('/api/auth/me', `${profile.baseUrl}/`)
+    const cookieHeader = getStoredCookieHeader(profile.id)
+    const headers = {
+      accept: 'application/json',
+    }
+    if (cookieHeader) {
+      headers.cookie = cookieHeader
+    }
+
+    const response = await requestJson(targetUrl, { headers })
+    const payload = response.payload
+    if (!response.ok || !payload?.authenticated || !payload.user) {
+      return {
+        authenticated: false,
+        userId: null,
+        username: '',
+        captureSessionId: '',
+        error: response.ok ? '' : `HTTP ${response.statusCode}`,
+      }
+    }
+
+    return {
+      authenticated: true,
+      userId: String(payload.user.id || ''),
+      username: String(payload.user.username || ''),
+      captureSessionId: String(payload.user.captureSessionId || ''),
+      error: '',
+    }
+  } catch (error) {
+    return {
+      authenticated: false,
+      userId: null,
+      username: '',
+      captureSessionId: '',
+      error: error.message || 'Unable to reach server',
+    }
+  }
+}
+
+async function refreshProfileAuthState(profileId) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    delete desktopProfileAuthStateById[profileId]
+    return null
+  }
+
+  const nextState = await fetchProfileAuthState(profile)
+  desktopProfileAuthStateById[profileId] = nextState
+  return nextState
+}
+
+async function refreshAllProfileAuthStates() {
+  await Promise.all(desktopState.profiles.map((profile) => refreshProfileAuthState(profile.id)))
+  for (const profileId of Object.keys(desktopProfileAuthStateById)) {
+    if (!desktopState.profiles.some((profile) => profile.id === profileId)) {
+      delete desktopProfileAuthStateById[profileId]
+    }
+  }
 }
 
 function captureSessionCookie(profileId, setCookieHeader) {
@@ -200,6 +310,9 @@ function captureSessionCookie(profileId, setCookieHeader) {
 
   if (changed) {
     writeDesktopState()
+    void refreshProfileAuthState(profileId).then(() => {
+      broadcastDesktopServerState()
+    })
   }
 }
 
@@ -405,6 +518,7 @@ async function upsertServerProfile(id, payload) {
   }
 
   writeDesktopState()
+  await refreshProfileAuthState(nextProfile.id)
   broadcastDesktopServerState()
   return getDesktopServerState()
 }
@@ -412,6 +526,7 @@ async function upsertServerProfile(id, payload) {
 async function deleteServerProfile(id) {
   desktopState.profiles = desktopState.profiles.filter((profile) => profile.id !== id)
   delete desktopState.sessionCookiesByProfileId[id]
+  delete desktopProfileAuthStateById[id]
   if (desktopState.selectedProfileId === id) {
     desktopState.selectedProfileId = desktopState.profiles[0]?.id || null
   }
@@ -426,6 +541,7 @@ async function selectServerProfile(id) {
   }
   desktopState.selectedProfileId = id
   writeDesktopState()
+  await refreshProfileAuthState(id)
   broadcastDesktopServerState()
   return getDesktopServerState()
 }
@@ -457,7 +573,10 @@ ipcMain.handle('desktop:get-window-state', (event) => {
   const window = getEventWindow(event)
   return { maximized: Boolean(window?.isMaximized()) }
 })
-ipcMain.handle('desktop:get-server-state', () => getDesktopServerState())
+ipcMain.handle('desktop:get-server-state', async () => {
+  await refreshAllProfileAuthStates()
+  return getDesktopServerState()
+})
 ipcMain.handle('desktop:create-server-profile', (_event, profile) => upsertServerProfile(null, profile))
 ipcMain.handle('desktop:update-server-profile', (_event, payload) =>
   upsertServerProfile(String(payload?.id || '').trim(), payload?.profile || {}),
@@ -484,5 +603,6 @@ app.on('before-quit', () => {
 await app.whenReady()
 readDesktopState()
 await startDesktopProxy()
+await refreshAllProfileAuthStates()
 logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''}`)
 createMainWindow()

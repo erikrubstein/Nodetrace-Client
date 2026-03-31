@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import AccountPanel from './components/AccountPanel'
 import AppDialogs from './components/AppDialogs'
 import AuthScreen from './components/AuthScreen'
 import CameraPanel from './components/CameraPanel'
@@ -64,7 +63,6 @@ import {
   PreviewIcon,
   SearchIcon,
   TemplatesIcon,
-  UserIcon,
   UsersIcon,
   WrenchIcon,
 } from './components/icons'
@@ -226,6 +224,15 @@ function MainApp() {
     [desktopServerState.profiles, desktopServerState.selectedProfileId],
   )
   const desktopServerSelectionRequired = desktopEnvironment && desktopServerReady && !selectedDesktopServerProfile
+  const refreshDesktopServerState = useCallback(async () => {
+    if (!desktopEnvironment) {
+      return null
+    }
+    const nextState = await getDesktopServerState()
+    setDesktopServerState(nextState)
+    configureApiBaseUrl(nextState.proxyBaseUrl || '')
+    return nextState
+  }, [desktopEnvironment])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -247,13 +254,14 @@ function MainApp() {
     }
 
     let cancelled = false
-    getDesktopServerState()
+    refreshDesktopServerState()
       .then((state) => {
         if (cancelled) {
           return
         }
-        setDesktopServerState(state)
-        configureApiBaseUrl(state.proxyBaseUrl || '')
+        if (!state) {
+          return
+        }
         setDesktopServerReady(true)
       })
       .catch((error) => {
@@ -276,7 +284,7 @@ function MainApp() {
       cancelled = true
       unsubscribe?.()
     }
-  }, [desktopEnvironment])
+  }, [desktopEnvironment, refreshDesktopServerState])
 
   useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId
@@ -883,6 +891,25 @@ function MainApp() {
     })
     setStatus(desktopEnvironment ? 'Sign in to access this server.' : 'Sign in to access your projects.')
   }, [desktopEnvironment])
+
+  const openAccountManager = useCallback(() => {
+    setError('')
+    setAccountStatus('')
+    if (desktopEnvironment) {
+      void refreshDesktopServerState().catch((loadError) => {
+        setError(loadError.message)
+      })
+      setDesktopServerDialogOpen(true)
+      return
+    }
+    setAccountDialog('overview')
+  }, [desktopEnvironment, refreshDesktopServerState])
+
+  const openAccountDialog = useCallback((dialog) => {
+    setError('')
+    setAccountStatus('')
+    setAccountDialog(dialog)
+  }, [])
 
   const loadCurrentUser = useCallback(async () => {
     if (desktopEnvironment && !desktopServerReady) {
@@ -2092,6 +2119,9 @@ function MainApp() {
       }
       setCurrentUser(user)
       setAuthReady(true)
+      if (desktopEnvironment) {
+        await refreshDesktopServerState()
+      }
       await loadProjects(getUrlState().projectId)
     } catch (submitError) {
       setError(submitError.message)
@@ -2115,6 +2145,9 @@ function MainApp() {
     try {
       await api('/api/auth/logout', { method: 'POST' })
       handleAuthLost()
+      if (desktopEnvironment) {
+        await refreshDesktopServerState()
+      }
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -3037,6 +3070,9 @@ function MainApp() {
       setAccountForm((current) => ({ ...current, username: '', deleteConfirmation: '' }))
       setAccountStatus('Username updated.')
       setAccountDialog(null)
+      if (desktopEnvironment) {
+        await refreshDesktopServerState()
+      }
       await loadProjects(selectedProjectId)
       if (selectedProjectId) {
         await loadTree(selectedProjectId, selectedNodeIdRef.current)
@@ -3072,6 +3108,9 @@ function MainApp() {
       setAccountForm((current) => ({ ...current, currentPassword: '', newPassword: '' }))
       setAccountStatus('Password updated.')
       setAccountDialog(null)
+      if (desktopEnvironment) {
+        await refreshDesktopServerState()
+      }
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -3105,6 +3144,9 @@ function MainApp() {
         newPassword: '',
         deleteConfirmation: '',
       })
+      if (desktopEnvironment) {
+        await refreshDesktopServerState()
+      }
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -3932,25 +3974,6 @@ function MainApp() {
           />
         ),
       },
-      account: {
-        id: 'account',
-        title: 'Account',
-        icon: <UserIcon />,
-        content: (
-          <AccountPanel
-            currentUser={currentUser}
-            currentServerLabel={selectedDesktopServerProfile?.name || ''}
-            currentServerUrl={selectedDesktopServerProfile?.baseUrl || ''}
-            manageServers={desktopEnvironment ? () => setDesktopServerDialogOpen(true) : null}
-            openAccountDialog={(dialog) => {
-              setError('')
-              setAccountStatus('')
-              setAccountDialog(dialog)
-            }}
-            logoutUser={() => void logoutUser()}
-          />
-        ),
-      },
     }
   const leftRailPanels = leftDockedPanelIds.map((panelId) => panelDefinitions[panelId]).filter(Boolean)
   const rightRailPanels = rightDockedPanelIds.map((panelId) => panelDefinitions[panelId]).filter(Boolean)
@@ -4008,10 +4031,15 @@ function MainApp() {
       <div className="app-shell app-shell--auth" data-theme={theme}>
         <DesktopServerManager
           busy={busy}
+          currentUser={currentUser}
+          error={error}
           onCreateProfile={createServerProfile}
           onDeleteProfile={deleteServerProfile}
+          onLogout={logoutUser}
+          onOpenAccountDialog={openAccountDialog}
           onSelectProfile={selectServerProfile}
           onUpdateProfile={updateServerProfile}
+          onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
           profiles={desktopServerState.profiles}
           selectedProfileId={desktopServerState.selectedProfileId}
         />
@@ -4028,8 +4056,9 @@ function MainApp() {
           currentServerLabel={selectedDesktopServerProfile?.name || ''}
           currentServerUrl={selectedDesktopServerProfile?.baseUrl || ''}
           error={error}
+          manageAccountsLabel={desktopEnvironment ? 'Manage Accounts' : 'Manage Account'}
           onLogin={loginUser}
-          onManageServers={desktopEnvironment ? () => setDesktopServerDialogOpen(true) : null}
+          onManageServers={desktopEnvironment ? openAccountManager : null}
           onRegister={registerUser}
         />
       </div>
@@ -4072,11 +4101,16 @@ function MainApp() {
         <div className="desktop-server-modal">
           <DesktopServerManager
             busy={busy}
+            currentUser={currentUser}
+            error={error}
             onClose={() => setDesktopServerDialogOpen(false)}
             onCreateProfile={createServerProfile}
             onDeleteProfile={deleteServerProfile}
+            onLogout={logoutUser}
+            onOpenAccountDialog={openAccountDialog}
             onSelectProfile={selectServerProfile}
             onUpdateProfile={updateServerProfile}
+            onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
             profiles={desktopServerState.profiles}
             selectedProfileId={desktopServerState.selectedProfileId}
           />
@@ -4104,10 +4138,10 @@ function MainApp() {
         pendingUploadParentId={pendingUploadParentId}
         presenceUsers={remotePresenceUsers}
         projectName={tree?.project?.name}
-        projects={projects}
         desktopWindowMaximized={desktopWindowMaximized}
         redo={redo}
         invertSelection={invertEffectiveSelection}
+        manageAccountsLabel={desktopEnvironment ? 'Manage Accounts' : 'Manage Account'}
         rightSidebarOpen={effectiveRightSidebarOpen}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
@@ -4136,6 +4170,7 @@ function MainApp() {
         tree={tree}
         undo={undo}
         uploadFiles={uploadFiles}
+        onManageAccounts={openAccountManager}
         onDesktopClose={() => closeDesktopWindow()}
         onDesktopMinimize={() => minimizeDesktopWindow()}
         onDesktopToggleMaximize={() => toggleMaximizeDesktopWindow()}
@@ -4298,6 +4333,8 @@ function MainApp() {
         confirmRemoveIdentificationTemplate={confirmRemoveIdentificationTemplate}
         createProject={createProject}
         currentUser={currentUser}
+        desktopEnvironment={desktopEnvironment}
+        desktopServerProfiles={desktopServerState.profiles}
         deleteNode={deleteNode}
         deleteAccount={deleteAccount}
         deleteTemplate={deleteTemplate}
@@ -4325,11 +4362,15 @@ function MainApp() {
         mobileConnectionCount={mobileConnectionCount}
         newNodeDialog={newNodeDialog}
         newNodeName={newNodeName}
+        onOpenManageAccounts={openAccountManager}
+        onSelectDesktopServerProfile={selectServerProfile}
         projectName={projectName}
         projects={projects}
         renameProject={renameProject}
+        logoutUser={() => void logoutUser()}
         saveProjectOpenAiKey={saveProjectOpenAiKey}
         selectedNode={selectedNode}
+        selectedDesktopServerProfileId={desktopServerState.selectedProfileId}
         selectedProjectId={selectedProjectId}
         sessionDialogOpen={sessionDialogOpen}
         setAccountDialog={setAccountDialog}

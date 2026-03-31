@@ -298,12 +298,41 @@ select {
   word-break: break-all;
 }
 
+.desktop-server-item__status {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
 .desktop-server-item__actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.desktop-server-manager__account {
+  display: grid;
+  gap: 10px;
+}
+
+.desktop-server-manager__account-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--control-bg);
+}
+
+.desktop-server-manager__account-status {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.desktop-server-manager__account-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .desktop-server-manager__form {
@@ -1945,7 +1974,6 @@ body.capture-route #root {
 }
 
 .settings-panel,
-.account-panel,
 .fields-panel,
 .templates-panel {
   display: flex;
@@ -1956,27 +1984,18 @@ body.capture-route #root {
 }
 
 .sidebar-shell__body > .settings-panel,
-.sidebar-shell__body > .account-panel,
 .sidebar-shell__body > .fields-panel,
 .sidebar-shell__body > .templates-panel {
   min-height: 100%;
 }
 
 .sidebar-shell__body > .settings-panel > .inspector__footer,
-.sidebar-shell__body > .account-panel > .inspector__footer,
 .sidebar-shell__body > .fields-panel > .inspector__footer,
 .sidebar-shell__body > .templates-panel > .inspector__footer,
 .sidebar-shell--window .sidebar-shell__body > .settings-panel > .inspector__footer,
-.sidebar-shell--window .sidebar-shell__body > .account-panel > .inspector__footer,
 .sidebar-shell--window .sidebar-shell__body > .fields-panel > .inspector__footer,
 .sidebar-shell--window .sidebar-shell__body > .templates-panel > .inspector__footer {
   margin-top: auto;
-}
-
-.account-panel .primary-button,
-.account-panel .ghost-button,
-.account-panel .danger-button {
-  width: 100%;
 }
 
 .button-spinner {
@@ -2499,6 +2518,31 @@ button:disabled {
   gap: 10px;
 }
 
+.project-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.project-picker--desktop {
+  grid-template-columns: minmax(220px, 240px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.project-picker__servers,
+.project-picker__projects,
+.project-picker__section,
+.project-picker__sections {
+  display: grid;
+  gap: 10px;
+}
+
+.project-picker__section-title {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .project-picker__divider {
   height: 1px;
   background: var(--border);
@@ -2530,6 +2574,11 @@ button:disabled {
 
 .project-row.active {
   box-shadow: inset 0 0 0 1px var(--selected);
+}
+
+.project-row--server {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .panel-tabs {
@@ -3098,6 +3147,10 @@ button:disabled {
 }
 
 @media (max-width: 920px) {
+  .project-picker--desktop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .main-layout {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr);

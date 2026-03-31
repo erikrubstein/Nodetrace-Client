@@ -9,6 +9,7 @@ export default function AuthScreen({
   currentServerLabel = '',
   currentServerUrl = '',
   error,
+  manageAccountsLabel = 'Manage Accounts',
   onLogin,
   onManageServers = null,
   onRegister,
@@ -73,7 +74,7 @@ export default function AuthScreen({
             </div>
             {onManageServers ? (
               <button className="ghost-button" onClick={onManageServers} type="button">
-                Servers
+                {manageAccountsLabel}
               </button>
             ) : null}
           </div>

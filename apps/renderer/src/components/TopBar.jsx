@@ -25,8 +25,8 @@ export default function TopBar({
   onPresenceSelect,
   presenceUsers,
   projectName,
-  projects,
   redo,
+  manageAccountsLabel = '',
   appendChildren,
   appendParents,
   appendSearchResults,
@@ -54,6 +54,7 @@ export default function TopBar({
   tree,
   undo,
   uploadFiles,
+  onManageAccounts = null,
   onDesktopClose,
   onDesktopMinimize,
   onDesktopToggleMaximize,
@@ -86,7 +87,6 @@ export default function TopBar({
               </button>
               <button
                 className="menu-item"
-                disabled={projects.length === 0}
                 onClick={() => {
                   setShowProjectDialog('open')
                   setOpenMenu(null)
@@ -145,6 +145,32 @@ export default function TopBar({
             </div>
           ) : null}
         </div>
+
+        {onManageAccounts ? (
+          <div className="menu-wrap">
+            <button
+              className={`menu-trigger ${openMenu === 'accounts' ? 'active' : ''}`}
+              onClick={() => setOpenMenu((current) => (current === 'accounts' ? null : 'accounts'))}
+              type="button"
+            >
+              Accounts
+            </button>
+            {openMenu === 'accounts' ? (
+              <div className="menu-panel">
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    onManageAccounts()
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {manageAccountsLabel || 'Manage Account'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="menu-wrap">
           <button

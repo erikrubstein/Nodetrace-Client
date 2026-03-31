@@ -9,7 +9,6 @@ export const panelMinWidths = {
   fields: 420,
   settings: 360,
   collaborators: 360,
-  account: 340,
 }
 
 export const panelInitialWidths = {
@@ -21,7 +20,6 @@ export const panelInitialWidths = {
   fields: 620,
   settings: 460,
   collaborators: 460,
-  account: 420,
 }
 
 export function getPanelMinWidth(panelId) {

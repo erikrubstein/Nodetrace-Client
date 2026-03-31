@@ -14,6 +14,8 @@ export default function AppDialogs({
   confirmMergeNodeIntoPhoto,
   createProject,
   currentUser,
+  desktopEnvironment = false,
+  desktopServerProfiles = [],
   deleteNode,
   deleteAccount,
   deleteTemplate,
@@ -42,10 +44,14 @@ export default function AppDialogs({
   mobileConnectionCount,
   newNodeDialog,
   newNodeName,
+  onOpenManageAccounts = null,
+  onSelectDesktopServerProfile = null,
   projects,
   renameProject,
+  logoutUser,
   saveProjectOpenAiKey,
   selectedNode,
+  selectedDesktopServerProfileId = null,
   selectedProjectId,
   sessionDialogOpen,
   setAccountDialog,
@@ -97,6 +103,21 @@ export default function AppDialogs({
     return sortedProjects.filter((project) => String(project?.name || '').toLowerCase().includes(query))
   }, [openProjectSearch, sortedProjects])
 
+  const selectedDesktopServerProfile = useMemo(
+    () => desktopServerProfiles.find((profile) => profile.id === selectedDesktopServerProfileId) || null,
+    [desktopServerProfiles, selectedDesktopServerProfileId],
+  )
+
+  const ownedProjects = useMemo(
+    () => filteredProjects.filter((project) => project.ownerUserId && project.ownerUserId === currentUser?.id),
+    [currentUser?.id, filteredProjects],
+  )
+
+  const collaboratorProjects = useMemo(
+    () => filteredProjects.filter((project) => !project.ownerUserId || project.ownerUserId !== currentUser?.id),
+    [currentUser?.id, filteredProjects],
+  )
+
   const importableProjects = useMemo(
     () =>
       (projects || []).filter(
@@ -111,8 +132,82 @@ export default function AppDialogs({
 
   const canCloseOpenProjectDialog = Boolean(tree?.project?.id)
 
+  function renderProjectSection(title, items) {
+    if (!items.length) {
+      return null
+    }
+
+    return (
+      <div className="project-picker__section" key={title}>
+        <div className="project-picker__section-title">{title}</div>
+        <div className="project-list">
+          {items.map((project) => (
+            <button
+              key={project.id}
+              className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
+              onClick={() => {
+                setOpenProjectSearch('')
+                setShowProjectId(project.id)
+                setShowProjectDialog(null)
+              }}
+              type="button"
+            >
+              <span>{project.name}</span>
+              <small>{project.node_count} nodes</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
+      {accountDialog === 'overview' ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setAccountDialog(null)} role="presentation">
+          <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="dialog__title">Manage Account</div>
+            <div className="inspector__notice">
+              Signed in as <strong>{currentUser?.username || 'Unknown user'}</strong>
+            </div>
+            <div className="field-stack">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setAccountDialog('username')}
+                type="button"
+              >
+                Change Username
+              </button>
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setAccountDialog('password')}
+                type="button"
+              >
+                Change Password
+              </button>
+              <button
+                className="danger-button"
+                disabled={busy}
+                onClick={() => setAccountDialog('delete-account')}
+                type="button"
+              >
+                Delete Account
+              </button>
+              <button className="ghost-button" disabled={busy} onClick={logoutUser} type="button">
+                Logout
+              </button>
+            </div>
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setAccountDialog(null)} type="button">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {accountDialog === 'username' ? (
         <div className="dialog-backdrop" onClick={() => !busy && setAccountDialog(null)} role="presentation">
           <div
@@ -362,35 +457,64 @@ export default function AppDialogs({
             role="dialog"
           >
             <div className="dialog__title">Open Project</div>
-            <div className="project-picker__toolbar">
-              <input
-                autoFocus
-                onChange={(event) => setOpenProjectSearch(event.target.value)}
-                placeholder="Search projects"
-                value={openProjectSearch}
-              />
-            </div>
-            <div className="project-picker__divider" />
-            <div className="project-list">
-              {filteredProjects.length ? (
-                filteredProjects.map((project) => (
-                  <button
-                    key={project.id}
-                    className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
-                    onClick={() => {
-                      setOpenProjectSearch('')
-                      setShowProjectId(project.id)
-                      setShowProjectDialog(null)
-                    }}
-                    type="button"
-                  >
-                    <span>{project.name}</span>
-                    <small>{project.node_count} nodes</small>
-                  </button>
-                ))
-              ) : (
-                <div className="inspector__notice">No projects match that search.</div>
-              )}
+            <div className={`project-picker${desktopEnvironment ? ' project-picker--desktop' : ''}`}>
+              {desktopEnvironment ? (
+                <div className="project-picker__servers">
+                  <div className="project-picker__section-title">Servers</div>
+                  <div className="project-list">
+                    {desktopServerProfiles.length ? (
+                      desktopServerProfiles.map((profile) => {
+                        const selected = profile.id === selectedDesktopServerProfileId
+                        return (
+                          <button
+                            key={profile.id}
+                            className={`project-row project-row--server ${selected ? 'active' : ''}`}
+                            disabled={busy || !profile.authenticated}
+                            onClick={() => void onSelectDesktopServerProfile?.(profile.id)}
+                            type="button"
+                          >
+                            <span>{profile.name}</span>
+                            <small>{profile.authenticated ? profile.username : 'Sign in required'}</small>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="inspector__notice">No desktop servers saved yet.</div>
+                    )}
+                  </div>
+                  {onOpenManageAccounts ? (
+                    <button className="ghost-button" disabled={busy} onClick={onOpenManageAccounts} type="button">
+                      Manage Accounts
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="project-picker__projects">
+                <div className="project-picker__toolbar">
+                  <input
+                    autoFocus={!desktopEnvironment}
+                    onChange={(event) => setOpenProjectSearch(event.target.value)}
+                    placeholder="Search projects"
+                    value={openProjectSearch}
+                  />
+                </div>
+                <div className="project-picker__divider" />
+                {desktopEnvironment && selectedDesktopServerProfile && !selectedDesktopServerProfile.authenticated ? (
+                  <div className="inspector__notice">
+                    Sign in to <strong>{selectedDesktopServerProfile.name}</strong> before opening projects on that server.
+                  </div>
+                ) : ownedProjects.length || collaboratorProjects.length ? (
+                  <div className="project-picker__sections">
+                    {renderProjectSection('Owned Projects', ownedProjects)}
+                    {renderProjectSection('Collaborator Projects', collaboratorProjects)}
+                  </div>
+                ) : (
+                  <div className="inspector__notice">
+                    {openProjectSearch ? 'No projects match that search.' : 'No projects available on this server yet.'}
+                  </div>
+                )}
+              </div>
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
             <div className="dialog__actions project-picker__actions">
