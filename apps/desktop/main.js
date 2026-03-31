@@ -318,18 +318,37 @@ function captureSessionCookie(profileId, setCookieHeader) {
 
 function createDesktopProxyServer() {
   return http.createServer((req, res) => {
+    let responseCompleted = false
+    let upstreamResponse = null
+
+    function markResponseCompleted() {
+      responseCompleted = true
+    }
+
+    function writeProxyError(statusCode, message) {
+      if (responseCompleted || res.headersSent || res.writableEnded || res.destroyed) {
+        return
+      }
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: message }))
+      responseCompleted = true
+    }
+
+    res.once('finish', markResponseCompleted)
+    res.once('close', markResponseCompleted)
+
     setCorsHeaders(req, res)
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204)
       res.end()
+      responseCompleted = true
       return
     }
 
     const selectedProfile = getSelectedServerProfile()
     if (!selectedProfile) {
-      res.writeHead(503, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'No desktop server selected' }))
+      writeProxyError(503, 'No desktop server selected')
       return
     }
 
@@ -337,8 +356,7 @@ function createDesktopProxyServer() {
     try {
       targetUrl = new URL(req.url || '/', `${selectedProfile.baseUrl}/`)
     } catch {
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'Invalid desktop proxy request URL' }))
+      writeProxyError(400, 'Invalid desktop proxy request URL')
       return
     }
 
@@ -357,7 +375,8 @@ function createDesktopProxyServer() {
         method: req.method,
         headers: proxyHeaders,
       },
-      (upstreamResponse) => {
+      (nextUpstreamResponse) => {
+        upstreamResponse = nextUpstreamResponse
         captureSessionCookie(selectedProfile.id, upstreamResponse.headers['set-cookie'])
 
         for (const [headerName, headerValue] of Object.entries(upstreamResponse.headers)) {
@@ -372,8 +391,25 @@ function createDesktopProxyServer() {
     )
 
     upstreamRequest.on('error', (error) => {
-      res.writeHead(502, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: `Desktop proxy request failed: ${error.message}` }))
+      if (responseCompleted || res.headersSent || res.writableEnded || res.destroyed) {
+        logDesktop(`Desktop proxy late error for ${targetUrl}: ${error.message}`)
+        res.destroy()
+        return
+      }
+      writeProxyError(502, `Desktop proxy request failed: ${error.message}`)
+    })
+
+    upstreamRequest.on('close', () => {
+      if (upstreamResponse && !upstreamResponse.destroyed && (res.destroyed || res.writableEnded)) {
+        upstreamResponse.destroy()
+      }
+    })
+
+    req.on('aborted', () => {
+      upstreamRequest.destroy()
+      if (upstreamResponse && !upstreamResponse.destroyed) {
+        upstreamResponse.destroy()
+      }
     })
 
     req.pipe(upstreamRequest)
