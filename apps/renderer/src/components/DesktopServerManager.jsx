@@ -1,7 +1,12 @@
-import { useState } from 'react'
-import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+import { useMemo, useState } from 'react'
 
-const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
+function createEmptyEditor() {
+  return {
+    id: null,
+    name: '',
+    baseUrl: '',
+  }
+}
 
 function normalizeBaseUrlInput(value) {
   return String(value || '').trim()
@@ -22,32 +27,46 @@ export default function DesktopServerManager({
   profiles = [],
   selectedProfileId = null,
 }) {
-  const [editingProfileId, setEditingProfileId] = useState(null)
-  const [nameInput, setNameInput] = useState('')
-  const [baseUrlInput, setBaseUrlInput] = useState('')
-  const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) || null
-  const selectedProfileUsername = selectedProfile?.username || currentUser?.username || ''
+  const [mode, setMode] = useState('list')
+  const [editor, setEditor] = useState(createEmptyEditor())
+  const selectedProfile = useMemo(
+    () => profiles.find((profile) => profile.id === selectedProfileId) || null,
+    [profiles, selectedProfileId],
+  )
   const selectedProfileReady = Boolean(
     selectedProfile?.authenticated && currentUser && currentUser.id === selectedProfile.userId,
   )
 
-  function resetEditor() {
-    setEditingProfileId(null)
-    setNameInput('')
-    setBaseUrlInput('')
+  function openCreateMode() {
+    setEditor(createEmptyEditor())
+    setMode('create')
   }
 
-  async function handleSubmit() {
+  function openEditMode(profile) {
+    setEditor({
+      id: profile.id,
+      name: profile.name || '',
+      baseUrl: profile.baseUrl || '',
+    })
+    setMode('edit')
+  }
+
+  function resetEditor() {
+    setEditor(createEmptyEditor())
+    setMode('list')
+  }
+
+  async function handleSave() {
     const payload = {
-      name: String(nameInput || '').trim(),
-      baseUrl: normalizeBaseUrlInput(baseUrlInput),
+      name: String(editor.name || '').trim(),
+      baseUrl: normalizeBaseUrlInput(editor.baseUrl),
     }
     if (!payload.name || !payload.baseUrl) {
       return
     }
 
-    if (editingProfileId) {
-      await onUpdateProfile?.(editingProfileId, payload)
+    if (mode === 'edit' && editor.id) {
+      await onUpdateProfile?.(editor.id, payload)
     } else {
       await onCreateProfile?.(payload)
     }
@@ -55,202 +74,214 @@ export default function DesktopServerManager({
   }
 
   return (
-    <div className="auth-shell auth-shell--server-manager">
-      <div className="auth-brand">
-        <img alt="Nodetrace" className="auth-brand__logo" src={brandLogoUrl} />
-        <div className="auth-title">Manage Accounts</div>
-      </div>
-      <div className="auth-card">
-        <div className="desktop-server-manager__header">
-          <div className="desktop-server-manager__lead">
-            Save one or more Nodetrace servers for this desktop client. Each server keeps its own account session and project list.
-          </div>
-          {onClose ? (
-            <button className="ghost-button" onClick={onClose} type="button">
-              Close
-            </button>
-          ) : null}
-        </div>
-
-        <div className="desktop-server-manager__list">
-          {profiles.length ? (
-            profiles.map((profile) => {
-              const selected = profile.id === selectedProfileId
-              const editing = profile.id === editingProfileId
-              return (
-                <div
-                  className={`desktop-server-item${selected ? ' is-selected' : ''}`}
-                  key={profile.id}
-                >
-                  <div className="desktop-server-item__meta">
-                    <div className="desktop-server-item__name-row">
-                      <strong>{profile.name}</strong>
-                      {selected ? <span className="desktop-server-item__badge">Active</span> : null}
-                    </div>
-                    <div className="desktop-server-item__url">{profile.baseUrl}</div>
-                    <div className="desktop-server-item__status">
-                      {profile.authenticated ? `Signed in as ${profile.username}` : 'Not signed in'}
-                    </div>
-                  </div>
-                  <div className="desktop-server-item__actions">
-                    <button
-                      className="ghost-button"
-                      disabled={busy || selected}
-                      onClick={() => void onSelectProfile?.(profile.id)}
-                      type="button"
-                    >
-                      Use
-                    </button>
-                    <button
-                      className="ghost-button"
-                      disabled={busy}
-                      onClick={() => {
-                        setEditingProfileId(profile.id)
-                        setNameInput(profile.name || '')
-                        setBaseUrlInput(profile.baseUrl || '')
-                      }}
-                      type="button"
-                    >
-                      {editing ? 'Editing' : 'Edit'}
-                    </button>
-                    <button
-                      className="danger-button"
-                      disabled={busy}
-                      onClick={() => {
-                        if (editingProfileId === profile.id) {
-                          resetEditor()
-                        }
-                        void onDeleteProfile?.(profile.id)
-                      }}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )
-            })
-          ) : (
-            <div className="inspector__notice">No desktop servers saved yet.</div>
-          )}
-        </div>
-
-        {selectedProfile ? (
-          <div className="desktop-server-manager__account">
-            <div className="desktop-server-manager__form-title">Selected Account</div>
-            <div className="desktop-server-manager__account-card">
+    <div className="desktop-account-manager-screen">
+      <div className="dialog dialog--wide desktop-account-manager" role="dialog">
+        {mode === 'list' ? (
+          <>
+            <div className="desktop-account-manager__header">
               <div>
-                <strong>{selectedProfile.name}</strong>
-                <div className="desktop-server-item__url">{selectedProfile.baseUrl}</div>
+                <div className="dialog__title">Manage Accounts</div>
+                <div className="desktop-account-manager__lead">
+                  One server, one account session.
+                </div>
               </div>
-              {selectedProfile.authenticated ? (
-                <>
-                  <div className="desktop-server-manager__account-status">
-                    {selectedProfileReady ? (
+              <div className="desktop-account-manager__header-actions">
+                <button className="ghost-button" disabled={busy} onClick={openCreateMode} type="button">
+                  Add Server
+                </button>
+                {onClose ? (
+                  <button className="ghost-button" disabled={busy} onClick={onClose} type="button">
+                    Close
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="project-picker project-picker--desktop">
+              <div className="project-picker__servers">
+                <div className="project-picker__section-title">Servers</div>
+                <div className="project-list">
+                  {profiles.length ? (
+                    profiles.map((profile) => {
+                      const selected = profile.id === selectedProfileId
+                      return (
+                        <button
+                          key={profile.id}
+                          className={`project-row project-row--server ${selected ? 'active' : ''}`}
+                          disabled={busy}
+                          onClick={() => void onSelectProfile?.(profile.id)}
+                          type="button"
+                        >
+                          <span>{profile.name}</span>
+                          <small>{profile.baseUrl}</small>
+                          <small>{profile.authenticated ? `Signed in as ${profile.username}` : 'Not signed in'}</small>
+                        </button>
+                      )
+                    })
+                  ) : (
+                    <div className="inspector__notice">No servers saved yet.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="project-picker__projects">
+                <div className="project-picker__section-title">Account</div>
+                {selectedProfile ? (
+                  <div className="desktop-account-manager__detail-card">
+                    <div className="desktop-account-manager__detail-head">
+                      <div>
+                        <strong>{selectedProfile.name}</strong>
+                        <div className="desktop-account-manager__meta">{selectedProfile.baseUrl}</div>
+                      </div>
+                      <div className="desktop-account-manager__detail-actions">
+                        <button
+                          className="ghost-button"
+                          disabled={busy}
+                          onClick={() => openEditMode(selectedProfile)}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="danger-button"
+                          disabled={busy}
+                          onClick={() => void onDeleteProfile?.(selectedProfile.id)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedProfile.authenticated ? (
                       <>
-                        Signed in as <strong>{selectedProfileUsername}</strong>
+                        <div className="desktop-account-manager__status">
+                          {selectedProfileReady ? (
+                            <>
+                              Signed in as <strong>{selectedProfile.username}</strong>
+                            </>
+                          ) : (
+                            'Switching to this account...'
+                          )}
+                        </div>
+                        <div className="desktop-account-manager__account-actions">
+                          <button
+                            className="ghost-button"
+                            disabled={busy || !selectedProfileReady}
+                            onClick={() => onOpenAccountDialog?.('username')}
+                            type="button"
+                          >
+                            Change Username
+                          </button>
+                          <button
+                            className="ghost-button"
+                            disabled={busy || !selectedProfileReady}
+                            onClick={() => onOpenAccountDialog?.('password')}
+                            type="button"
+                          >
+                            Change Password
+                          </button>
+                          <button
+                            className="danger-button"
+                            disabled={busy || !selectedProfileReady}
+                            onClick={() => onOpenAccountDialog?.('delete-account')}
+                            type="button"
+                          >
+                            Delete Account
+                          </button>
+                          <button
+                            className="ghost-button"
+                            disabled={busy || !selectedProfileReady}
+                            onClick={() => void onLogout?.()}
+                            type="button"
+                          >
+                            Logout
+                          </button>
+                        </div>
                       </>
                     ) : (
-                      'Switching to this account...'
+                      <>
+                        <div className="desktop-account-manager__status">No account session on this server.</div>
+                        <div className="desktop-account-manager__account-actions">
+                          <button
+                            className="primary-button"
+                            disabled={busy}
+                            onClick={() => void onUseSelectedProfile?.()}
+                            type="button"
+                          >
+                            Sign In
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
-                  <div className="desktop-server-manager__account-actions">
-                    <button
-                      className="ghost-button"
-                      disabled={busy || !selectedProfileReady}
-                      onClick={() => onOpenAccountDialog?.('username')}
-                      type="button"
-                    >
-                      Change Username
-                    </button>
-                    <button
-                      className="ghost-button"
-                      disabled={busy || !selectedProfileReady}
-                      onClick={() => onOpenAccountDialog?.('password')}
-                      type="button"
-                    >
-                      Change Password
-                    </button>
-                    <button
-                      className="danger-button"
-                      disabled={busy || !selectedProfileReady}
-                      onClick={() => onOpenAccountDialog?.('delete-account')}
-                      type="button"
-                    >
-                      Delete Account
-                    </button>
-                    <button
-                      className="ghost-button"
-                      disabled={busy || !selectedProfileReady}
-                      onClick={() => void onLogout?.()}
-                      type="button"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="desktop-server-manager__account-status">
-                    This server does not have an active account session.
-                  </div>
-                  {onUseSelectedProfile ? (
-                    <button
-                      className="primary-button"
-                      disabled={busy}
-                      onClick={() => void onUseSelectedProfile()}
-                      type="button"
-                    >
-                      Sign In To This Server
-                    </button>
-                  ) : null}
-                </>
-              )}
+                ) : (
+                  <div className="inspector__notice">Select a server to manage its account.</div>
+                )}
+              </div>
             </div>
-          </div>
-        ) : null}
+          </>
+        ) : (
+          <>
+            <div className="desktop-account-manager__header">
+              <div>
+                <div className="dialog__title">{mode === 'edit' ? 'Edit Server' : 'Add Server'}</div>
+                <div className="desktop-account-manager__lead">
+                  Save the server name and base URL.
+                </div>
+              </div>
+            </div>
 
-        <div className="desktop-server-manager__form">
-          <div className="desktop-server-manager__form-title">
-            {editingProfileId ? 'Edit Server' : 'Add Server'}
-          </div>
-          <div className="field-stack auth-fields">
-            <label>
-              <span>Name</span>
-              <input
-                autoCorrect="off"
-                onChange={(event) => setNameInput(event.target.value)}
-                placeholder="Primary Lab"
-                value={nameInput}
-              />
-            </label>
-            <label>
-              <span>Base URL</span>
-              <input
-                autoCapitalize="none"
-                autoCorrect="off"
-                onChange={(event) => setBaseUrlInput(event.target.value)}
-                placeholder="http://127.0.0.1:3001"
-                value={baseUrlInput}
-              />
-            </label>
-          </div>
-          <div className="desktop-server-manager__form-actions">
-            <button
-              className="primary-button"
-              disabled={busy || !nameInput.trim() || !normalizeBaseUrlInput(baseUrlInput)}
-              onClick={() => void handleSubmit()}
-              type="button"
-            >
-              {editingProfileId ? 'Save Server' : 'Add Server'}
-            </button>
-            {editingProfileId ? (
-              <button className="ghost-button" disabled={busy} onClick={resetEditor} type="button">
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        </div>
+            <div className="desktop-account-manager__editor">
+              <div className="field-stack auth-fields">
+                <label>
+                  <span>Name</span>
+                  <input
+                    autoFocus
+                    autoCorrect="off"
+                    onChange={(event) =>
+                      setEditor((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Primary Lab"
+                    value={editor.name}
+                  />
+                </label>
+                <label>
+                  <span>Base URL</span>
+                  <input
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    onChange={(event) =>
+                      setEditor((current) => ({
+                        ...current,
+                        baseUrl: event.target.value,
+                      }))
+                    }
+                    placeholder="http://127.0.0.1:3001"
+                    value={editor.baseUrl}
+                  />
+                </label>
+              </div>
+              <div className="dialog__actions">
+                <button className="ghost-button" disabled={busy} onClick={resetEditor} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={busy || !editor.name.trim() || !normalizeBaseUrlInput(editor.baseUrl)}
+                  onClick={() => void handleSave()}
+                  type="button"
+                >
+                  {mode === 'edit' ? 'Save Server' : 'Add Server'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {error ? <div className="inspector__notice error">{error}</div> : null}
       </div>
     </div>
