@@ -18,6 +18,23 @@ function normalizeBaseUrl(value) {
   return trimmed ? trimmed.replace(/\/+$/, '') : ''
 }
 
+function normalizeApiErrorMessage(message) {
+  const value = String(message || '').trim()
+  if (!value) {
+    return 'Request failed'
+  }
+  if (/^Desktop proxy request failed/i.test(value)) {
+    return 'Unable to reach the selected server profile.'
+  }
+  if (/^No desktop server selected/i.test(value)) {
+    return 'Choose a connected server profile.'
+  }
+  if (!/[.!?]$/.test(value)) {
+    return `${value}.`
+  }
+  return value
+}
+
 export function configureApiBaseUrl(baseUrl) {
   runtimeApiBaseUrl = normalizeBaseUrl(baseUrl)
 }
@@ -40,7 +57,7 @@ export async function api(url, options = {}) {
   })
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
-    throw new ApiError(payload.error || 'Request failed', response.status, payload)
+    throw new ApiError(normalizeApiErrorMessage(payload.error || 'Request failed'), response.status, payload)
   }
 
   if (response.status === 204) {
@@ -71,7 +88,13 @@ export function uploadWithProgress(url, formData, onProgress) {
         return
       }
 
-      reject(new ApiError(request.response?.error || 'Request failed', request.status, request.response))
+      reject(
+        new ApiError(
+          normalizeApiErrorMessage(request.response?.error || 'Request failed'),
+          request.status,
+          request.response,
+        ),
+      )
     }
 
     request.onerror = () => {

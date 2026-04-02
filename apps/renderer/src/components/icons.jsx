@@ -22,6 +22,10 @@ export function AddFolderIcon() {
   return <i aria-hidden="true" className="fa-solid fa-folder-plus" />
 }
 
+export function PlusIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-plus" />
+}
+
 export function AddPhotoIcon() {
   return <i aria-hidden="true" className="fa-solid fa-image" />
 }
@@ -60,6 +64,14 @@ export function UserIcon() {
 
 export function UsersIcon() {
   return <i aria-hidden="true" className="fa-solid fa-users" />
+}
+
+export function WarningIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-triangle-exclamation" />
+}
+
+export function TrashIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-trash" />
 }
 
 export function IdentificationIcon() {

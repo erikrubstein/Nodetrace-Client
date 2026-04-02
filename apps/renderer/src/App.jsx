@@ -26,9 +26,14 @@ import { ApiError, api, configureApiBaseUrl, uploadWithProgress } from './lib/ap
 import { defaultProjectSettings, defaultUserProjectUi, getPanelMinWidth, panelIds, SIDEBAR_RAIL_WIDTH } from './lib/constants'
 import {
   closeDesktopWindow,
+  changeDesktopProfileAccountPassword,
+  changeDesktopProfileAccountUsername,
+  createDesktopProjectForProfile,
   createDesktopServerProfile,
+  deleteDesktopProfileAccount,
   deleteDesktopServerProfile,
   getDesktopServerState,
+  listDesktopProjectsForProfile,
   getDesktopWindowState,
   isDesktopEnvironment,
   minimizeDesktopWindow,
@@ -70,6 +75,17 @@ import {
 const PRESENCE_COLORS = ['#6f9cff', '#5fc9a8', '#d48cff', '#f0a35b', '#58c5d8', '#d86f9f', '#a6c95b', '#c27cff']
 const DESKTOP_SELECTION_SYNC_CHANNEL = 'nodetrace-desktop-selection'
 const DESKTOP_PANEL_SYNC_CHANNEL = 'nodetrace-desktop-panels'
+const CLIENT_THEME_STORAGE_KEY = 'nodetrace-client-theme'
+const DESKTOP_CONNECTION_ERROR_MESSAGE = 'Unable to reach the selected server profile.'
+
+function getStoredClientTheme() {
+  if (typeof window === 'undefined') {
+    return defaultUserProjectUi.theme
+  }
+
+  const storedTheme = window.localStorage.getItem(CLIENT_THEME_STORAGE_KEY)
+  return storedTheme === 'light' ? 'light' : storedTheme === 'dark' ? 'dark' : defaultUserProjectUi.theme
+}
 
 function shouldShowMobileEntryPrompt() {
   if (typeof window === 'undefined') {
@@ -121,12 +137,18 @@ function MainApp() {
     proxyBaseUrl: '',
   })
   const [desktopServerDialogOpen, setDesktopServerDialogOpen] = useState(false)
+  const [desktopAccountManagerFocusId, setDesktopAccountManagerFocusId] = useState(null)
+  const [desktopServerDialogReturnTarget, setDesktopServerDialogReturnTarget] = useState(null)
   const [projects, setProjects] = useState([])
+  const [projectListLoading, setProjectListLoading] = useState(false)
+  const [projectPickerProfileId, setProjectPickerProfileId] = useState(null)
+  const [projectPickerProjects, setProjectPickerProjects] = useState([])
+  const [projectPickerLoading, setProjectPickerLoading] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [tree, setTree] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState([])
-  const [theme, setTheme] = useState(defaultUserProjectUi.theme)
+  const [theme, setTheme] = useState(() => getStoredClientTheme())
   const [showGrid, setShowGrid] = useState(defaultUserProjectUi.showGrid)
   const [status, setStatus] = useState('Loading projects...')
   const [error, setError] = useState('')
@@ -177,9 +199,11 @@ function MainApp() {
   const [loadedImages, setLoadedImages] = useState({})
   const [projectPresenceUsers, setProjectPresenceUsers] = useState([])
   const [searchResultNodeIds, setSearchResultNodeIds] = useState([])
+  const [searchResultsInitialized, setSearchResultsInitialized] = useState(false)
   const [canvasIsolationMode, setCanvasIsolationMode] = useState('none')
   const [draggingPanelId, setDraggingPanelId] = useState(null)
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false)
+  const [serverDisconnectDialogOpen, setServerDisconnectDialogOpen] = useState(false)
   const [mobileConnectionCount, setMobileConnectionCount] = useState(0)
   const [collaboratorUsername, setCollaboratorUsername] = useState('')
   const [accountDialog, setAccountDialog] = useState(null)
@@ -189,6 +213,7 @@ function MainApp() {
     username: '',
     currentPassword: '',
     newPassword: '',
+    confirmPassword: '',
     deleteConfirmation: '',
   })
   const [templateForm, setTemplateForm] = useState({
@@ -206,6 +231,9 @@ function MainApp() {
   const pendingLocalEventsRef = useRef(0)
   const pendingInitialCanvasFitRef = useRef(false)
   const treeRef = useRef(null)
+  const previousDesktopConnectionStatusRef = useRef(null)
+  const initializedAuthProfileIdRef = useRef(null)
+  const currentUserRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
   const nodeImageEditSequenceRef = useRef(new Map())
   const loadedUiSignatureRef = useRef('')
@@ -215,6 +243,7 @@ function MainApp() {
   const selectedLayoutAnchorRef = useRef({ nodeId: null, x: null, y: null })
   const pendingFocusNodeIdRef = useRef(null)
   const presenceRequestSequenceRef = useRef(0)
+  const projectPickerRequestSequenceRef = useRef(0)
   const { clearHistory, historyState, pushHistory, undo, redo } = useUndoRedo({ busy, setBusy, setError })
   const applyTreePayload = useCallback((payload) => {
     setTree(normalizeServerTree(payload))
@@ -223,7 +252,26 @@ function MainApp() {
     () => desktopServerState.profiles.find((profile) => profile.id === desktopServerState.selectedProfileId) || null,
     [desktopServerState.profiles, desktopServerState.selectedProfileId],
   )
+  const managedDesktopAccountProfile = useMemo(() => {
+    if (!desktopEnvironment) {
+      return null
+    }
+    const focusedId = String(desktopAccountManagerFocusId || '').trim()
+    if (focusedId) {
+      return desktopServerState.profiles.find((profile) => profile.id === focusedId) || null
+    }
+    return selectedDesktopServerProfile
+  }, [desktopAccountManagerFocusId, desktopEnvironment, desktopServerState.profiles, selectedDesktopServerProfile])
+  const selectedDesktopServerProfileId = selectedDesktopServerProfile?.id || null
+  const selectedDesktopServerConnectionStatus = selectedDesktopServerProfile?.connectionStatus || null
   const desktopServerSelectionRequired = desktopEnvironment && desktopServerReady && !selectedDesktopServerProfile
+  const desktopConnectedAccountRequired =
+    desktopEnvironment &&
+    desktopServerReady &&
+    (!selectedDesktopServerProfile ||
+      (selectedDesktopServerConnectionStatus !== 'connected' &&
+        showProjectDialog !== 'open' &&
+        !serverDisconnectDialogOpen))
   const refreshDesktopServerState = useCallback(async () => {
     if (!desktopEnvironment) {
       return null
@@ -239,12 +287,38 @@ function MainApp() {
   }, [theme])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(CLIENT_THEME_STORAGE_KEY, theme)
+  }, [theme])
+
+  useEffect(() => {
     document.title = tree?.project?.name ? `Nodetrace | ${tree.project.name}` : 'Nodetrace'
   }, [tree?.project?.name])
 
   useEffect(() => {
     treeRef.current = tree
   }, [tree])
+
+  useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!desktopEnvironment) {
+      previousDesktopConnectionStatusRef.current = null
+      return
+    }
+    const currentStatus = selectedDesktopServerConnectionStatus
+    const previousStatus = previousDesktopConnectionStatusRef.current
+    const hasOpenProject = Boolean(selectedProjectId && tree?.project)
+    const browsingProjectPicker = showProjectDialog === 'open'
+    if (!browsingProjectPicker && previousStatus === 'connected' && currentStatus && currentStatus !== 'connected' && hasOpenProject) {
+      setServerDisconnectDialogOpen(true)
+    }
+    previousDesktopConnectionStatusRef.current = currentStatus
+  }, [desktopEnvironment, selectedDesktopServerConnectionStatus, selectedProjectId, showProjectDialog, tree?.project])
 
   useEffect(() => {
     if (!desktopEnvironment) {
@@ -285,6 +359,57 @@ function MainApp() {
       unsubscribe?.()
     }
   }, [desktopEnvironment, refreshDesktopServerState])
+
+  useEffect(() => {
+    if (!desktopEnvironment || showProjectDialog !== 'open') {
+      return
+    }
+
+    const availableProfileIds = new Set(desktopServerState.profiles.map((profile) => profile.id))
+    if (projectPickerProfileId && availableProfileIds.has(projectPickerProfileId)) {
+      return
+    }
+
+    setProjectPickerProfileId(desktopServerState.selectedProfileId || desktopServerState.profiles[0]?.id || null)
+  }, [desktopEnvironment, desktopServerState.profiles, desktopServerState.selectedProfileId, projectPickerProfileId, showProjectDialog])
+
+  useEffect(() => {
+    if (!desktopEnvironment || showProjectDialog !== 'open') {
+      return
+    }
+
+    const selectedProfile =
+      desktopServerState.profiles.find((profile) => profile.id === projectPickerProfileId) || null
+    if (!selectedProfile || selectedProfile.connectionStatus !== 'connected') {
+      setProjectPickerLoading(false)
+      setProjectPickerProjects([])
+      return
+    }
+
+    const requestSequence = ++projectPickerRequestSequenceRef.current
+    setProjectPickerLoading(true)
+    listDesktopProjectsForProfile(projectPickerProfileId)
+      .then((projectList) => {
+        if (requestSequence !== projectPickerRequestSequenceRef.current) {
+          return
+        }
+        setProjectPickerProjects(Array.isArray(projectList) ? projectList : [])
+      })
+      .catch((loadError) => {
+        if (requestSequence !== projectPickerRequestSequenceRef.current) {
+          return
+        }
+        setProjectPickerProjects([])
+        if (String(loadError.message || '').trim() !== DESKTOP_CONNECTION_ERROR_MESSAGE) {
+          setError(loadError.message || 'Unable to load projects for that server profile.')
+        }
+      })
+      .finally(() => {
+        if (requestSequence === projectPickerRequestSequenceRef.current) {
+          setProjectPickerLoading(false)
+        }
+      })
+  }, [desktopEnvironment, desktopServerState.profiles, projectPickerProfileId, showProjectDialog])
 
   useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId
@@ -394,7 +519,6 @@ function MainApp() {
 
   function markPendingUiSignature(overrides = {}) {
     const nextUi = {
-      theme: overrides.theme ?? theme,
       showGrid: overrides.showGrid ?? showGrid,
       canvasTransform: overrides.canvasTransform ?? transform,
       leftSidebarOpen: overrides.leftSidebarOpen ?? leftSidebarOpen,
@@ -410,9 +534,7 @@ function MainApp() {
 
   function toggleThemePreference() {
     setTheme((current) => {
-      const nextTheme = current === 'dark' ? 'light' : 'dark'
-      markPendingUiSignature({ theme: nextTheme })
-      return nextTheme
+      return current === 'dark' ? 'light' : 'dark'
     })
   }
 
@@ -531,7 +653,6 @@ function MainApp() {
       const nextTransform =
         typeof nextTransformOrUpdater === 'function' ? nextTransformOrUpdater(current) : nextTransformOrUpdater
       pendingUiSignatureRef.current = JSON.stringify({
-        theme,
         showGrid,
         canvasTransform: nextTransform,
         leftSidebarOpen,
@@ -553,7 +674,6 @@ function MainApp() {
     rightSidebarOpen,
     rightSidebarWidth,
     showGrid,
-    theme,
   ])
 
   const previewVisible =
@@ -665,9 +785,17 @@ function MainApp() {
     const invertedIds = allNodeIds.filter((nodeId) => !selectedSet.has(nodeId))
     setEffectiveSelection(invertedIds, invertedIds[0] || null)
   }, [effectiveSelectedNodeIds, setEffectiveSelection, tree?.nodes])
+  const defaultSearchResultNodeIds = useMemo(
+    () => (tree?.nodes || []).filter((node) => node.type !== 'collapsed-group').map((node) => node.id),
+    [tree?.nodes],
+  )
+  const effectiveSearchResultNodeIds = useMemo(
+    () => (searchResultsInitialized ? searchResultNodeIds : defaultSearchResultNodeIds),
+    [defaultSearchResultNodeIds, searchResultNodeIds, searchResultsInitialized],
+  )
   const selectSearchResults = useCallback(() => {
-    replaceSelectionWith(searchResultNodeIds, searchResultNodeIds[0] || null)
-  }, [replaceSelectionWith, searchResultNodeIds])
+    replaceSelectionWith(effectiveSearchResultNodeIds, effectiveSearchResultNodeIds[0] || null)
+  }, [effectiveSearchResultNodeIds, replaceSelectionWith])
   const selectParents = useCallback(() => {
     const parentIds = collectSelectionParentIds(effectiveSelectedNodeIds)
     replaceSelectionWith(parentIds, parentIds[0] || null)
@@ -677,8 +805,11 @@ function MainApp() {
     replaceSelectionWith(childIds, childIds[0] || null)
   }, [collectSelectionChildIds, effectiveSelectedNodeIds, replaceSelectionWith])
   const appendSearchResults = useCallback(() => {
-    appendSelectionWith(searchResultNodeIds, selectedNodeId || searchResultNodeIds[0] || null)
-  }, [appendSelectionWith, searchResultNodeIds, selectedNodeId])
+    appendSelectionWith(
+      effectiveSearchResultNodeIds,
+      selectedNodeId || effectiveSearchResultNodeIds[0] || null,
+    )
+  }, [appendSelectionWith, effectiveSearchResultNodeIds, selectedNodeId])
   const appendParents = useCallback(() => {
     const parentIds = collectSelectionParentIds(effectiveSelectedNodeIds)
     appendSelectionWith(parentIds, selectedNodeId || parentIds[0] || null)
@@ -780,14 +911,19 @@ function MainApp() {
   )
 
   useEffect(() => {
-    if (canvasIsolationMode === 'search' && !searchResultNodeIds.length) {
+    setSearchResultNodeIds([])
+    setSearchResultsInitialized(false)
+  }, [selectedProjectId])
+
+  useEffect(() => {
+    if (canvasIsolationMode === 'search' && !effectiveSearchResultNodeIds.length) {
       setCanvasIsolationMode('none')
       return
     }
     if (canvasIsolationMode === 'path' && !selectedNodePathIds.length) {
       setCanvasIsolationMode('none')
     }
-  }, [canvasIsolationMode, searchResultNodeIds.length, selectedNodePathIds.length])
+  }, [canvasIsolationMode, effectiveSearchResultNodeIds.length, selectedNodePathIds.length])
 
   useLayoutEffect(() => {
     const currentLayoutNode = selectedNodeId ? layout.nodes.find((item) => item.id === selectedNodeId) : null
@@ -834,7 +970,6 @@ function MainApp() {
     }
 
     const nextUi = {
-      theme: projectUi.theme,
       showGrid: projectUi.showGrid,
       canvasTransform: projectUi.canvasTransform,
       selectedNodeIds: projectUi.selectedNodeIds,
@@ -852,7 +987,6 @@ function MainApp() {
     }
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = incomingSignature
-    setTheme(nextUi.theme)
     setShowGrid(nextUi.showGrid)
     setTransform(nextUi.canvasTransform || { x: 80, y: 80, scale: 1 })
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
@@ -870,12 +1004,14 @@ function MainApp() {
     setRightActivePanel(nextUi.rightActivePanel)
     setPanelDock(nextUi.panelDock)
     setProjectUiReady(true)
-  }, [projectUi.canvasTransform, projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.theme, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [projectUi.canvasTransform, projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
+    initializedAuthProfileIdRef.current = null
     setCurrentUser(null)
     setAuthReady(true)
     setProjects([])
+    setProjectListLoading(false)
     setSelectedProjectId(null)
     setTree(null)
     setSelectedNodeId(null)
@@ -887,15 +1023,23 @@ function MainApp() {
       username: '',
       currentPassword: '',
       newPassword: '',
+      confirmPassword: '',
       deleteConfirmation: '',
     })
-    setStatus(desktopEnvironment ? 'Sign in to access this server.' : 'Sign in to access your projects.')
+    setStatus(desktopEnvironment ? 'Select or repair a desktop server profile to continue.' : 'Sign in to access your projects.')
   }, [desktopEnvironment])
 
-  const openAccountManager = useCallback(() => {
+  const openAccountManager = useCallback((focusProfileId = null) => {
     setError('')
     setAccountStatus('')
     if (desktopEnvironment) {
+      if (showProjectDialog === 'open') {
+        setDesktopServerDialogReturnTarget('open')
+        setShowProjectDialog(null)
+      } else {
+        setDesktopServerDialogReturnTarget(null)
+      }
+      setDesktopAccountManagerFocusId(String(focusProfileId || '').trim() || null)
       void refreshDesktopServerState().catch((loadError) => {
         setError(loadError.message)
       })
@@ -903,46 +1047,122 @@ function MainApp() {
       return
     }
     setAccountDialog('overview')
-  }, [desktopEnvironment, refreshDesktopServerState])
+  }, [desktopEnvironment, refreshDesktopServerState, showProjectDialog])
 
-  const openAccountDialog = useCallback((dialog) => {
+  const closeDesktopServerManager = useCallback(() => {
+    const returnTarget = desktopServerDialogReturnTarget
+    setDesktopAccountManagerFocusId(null)
+    setDesktopServerDialogOpen(false)
+    setDesktopServerDialogReturnTarget(null)
+    if (returnTarget === 'open') {
+      setShowProjectDialog('open')
+    }
+  }, [desktopServerDialogReturnTarget])
+
+  const openAccountDialog = useCallback((dialog, profileId = null) => {
     setError('')
     setAccountStatus('')
+    if (desktopEnvironment) {
+      setDesktopAccountManagerFocusId(String(profileId || '').trim() || desktopAccountManagerFocusId || null)
+    }
     setAccountDialog(dialog)
-  }, [])
+  }, [desktopAccountManagerFocusId, desktopEnvironment])
+
+  async function syncSelectedDesktopAccount(updates) {
+    if (!desktopEnvironment || !selectedDesktopServerProfile?.id) {
+      return null
+    }
+    const nextState = await updateDesktopServerProfile(selectedDesktopServerProfile.id, updates)
+    if (nextState) {
+      setDesktopServerState(nextState)
+      configureApiBaseUrl(nextState.proxyBaseUrl || '')
+    }
+    return nextState
+  }
 
   const loadCurrentUser = useCallback(async () => {
+    const hasOpenProject = Boolean(selectedProjectId && tree?.project)
+
     if (desktopEnvironment && !desktopServerReady) {
       return
     }
 
-    if (desktopEnvironment && !selectedDesktopServerProfile) {
+    if (desktopEnvironment && !selectedDesktopServerProfileId) {
+      initializedAuthProfileIdRef.current = null
       handleAuthLost()
-      setStatus('Add or select a desktop server to continue.')
+      setStatus('Add a server profile to continue.')
       return
     }
 
-    setCurrentUser(null)
-    setProjects([])
-    setSelectedProjectId(null)
-    setTree(null)
-    setSelectedNodeId(null)
-    setProjectUiReady(false)
-    setMobileConnectionCount(0)
-    setAuthReady(false)
+    if (desktopEnvironment && selectedDesktopServerConnectionStatus !== 'connected') {
+      if (showProjectDialog === 'open') {
+        setProjectListLoading(false)
+        setStatus(
+          selectedDesktopServerConnectionStatus === 'invalid_login'
+            ? 'The selected server profile has invalid login credentials.'
+            : 'The selected server profile is disconnected.',
+        )
+        return
+      }
+      if (hasOpenProject || serverDisconnectDialogOpen) {
+        setServerDisconnectDialogOpen(true)
+        setStatus('The active server profile disconnected.')
+        return
+      }
+      initializedAuthProfileIdRef.current = null
+      handleAuthLost()
+      setStatus('Select or repair a desktop server profile to continue.')
+      return
+    }
+
+    const shouldResetDesktopWorkspace = desktopEnvironment
+      ? initializedAuthProfileIdRef.current !== selectedDesktopServerProfileId || !currentUserRef.current
+      : !currentUserRef.current
+
+    if (shouldResetDesktopWorkspace) {
+      setCurrentUser(null)
+      setSelectedProjectId(null)
+      setTree(null)
+      setSelectedNodeId(null)
+      setProjectUiReady(false)
+      setMobileConnectionCount(0)
+      setAuthReady(false)
+      setProjectListLoading(true)
+    }
 
     try {
       const payload = await api('/api/auth/me')
       if (!payload?.authenticated || !payload.user) {
+        initializedAuthProfileIdRef.current = null
         handleAuthLost()
         return
       }
-      setCurrentUser(payload.user)
+      initializedAuthProfileIdRef.current = desktopEnvironment ? selectedDesktopServerProfileId : '__web__'
+      const nextUser = payload.user
+      const previousUser = currentUserRef.current
+      if (
+        !previousUser ||
+        previousUser.id !== nextUser.id ||
+        previousUser.username !== nextUser.username ||
+        previousUser.captureSessionId !== nextUser.captureSessionId
+      ) {
+        setCurrentUser(nextUser)
+      }
       setStatus('')
     } finally {
       setAuthReady(true)
     }
-  }, [desktopEnvironment, desktopServerReady, handleAuthLost, selectedDesktopServerProfile])
+  }, [
+    desktopEnvironment,
+    desktopServerReady,
+    handleAuthLost,
+    selectedProjectId,
+    selectedDesktopServerConnectionStatus,
+    selectedDesktopServerProfileId,
+    showProjectDialog,
+    serverDisconnectDialogOpen,
+    tree?.project,
+  ])
 
   useEffect(() => {
     if (desktopEnvironment && !desktopServerReady) {
@@ -964,8 +1184,10 @@ function MainApp() {
         setDesktopServerState(nextState)
         configureApiBaseUrl(nextState.proxyBaseUrl || '')
       }
+      return true
     } catch (submitError) {
       setError(submitError.message)
+      return false
     } finally {
       setBusy(false)
     }
@@ -980,8 +1202,10 @@ function MainApp() {
         setDesktopServerState(nextState)
         configureApiBaseUrl(nextState.proxyBaseUrl || '')
       }
+      return true
     } catch (submitError) {
       setError(submitError.message)
+      return false
     } finally {
       setBusy(false)
     }
@@ -1003,20 +1227,48 @@ function MainApp() {
     }
   }
 
-  async function selectServerProfile(id) {
+  function browseProjectPickerProfile(id) {
+    setError('')
+    setProjectPickerProfileId(String(id || '').trim() || null)
+  }
+
+  async function openDesktopProjectFromPicker(profileId, projectId) {
+    const normalizedProfileId = String(profileId || '').trim()
+    const normalizedProjectId = String(projectId || '').trim()
+    if (!normalizedProfileId || !normalizedProjectId) {
+      return
+    }
+
     setBusy(true)
     setError('')
     try {
-      const nextState = await selectDesktopServerProfile(id)
-      if (nextState) {
-        setDesktopServerState(nextState)
-        configureApiBaseUrl(nextState.proxyBaseUrl || '')
+      updateUrlState(normalizedProjectId, null, getUrlState().transform)
+      if (desktopServerState.selectedProfileId !== normalizedProfileId) {
+        const nextState = await selectDesktopServerProfile(normalizedProfileId)
+        if (nextState) {
+          setDesktopServerState(nextState)
+          configureApiBaseUrl(nextState.proxyBaseUrl || '')
+        }
       }
+      setSelectedProjectId(normalizedProjectId)
+      setShowProjectDialog(null)
+      setProjectListLoading(false)
     } catch (submitError) {
       setError(submitError.message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function dismissServerDisconnectDialog() {
+    setServerDisconnectDialogOpen(false)
+    setSelectedProjectId(null)
+    setSelectedNodeId(null)
+    setTree(null)
+    setProjects([])
+    setProjectUiReady(false)
+    setStatus('Select a project from another server profile.')
+    setShowProjectDialog('open')
   }
 
   const { loadProjects, loadTree } = useProjectSync({
@@ -1031,6 +1283,7 @@ function MainApp() {
     treeProjectId: tree?.project?.id || null,
     setError,
     setMobileConnectionCount,
+    setProjectListLoading,
     setProjects,
     setSelectedNodeId,
     setSelectedProjectId,
@@ -1543,7 +1796,6 @@ function MainApp() {
     }
 
     const nextUi = {
-      theme,
       showGrid,
       canvasTransform: transform,
       selectedNodeIds: effectiveSelectedNodeIds,
@@ -1586,7 +1838,6 @@ function MainApp() {
     selectedProjectId,
     effectiveSelectedNodeIds,
     showGrid,
-    theme,
     transform,
     tree?.project,
     projectUiReady,
@@ -1598,7 +1849,6 @@ function MainApp() {
     }
 
     const nextUi = {
-      theme,
       showGrid,
       canvasTransform: transform,
       selectedNodeIds: effectiveSelectedNodeIds,
@@ -1644,7 +1894,6 @@ function MainApp() {
     selectedProjectId,
     effectiveSelectedNodeIds,
     showGrid,
-    theme,
     transform,
     tree?.project,
     projectUiReady,
@@ -2164,6 +2413,53 @@ function MainApp() {
     setError('')
 
     try {
+      if (desktopEnvironment) {
+        const targetProfileId = String(projectPickerProfileId || desktopServerState.selectedProfileId || '').trim()
+        const targetProfile =
+          desktopServerState.profiles.find((profile) => profile.id === targetProfileId) || null
+
+        if (!targetProfile || targetProfile.connectionStatus !== 'connected') {
+          setError('Choose a connected server profile before creating a project.')
+          return
+        }
+
+        const created = await createDesktopProjectForProfile(targetProfileId, projectName.trim())
+        let nextDesktopState = desktopServerState
+
+        if (desktopServerState.selectedProfileId !== targetProfileId) {
+          const updatedState = await selectDesktopServerProfile(targetProfileId)
+          if (updatedState) {
+            nextDesktopState = updatedState
+            setDesktopServerState(updatedState)
+            configureApiBaseUrl(updatedState.proxyBaseUrl || '')
+          }
+        }
+
+        const activeProfile =
+          nextDesktopState.profiles.find((profile) => profile.id === targetProfileId) || targetProfile
+
+        if (activeProfile?.authenticated) {
+          setCurrentUser({
+            id: activeProfile.userId,
+            username: activeProfile.username,
+            captureSessionId: activeProfile.captureSessionId,
+          })
+        }
+
+        initializedAuthProfileIdRef.current = targetProfileId
+        updateUrlState(created.project.id, created.root?.id || null, getUrlState().transform)
+        setProjectName('')
+        setShowProjectDialog(null)
+        setOpenMenu(null)
+        setStatus('')
+        setProjectListLoading(false)
+        setSelectedProjectId(created.project.id)
+        applyTreePayload(created)
+        setSelectedNodeId(created.root?.id || null)
+        await loadProjects(created.project.id, { silent: true })
+        return
+      }
+
       const created = await api('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3057,6 +3353,21 @@ function MainApp() {
     setError('')
     setAccountStatus('')
     try {
+      if (desktopEnvironment && managedDesktopAccountProfile?.id) {
+        const response = await changeDesktopProfileAccountUsername(managedDesktopAccountProfile.id, accountForm.username.trim())
+        if (response?.desktopState) {
+          setDesktopServerState(response.desktopState)
+          configureApiBaseUrl(response.desktopState.proxyBaseUrl || '')
+        }
+        if (managedDesktopAccountProfile.id === desktopServerState.selectedProfileId && response?.user) {
+          setCurrentUser(response.user)
+        }
+        setAccountForm((current) => ({ ...current, username: '', deleteConfirmation: '' }))
+        setAccountStatus('Username updated.')
+        setAccountDialog(null)
+        return
+      }
+
       const user = await api('/api/account/username', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -3071,6 +3382,7 @@ function MainApp() {
       setAccountStatus('Username updated.')
       setAccountDialog(null)
       if (desktopEnvironment) {
+        await syncSelectedDesktopAccount({ username: accountForm.username.trim() })
         await refreshDesktopServerState()
       }
       await loadProjects(selectedProjectId)
@@ -3085,7 +3397,7 @@ function MainApp() {
   }
 
   async function changePassword() {
-    if (!accountForm.currentPassword || !accountForm.newPassword) {
+    if (!accountForm.currentPassword || !accountForm.newPassword || accountForm.newPassword !== accountForm.confirmPassword) {
       return
     }
 
@@ -3093,6 +3405,22 @@ function MainApp() {
     setError('')
     setAccountStatus('')
     try {
+      if (desktopEnvironment && managedDesktopAccountProfile?.id) {
+        const response = await changeDesktopProfileAccountPassword(
+          managedDesktopAccountProfile.id,
+          accountForm.currentPassword,
+          accountForm.newPassword,
+        )
+        if (response?.desktopState) {
+          setDesktopServerState(response.desktopState)
+          configureApiBaseUrl(response.desktopState.proxyBaseUrl || '')
+        }
+        setAccountForm((current) => ({ ...current, currentPassword: '', newPassword: '', confirmPassword: '' }))
+        setAccountStatus('Password updated.')
+        setAccountDialog(null)
+        return
+      }
+
       const payload = await api('/api/account/password', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -3105,10 +3433,11 @@ function MainApp() {
         setError(payload.error || 'Unable to change password')
         return
       }
-      setAccountForm((current) => ({ ...current, currentPassword: '', newPassword: '' }))
+      setAccountForm((current) => ({ ...current, currentPassword: '', newPassword: '', confirmPassword: '' }))
       setAccountStatus('Password updated.')
       setAccountDialog(null)
       if (desktopEnvironment) {
+        await syncSelectedDesktopAccount({ password: accountForm.newPassword })
         await refreshDesktopServerState()
       }
     } catch (submitError) {
@@ -3119,7 +3448,8 @@ function MainApp() {
   }
 
   async function deleteAccount() {
-    if (accountForm.deleteConfirmation !== currentUser?.username) {
+    const accountDialogUsername = managedDesktopAccountProfile?.username || currentUser?.username || ''
+    if (accountForm.deleteConfirmation !== accountDialogUsername) {
       return
     }
 
@@ -3127,6 +3457,26 @@ function MainApp() {
     setError('')
     setAccountStatus('')
     try {
+      if (desktopEnvironment && managedDesktopAccountProfile?.id) {
+        const response = await deleteDesktopProfileAccount(managedDesktopAccountProfile.id, accountForm.deleteConfirmation)
+        if (response?.desktopState) {
+          setDesktopServerState(response.desktopState)
+          configureApiBaseUrl(response.desktopState.proxyBaseUrl || '')
+        }
+        if (managedDesktopAccountProfile.id === desktopServerState.selectedProfileId) {
+          handleAuthLost()
+        }
+        setAccountDialog(null)
+        setAccountForm({
+          username: '',
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+          deleteConfirmation: '',
+        })
+        return
+      }
+
       const payload = await api('/api/account', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -3142,6 +3492,7 @@ function MainApp() {
         username: '',
         currentPassword: '',
         newPassword: '',
+        confirmPassword: '',
         deleteConfirmation: '',
       })
       if (desktopEnvironment) {
@@ -3834,7 +4185,10 @@ function MainApp() {
           <SearchPanel
             key={selectedProjectId || 'global'}
             bulkSelectNodeIds={bulkSelectSearchResults}
-            onResultsChange={setSearchResultNodeIds}
+            onResultsChange={(nodeIds) => {
+              setSearchResultsInitialized(true)
+              setSearchResultNodeIds(nodeIds)
+            }}
             onSelectNode={selectNodeAndFocus}
             projectId={selectedProjectId}
             selectedNodeId={selectedNodeId}
@@ -4005,18 +4359,117 @@ function MainApp() {
     return (
       <DesktopServerManager
         busy={busy}
-        currentUser={currentUser}
+        desktopWindowMaximized={desktopWindowMaximized}
         error={error}
-        onClose={allowClose ? () => setDesktopServerDialogOpen(false) : null}
+        focusProfileId={desktopAccountManagerFocusId}
+        onClose={allowClose ? closeDesktopServerManager : null}
         onCreateProfile={createServerProfile}
+        onDesktopClose={() => closeDesktopWindow()}
+        onDesktopMinimize={() => minimizeDesktopWindow()}
+        onDesktopToggleMaximize={() => toggleMaximizeDesktopWindow()}
         onDeleteProfile={deleteServerProfile}
-        onLogout={logoutUser}
         onOpenAccountDialog={openAccountDialog}
-        onSelectProfile={selectServerProfile}
         onUpdateProfile={updateServerProfile}
-        onUseSelectedProfile={() => setDesktopServerDialogOpen(false)}
         profiles={desktopServerState.profiles}
         selectedProfileId={desktopServerState.selectedProfileId}
+        showDesktopControls={isDesktopEnvironment()}
+      />
+    )
+  }
+
+  function renderAppDialogs() {
+    return (
+      <AppDialogs
+        accountDialog={accountDialog}
+        accountDialogUsername={managedDesktopAccountProfile?.username || currentUser?.username || ''}
+        accountForm={accountForm}
+        accountStatus={accountStatus}
+        applyTemplateConfirmation={applyTemplateConfirmation}
+        bulkSelectionCount={bulkSelectionCount}
+        bulkTemplateCount={selectionNodesWithTemplates.length}
+        busy={busy}
+        changePassword={changePassword}
+        changeUsername={changeUsername}
+        confirmApplyTemplateSelection={confirmApplyTemplateSelection}
+        confirmMergeNodeIntoPhoto={confirmMergeNodeIntoPhoto}
+        confirmRemoveIdentificationTemplate={confirmRemoveIdentificationTemplate}
+        createProject={createProject}
+        currentUser={currentUser}
+        desktopEnvironment={desktopEnvironment}
+        desktopServerProfiles={desktopServerState.profiles}
+        desktopProjectPickerLoading={desktopEnvironment ? projectPickerLoading : projectListLoading}
+        desktopProjectPickerProjects={desktopEnvironment ? projectPickerProjects : projects}
+        deleteNode={deleteNode}
+        deleteAccount={deleteAccount}
+        deleteTemplate={deleteTemplate}
+        deleteNodeOpen={deleteNodeOpen}
+        deleteProject={deleteProject}
+        deleteProjectText={deleteProjectText}
+        desktopClientId={currentUser?.captureSessionId || ''}
+        error={error}
+        exportFileName={exportFileName}
+        exportMediaTree={exportMediaTree}
+        exportProject={exportProject}
+        handleDialogEnter={handleDialogEnter}
+        hasBulkSelection={hasBulkSelection}
+        identificationTemplates={identificationTemplates}
+        importTemplateDialog={importTemplateDialog}
+        importTemplateFromProject={importTemplateFromProject}
+        importArchiveFile={importArchiveFile}
+        importInputRef={importInputRef}
+        importProject={importProject}
+        importProjectName={importProjectName}
+        projectApiKeyInput={projectApiKeyInput}
+        projectName={projectName}
+        identificationTemplateRemovalCount={identificationTemplateRemovalCount}
+        identificationTemplateRemovalNodes={identificationTemplateRemovalNodes}
+        mergePhotoConfirmation={mergePhotoConfirmation}
+        mobileConnectionCount={mobileConnectionCount}
+        newNodeDialog={newNodeDialog}
+        newNodeName={newNodeName}
+        onOpenManageAccounts={openAccountManager}
+        onOpenDesktopProject={openDesktopProjectFromPicker}
+        onSelectDesktopServerProfile={browseProjectPickerProfile}
+        projects={projects}
+        renameProject={renameProject}
+        logoutUser={() => void logoutUser()}
+        saveProjectOpenAiKey={saveProjectOpenAiKey}
+        selectedNode={selectedNode}
+        selectedDesktopServerProfileId={projectPickerProfileId}
+        selectedProjectId={selectedProjectId}
+        serverDisconnectDialogOpen={serverDisconnectDialogOpen}
+        sessionDialogOpen={sessionDialogOpen}
+        setAccountDialog={setAccountDialog}
+        setAccountForm={setAccountForm}
+        setApplyTemplateConfirmation={setApplyTemplateConfirmation}
+        setDeleteNodeOpen={setDeleteNodeOpen}
+        setDeleteProjectText={setDeleteProjectText}
+        setExportFileName={setExportFileName}
+        setIdentificationTemplateRemovalNodeId={(nodeId) => {
+          if (!nodeId) {
+            setIdentificationTemplateRemoval(null)
+            return
+          }
+          requestRemoveIdentificationTemplates([nodeId])
+        }}
+        setImportProjectName={setImportProjectName}
+        setImportTemplateDialog={setImportTemplateDialog}
+        setNewNodeDialog={setNewNodeDialog}
+        setNewNodeName={setNewNodeName}
+        setProjectApiKeyInput={setProjectApiKeyInput}
+        setProjectName={setProjectName}
+        setSessionDialogOpen={setSessionDialogOpen}
+        setShowProjectDialog={setShowProjectDialog}
+        setShowProjectId={setSelectedProjectId}
+        setTemplateDialog={setTemplateDialog}
+        setMergePhotoConfirmation={setMergePhotoConfirmation}
+        showProjectDialog={showProjectDialog}
+        handleServerDisconnectDismiss={dismissServerDisconnectDialog}
+        submitNewNode={submitNewNode}
+        submitTemplateDialog={submitTemplateDialog}
+        templateDialog={templateDialog}
+        transferProgress={transferProgress}
+        tree={tree}
       />
     )
   }
@@ -4050,6 +4503,7 @@ function MainApp() {
     return (
       <div className="app-shell app-shell--auth" data-theme={theme}>
         {renderDesktopServerManager(false)}
+        {renderAppDialogs()}
       </div>
     )
   }
@@ -4058,11 +4512,29 @@ function MainApp() {
     return (
       <div className="app-shell app-shell--auth" data-theme={theme}>
         {renderDesktopServerManager(true)}
+        {renderAppDialogs()}
+      </div>
+    )
+  }
+
+  if (desktopConnectedAccountRequired) {
+    return (
+      <div className="app-shell app-shell--auth" data-theme={theme}>
+        {renderDesktopServerManager(false)}
+        {renderAppDialogs()}
       </div>
     )
   }
 
   if (!currentUser) {
+    if (desktopEnvironment) {
+      return (
+        <div className="app-shell app-shell--auth" data-theme={theme}>
+          {renderDesktopServerManager(false)}
+          {renderAppDialogs()}
+        </div>
+      )
+    }
     return (
       <div className="app-shell app-shell--auth" data-theme={theme}>
         <AuthScreen
@@ -4071,7 +4543,7 @@ function MainApp() {
           currentServerLabel={selectedDesktopServerProfile?.name || ''}
           currentServerUrl={selectedDesktopServerProfile?.baseUrl || ''}
           error={error}
-          manageAccountsLabel={desktopEnvironment ? 'Manage Accounts' : 'Manage Account'}
+          manageAccountsLabel={desktopEnvironment ? 'Manage Server Profiles' : 'Manage Account'}
           onLogin={loginUser}
           onManageServers={desktopEnvironment ? openAccountManager : null}
           onRegister={registerUser}
@@ -4137,7 +4609,7 @@ function MainApp() {
         desktopWindowMaximized={desktopWindowMaximized}
         redo={redo}
         invertSelection={invertEffectiveSelection}
-        manageAccountsLabel={desktopEnvironment ? 'Manage Accounts' : 'Manage Account'}
+        manageAccountsLabel={desktopEnvironment ? 'Manage Server Profiles' : 'Manage Account'}
         rightSidebarOpen={effectiveRightSidebarOpen}
         selectedNode={selectedNode}
         selectedProjectId={selectedProjectId}
@@ -4157,7 +4629,7 @@ function MainApp() {
         selectChildren={selectChildren}
         selectParents={selectParents}
         selectSearchResults={selectSearchResults}
-        searchResultCount={searchResultNodeIds.length}
+        searchResultCount={effectiveSearchResultNodeIds.length}
         toggleTheme={toggleThemePreference}
         theme={theme}
         triggerAddPhoto={triggerAddPhoto}
@@ -4237,7 +4709,7 @@ function MainApp() {
           triggerAddPhotoNode={triggerAddPhotoNode}
           projectSettings={projectSettings}
           remoteSelectionsByNodeId={remoteSelectionsByNodeId}
-          searchResultNodeIds={searchResultNodeIds}
+          searchResultNodeIds={effectiveSearchResultNodeIds}
           selectRootNode={selectRootNode}
           selectedNodePath={selectedNodePath}
           selectedNodePathIds={selectedNodePathIds}
@@ -4314,92 +4786,7 @@ function MainApp() {
         </div>
       ) : null}
 
-      <AppDialogs
-        accountDialog={accountDialog}
-        accountForm={accountForm}
-        accountStatus={accountStatus}
-        applyTemplateConfirmation={applyTemplateConfirmation}
-        bulkSelectionCount={bulkSelectionCount}
-        bulkTemplateCount={selectionNodesWithTemplates.length}
-        busy={busy}
-        changePassword={changePassword}
-        changeUsername={changeUsername}
-        confirmApplyTemplateSelection={confirmApplyTemplateSelection}
-        confirmMergeNodeIntoPhoto={confirmMergeNodeIntoPhoto}
-        confirmRemoveIdentificationTemplate={confirmRemoveIdentificationTemplate}
-        createProject={createProject}
-        currentUser={currentUser}
-        desktopEnvironment={desktopEnvironment}
-        desktopServerProfiles={desktopServerState.profiles}
-        deleteNode={deleteNode}
-        deleteAccount={deleteAccount}
-        deleteTemplate={deleteTemplate}
-        deleteNodeOpen={deleteNodeOpen}
-        deleteProject={deleteProject}
-        deleteProjectText={deleteProjectText}
-        desktopClientId={currentUser?.captureSessionId || ''}
-        error={error}
-        exportFileName={exportFileName}
-        exportMediaTree={exportMediaTree}
-        exportProject={exportProject}
-        handleDialogEnter={handleDialogEnter}
-        hasBulkSelection={hasBulkSelection}
-        identificationTemplates={identificationTemplates}
-        importTemplateDialog={importTemplateDialog}
-        importTemplateFromProject={importTemplateFromProject}
-        importArchiveFile={importArchiveFile}
-        importInputRef={importInputRef}
-        importProject={importProject}
-        importProjectName={importProjectName}
-        projectApiKeyInput={projectApiKeyInput}
-        identificationTemplateRemovalCount={identificationTemplateRemovalCount}
-        identificationTemplateRemovalNodes={identificationTemplateRemovalNodes}
-        mergePhotoConfirmation={mergePhotoConfirmation}
-        mobileConnectionCount={mobileConnectionCount}
-        newNodeDialog={newNodeDialog}
-        newNodeName={newNodeName}
-        onOpenManageAccounts={openAccountManager}
-        onSelectDesktopServerProfile={selectServerProfile}
-        projectName={projectName}
-        projects={projects}
-        renameProject={renameProject}
-        logoutUser={() => void logoutUser()}
-        saveProjectOpenAiKey={saveProjectOpenAiKey}
-        selectedNode={selectedNode}
-        selectedDesktopServerProfileId={desktopServerState.selectedProfileId}
-        selectedProjectId={selectedProjectId}
-        sessionDialogOpen={sessionDialogOpen}
-        setAccountDialog={setAccountDialog}
-        setAccountForm={setAccountForm}
-        setApplyTemplateConfirmation={setApplyTemplateConfirmation}
-        setDeleteNodeOpen={setDeleteNodeOpen}
-        setDeleteProjectText={setDeleteProjectText}
-        setExportFileName={setExportFileName}
-        setIdentificationTemplateRemovalNodeId={(nodeId) => {
-          if (!nodeId) {
-            setIdentificationTemplateRemoval(null)
-            return
-          }
-          requestRemoveIdentificationTemplates([nodeId])
-        }}
-        setImportProjectName={setImportProjectName}
-        setImportTemplateDialog={setImportTemplateDialog}
-        setNewNodeDialog={setNewNodeDialog}
-        setNewNodeName={setNewNodeName}
-        setProjectApiKeyInput={setProjectApiKeyInput}
-        setProjectName={setProjectName}
-        setSessionDialogOpen={setSessionDialogOpen}
-        setShowProjectDialog={setShowProjectDialog}
-        setShowProjectId={setSelectedProjectId}
-        setTemplateDialog={setTemplateDialog}
-        setMergePhotoConfirmation={setMergePhotoConfirmation}
-        showProjectDialog={showProjectDialog}
-        submitNewNode={submitNewNode}
-        submitTemplateDialog={submitTemplateDialog}
-        templateDialog={templateDialog}
-        transferProgress={transferProgress}
-        tree={tree}
-      />
+      {renderAppDialogs()}
     </div>
   )
 }

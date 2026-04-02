@@ -4,6 +4,11 @@ import { getUrlState, updateUrlState } from '../lib/urlState'
 import { debugLog } from '../lib/debug'
 import { normalizeServerTree } from '../lib/tree'
 
+function shouldSuppressDesktopConnectionError(error) {
+  const message = String(error?.message || '').trim()
+  return message === 'Unable to reach the selected server profile.' || message === 'Choose a connected server profile.'
+}
+
 export default function useProjectSync({
   captureSessionId,
   clearHistory,
@@ -16,6 +21,7 @@ export default function useProjectSync({
   treeProjectId,
   setError,
   setMobileConnectionCount,
+  setProjectListLoading,
   setProjects,
   setSelectedNodeId,
   setSelectedProjectId,
@@ -23,41 +29,70 @@ export default function useProjectSync({
   setTree,
 }) {
   const projectsRequestSequenceRef = useRef(0)
+  const loadingProjectsRequestSequenceRef = useRef(0)
   const treeRequestSequenceRef = useRef(0)
+  const currentUserId = currentUser?.id || null
+  function buildProjectsSignature(projectList) {
+    return JSON.stringify(
+      (projectList || []).map((project) => ({
+        id: project?.id || '',
+        name: project?.name || '',
+        node_count: Number(project?.node_count || 0),
+        ownerUserId: project?.ownerUserId || '',
+        ownerUsername: project?.ownerUsername || '',
+      })),
+    )
+  }
 
   const loadProjects = useCallback(
-    async (preferredProjectId) => {
+    async (preferredProjectId, options = {}) => {
+      const silent = Boolean(options?.silent)
       const requestSequence = ++projectsRequestSequenceRef.current
-      const projectList = await api('/api/projects')
-      if (requestSequence !== projectsRequestSequenceRef.current) {
-        debugLog('loadProjects ignored stale response', { preferredProjectId, requestSequence })
+      if (!silent) {
+        loadingProjectsRequestSequenceRef.current = requestSequence
+        setProjectListLoading?.(true)
+      }
+      try {
+        const projectList = await api('/api/projects')
+        if (requestSequence !== projectsRequestSequenceRef.current) {
+          debugLog('loadProjects ignored stale response', { preferredProjectId, requestSequence })
+          return projectList
+        }
+        setProjects((current) => {
+          const nextProjectsSignature = buildProjectsSignature(projectList)
+          const currentProjectsSignature = buildProjectsSignature(current)
+          return nextProjectsSignature === currentProjectsSignature ? current : projectList
+        })
+
+        if (projectList.length === 0) {
+          updateUrlState(null, null, getUrlState().transform)
+          setSelectedProjectId(null)
+          setTree(null)
+          setSelectedNodeId(null)
+          setStatus('Create a project to start mapping images.')
+          return projectList
+        }
+
+        const nextId =
+          preferredProjectId && projectList.some((project) => project.id === preferredProjectId)
+            ? preferredProjectId
+            : projectList[0].id
+
+        debugLog('loadProjects selected project', {
+          preferredProjectId,
+          nextId,
+          projectIds: projectList.map((project) => project.id),
+        })
+        setSelectedProjectId(nextId)
+        setStatus('')
         return projectList
+      } finally {
+        if (!silent && requestSequence === loadingProjectsRequestSequenceRef.current) {
+          setProjectListLoading?.(false)
+        }
       }
-      setProjects(projectList)
-
-      if (projectList.length === 0) {
-        updateUrlState(null, null, getUrlState().transform)
-        setSelectedProjectId(null)
-        setTree(null)
-        setSelectedNodeId(null)
-        setStatus('Create a project to start mapping images.')
-        return
-      }
-
-      const nextId =
-        preferredProjectId && projectList.some((project) => project.id === preferredProjectId)
-          ? preferredProjectId
-          : projectList[0].id
-
-      debugLog('loadProjects selected project', {
-        preferredProjectId,
-        nextId,
-        projectIds: projectList.map((project) => project.id),
-      })
-      setSelectedProjectId(nextId)
-      setStatus('')
     },
-    [setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree],
+    [setProjectListLoading, setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree],
   )
 
   const loadTree = useCallback(
@@ -91,7 +126,8 @@ export default function useProjectSync({
 
   useEffect(() => {
     async function initialize() {
-      if (!currentUser) {
+      if (!currentUserId) {
+        setProjectListLoading?.(false)
         setProjects([])
         setSelectedProjectId(null)
         setTree(null)
@@ -106,16 +142,18 @@ export default function useProjectSync({
           onAuthLost?.()
           return
         }
-        setError(loadError.message)
+        if (!shouldSuppressDesktopConnectionError(loadError)) {
+          setError(loadError.message)
+        }
         setStatus('Unable to load projects.')
       }
     }
 
     void initialize()
-  }, [currentUser, loadProjects, onAuthLost, setError, setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree])
+  }, [currentUserId, loadProjects, onAuthLost, setError, setProjectListLoading, setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree])
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUserId) {
       return undefined
     }
 
@@ -123,13 +161,13 @@ export default function useProjectSync({
 
     async function refreshProjects() {
       try {
-        await loadProjects(selectedProjectId || getUrlState().projectId)
+        await loadProjects(selectedProjectId || getUrlState().projectId, { silent: true })
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
           onAuthLost?.()
           return
         }
-        if (!cancelled) {
+        if (!cancelled && !shouldSuppressDesktopConnectionError(loadError)) {
           setError(loadError.message)
         }
       }
@@ -154,14 +192,14 @@ export default function useProjectSync({
       window.removeEventListener('focus', refreshProjects)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [currentUser, loadProjects, onAuthLost, selectedProjectId, setError])
+  }, [currentUserId, loadProjects, onAuthLost, selectedProjectId, setError])
 
   useEffect(() => {
     clearHistory()
   }, [clearHistory, selectedProjectId])
 
   useEffect(() => {
-    if (!currentUser || !selectedProjectId) {
+    if (!currentUserId || !selectedProjectId) {
       return
     }
 
@@ -173,9 +211,11 @@ export default function useProjectSync({
         onAuthLost?.()
         return
       }
-      setError(loadError.message)
+      if (!shouldSuppressDesktopConnectionError(loadError)) {
+        setError(loadError.message)
+      }
     })
-  }, [currentUser, loadTree, onAuthLost, selectedProjectId, setError])
+  }, [currentUserId, loadTree, onAuthLost, selectedProjectId, setError])
 
   useEffect(() => {
     if (!captureSessionId || !selectedProjectId || !selectedNode?.id || treeProjectId !== selectedProjectId) {
@@ -202,7 +242,7 @@ export default function useProjectSync({
           onAuthLost?.()
           return
         }
-        if (!cancelled) {
+        if (!cancelled && !shouldSuppressDesktopConnectionError(publishError)) {
           setError(publishError.message)
         }
       }
@@ -258,7 +298,7 @@ export default function useProjectSync({
   }, [captureSessionId, onAuthLost, selectedProjectId, setMobileConnectionCount])
 
   useEffect(() => {
-    if (!currentUser || selectedProjectId == null) {
+    if (!currentUserId || selectedProjectId == null) {
       return undefined
     }
 
@@ -277,7 +317,9 @@ export default function useProjectSync({
             onAuthLost?.()
             return
           }
-          setError(loadError.message)
+          if (!shouldSuppressDesktopConnectionError(loadError)) {
+            setError(loadError.message)
+          }
         })
         return
       }
@@ -302,7 +344,9 @@ export default function useProjectSync({
           onAuthLost?.()
           return
         }
-        setError(loadError.message)
+        if (!shouldSuppressDesktopConnectionError(loadError)) {
+          setError(loadError.message)
+        }
       })
     }
 
@@ -313,7 +357,7 @@ export default function useProjectSync({
     return () => {
       stream.close()
     }
-  }, [currentUser, loadProjects, loadTree, onAuthLost, pendingLocalEventsRef, selectedNodeIdRef, selectedProjectId, setError])
+  }, [currentUserId, loadProjects, loadTree, onAuthLost, pendingLocalEventsRef, selectedNodeIdRef, selectedProjectId, setError])
 
   return {
     loadProjects,

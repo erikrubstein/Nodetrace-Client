@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const rendererDir = fileURLToPath(new URL('.', import.meta.url))
 const apiBaseUrl = process.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001'
-const host = process.env.VITE_HOST || '0.0.0.0'
+const host = process.env.VITE_HOST || '127.0.0.1'
 const port = Number(process.env.VITE_PORT || 5173)
 
 // https://vite.dev/config/

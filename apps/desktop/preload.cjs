@@ -13,6 +13,13 @@ contextBridge.exposeInMainWorld('nodetraceDesktop', {
   updateServerProfile: (id, profile) => ipcRenderer.invoke('desktop:update-server-profile', { id, profile }),
   deleteServerProfile: (id) => ipcRenderer.invoke('desktop:delete-server-profile', id),
   selectServerProfile: (id) => ipcRenderer.invoke('desktop:select-server-profile', id),
+  createProjectForProfile: (id, name) => ipcRenderer.invoke('desktop:create-project-for-profile', { id, name }),
+  listProjectsForProfile: (id) => ipcRenderer.invoke('desktop:list-projects-for-profile', id),
+  changeProfileAccountUsername: (id, username) =>
+    ipcRenderer.invoke('desktop:change-profile-account-username', { id, username }),
+  changeProfileAccountPassword: (id, currentPassword, newPassword) =>
+    ipcRenderer.invoke('desktop:change-profile-account-password', { id, currentPassword, newPassword }),
+  deleteProfileAccount: (id, username) => ipcRenderer.invoke('desktop:delete-profile-account', { id, username }),
   onWindowStateChange: (callback) => {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('desktop:window-state', listener)

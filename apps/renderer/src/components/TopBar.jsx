@@ -46,7 +46,6 @@ export default function TopBar({
   selectChildren,
   selectParents,
   selectSearchResults,
-  searchResultCount,
   theme,
   triggerAddPhoto,
   triggerAddPhotoNode,
@@ -264,7 +263,7 @@ export default function TopBar({
             <div className="menu-panel">
               <button
                 className="menu-item"
-                disabled={!searchResultCount || busy}
+                disabled={busy}
                 onClick={() => {
                   setOpenMenu(null)
                   selectSearchResults()
@@ -297,7 +296,7 @@ export default function TopBar({
               </button>
               <button
                 className="menu-item"
-                disabled={!searchResultCount || busy}
+                disabled={busy}
                 onClick={() => {
                   setOpenMenu(null)
                   appendSearchResults()

@@ -38,7 +38,7 @@ export default function InspectorPanel({
   const isRootNode = Boolean(selectedNode && selectedNode.parent_id == null)
 
   return (
-    <>
+    <div className="settings-panel inspector-panel">
       <PanelSection
         title={
           hasBulkSelection
@@ -154,6 +154,6 @@ export default function InspectorPanel({
 
       {error ? <div className="inspector__notice error">{error}</div> : null}
       {!error && status ? <div className="inspector__notice">{status}</div> : null}
-    </>
+    </div>
   )
 }

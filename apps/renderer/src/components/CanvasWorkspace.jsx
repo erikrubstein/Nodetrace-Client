@@ -227,7 +227,7 @@ export default function CanvasWorkspace({
         <IconButton
           aria-label={canvasIsolationMode === 'search' ? 'Show all nodes' : 'Show search results only'}
           className={`canvas-tool-button ${canvasIsolationMode === 'search' ? 'is-active' : ''}`}
-          disabled={!searchResultNodeIds?.length && canvasIsolationMode !== 'search'}
+          disabled={busy}
           onClick={toggleSearchIsolation}
           tooltip={canvasIsolationMode === 'search' ? 'Show All Nodes' : 'Show Results Only'}
         >

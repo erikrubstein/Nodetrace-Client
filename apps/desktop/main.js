@@ -5,7 +5,7 @@ import http from 'node:http'
 import https from 'node:https'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { getPanelInitialWidth, getPanelMinWidth } from '../../packages/shared/src/panelSizing.js'
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url))
@@ -21,12 +21,16 @@ let mainWindow = null
 const panelWindows = new Map()
 let desktopProxyServer = null
 let desktopProxyBaseUrl = ''
+let profileStatusPollTimer = null
+let profileStatusPollInFlight = false
+let lastBroadcastDesktopServerStateSignature = ''
 let desktopState = {
   profiles: [],
   selectedProfileId: null,
   sessionCookiesByProfileId: {},
 }
 let desktopProfileAuthStateById = {}
+const PROFILE_STATUS_POLL_INTERVAL_MS = 5000
 
 function logDesktop(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`
@@ -59,6 +63,32 @@ function buildWindowOptions(overrides = {}) {
   }
 }
 
+function encryptStoredSecret(secret) {
+  const normalized = String(secret || '')
+  if (!normalized) {
+    return ''
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Desktop credential encryption is unavailable on this system')
+  }
+  return safeStorage.encryptString(normalized).toString('base64')
+}
+
+function decryptStoredSecret(secret) {
+  const normalized = String(secret || '').trim()
+  if (!normalized) {
+    return ''
+  }
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(normalized, 'base64'))
+    }
+  } catch {
+    return ''
+  }
+  return ''
+}
+
 function normalizeServerProfile(profile, fallbackId = randomUUID()) {
   const id = String(profile?.id || fallbackId).trim()
   const baseUrlRaw = String(profile?.baseUrl || '').trim()
@@ -80,13 +110,15 @@ function normalizeServerProfile(profile, fallbackId = randomUUID()) {
   parsedUrl.hash = ''
   parsedUrl.search = ''
   const baseUrl = parsedUrl.toString().replace(/\/+$/, '')
-  const fallbackName = parsedUrl.host
-  const name = String(profile?.name || fallbackName).trim() || fallbackName
+  const username = String(profile?.username || '').trim().toLowerCase()
+  const providedPassword = typeof profile?.password === 'string' ? profile.password : ''
+  const passwordEncrypted = providedPassword ? encryptStoredSecret(providedPassword) : String(profile?.passwordEncrypted || '').trim()
 
   return {
     id,
-    name,
     baseUrl,
+    username,
+    passwordEncrypted,
   }
 }
 
@@ -148,27 +180,74 @@ function getProfileAuthState(profileId) {
     userId: null,
     username: '',
     captureSessionId: '',
+    connectionStatus: 'disconnected',
     error: '',
   }
 }
 
 function getDesktopServerState() {
   return {
-    profiles: desktopState.profiles.map((profile) => ({
-      ...profile,
-      ...getProfileAuthState(profile.id),
-    })),
+    profiles: desktopState.profiles.map((profile) => {
+      const authState = getProfileAuthState(profile.id)
+      return {
+        ...profile,
+        ...authState,
+        username: authState.username || profile.username || '',
+      }
+    }),
     selectedProfileId: desktopState.selectedProfileId,
     proxyBaseUrl: desktopProxyBaseUrl,
   }
 }
 
-function broadcastDesktopServerState() {
+function getDesktopServerStateSignature(payload) {
+  return JSON.stringify(payload)
+}
+
+function broadcastDesktopServerState(options = {}) {
   const payload = getDesktopServerState()
+  const signature = getDesktopServerStateSignature(payload)
+  if (!options.force && signature === lastBroadcastDesktopServerStateSignature) {
+    return false
+  }
+  lastBroadcastDesktopServerStateSignature = signature
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send('desktop:server-state', payload)
     }
+  }
+  return true
+}
+
+async function refreshAndBroadcastDesktopServerState() {
+  await refreshAllProfileAuthStates()
+  broadcastDesktopServerState()
+}
+
+function startProfileStatusPolling() {
+  if (profileStatusPollTimer) {
+    return
+  }
+
+  profileStatusPollTimer = setInterval(() => {
+    if (profileStatusPollInFlight) {
+      return
+    }
+    profileStatusPollInFlight = true
+    refreshAndBroadcastDesktopServerState()
+      .catch((error) => {
+        logDesktop(`Profile status poll failed: ${error.message}`)
+      })
+      .finally(() => {
+        profileStatusPollInFlight = false
+      })
+  }, PROFILE_STATUS_POLL_INTERVAL_MS)
+}
+
+function stopProfileStatusPolling() {
+  if (profileStatusPollTimer) {
+    clearInterval(profileStatusPollTimer)
+    profileStatusPollTimer = null
   }
 }
 
@@ -182,6 +261,30 @@ function setCorsHeaders(req, res) {
 
 function getStoredCookieHeader(profileId) {
   return String(desktopState.sessionCookiesByProfileId?.[profileId] || '').trim()
+}
+
+function getStoredPassword(profile) {
+  return decryptStoredSecret(profile?.passwordEncrypted)
+}
+
+function updateStoredProfile(profileId, updates = {}) {
+  const profileIndex = desktopState.profiles.findIndex((profile) => profile.id === profileId)
+  if (profileIndex < 0) {
+    return null
+  }
+  const nextProfile = normalizeServerProfile(
+    {
+      ...desktopState.profiles[profileIndex],
+      ...updates,
+    },
+    profileId,
+  )
+  if (!nextProfile) {
+    return null
+  }
+  desktopState.profiles[profileIndex] = nextProfile
+  writeDesktopState()
+  return nextProfile
 }
 
 function requestJson(url, options = {}) {
@@ -208,6 +311,7 @@ function requestJson(url, options = {}) {
             ok: response.statusCode >= 200 && response.statusCode < 300,
             statusCode: response.statusCode || 0,
             payload,
+            headers: response.headers || {},
           })
         })
       },
@@ -219,6 +323,15 @@ function requestJson(url, options = {}) {
 }
 
 async function fetchProfileAuthState(profile) {
+  const baseState = {
+    authenticated: false,
+    userId: null,
+    username: '',
+    captureSessionId: '',
+    connectionStatus: 'disconnected',
+    error: '',
+  }
+
   try {
     const targetUrl = new URL('/api/auth/me', `${profile.baseUrl}/`)
     const cookieHeader = getStoredCookieHeader(profile.id)
@@ -231,29 +344,82 @@ async function fetchProfileAuthState(profile) {
 
     const response = await requestJson(targetUrl, { headers })
     const payload = response.payload
-    if (!response.ok || !payload?.authenticated || !payload.user) {
-      return {
-        authenticated: false,
-        userId: null,
-        username: '',
-        captureSessionId: '',
-        error: response.ok ? '' : `HTTP ${response.statusCode}`,
+    if (response.ok && payload?.authenticated && payload.user) {
+      const resolvedUsername = String(payload.user.username || profile.username || '').trim().toLowerCase()
+      if (resolvedUsername && resolvedUsername !== profile.username) {
+        updateStoredProfile(profile.id, { username: resolvedUsername })
       }
+      return {
+        authenticated: true,
+        userId: String(payload.user.id || ''),
+        username: String(payload.user.username || ''),
+        captureSessionId: String(payload.user.captureSessionId || ''),
+        connectionStatus: 'connected',
+        error: '',
+      }
+    }
+
+    if (!response.ok) {
+      return {
+        ...baseState,
+        error: `HTTP ${response.statusCode}`,
+      }
+    }
+
+    const savedUsername = String(profile.username || '').trim().toLowerCase()
+    const savedPassword = getStoredPassword(profile)
+    if (!savedUsername || !savedPassword) {
+      return {
+        ...baseState,
+        connectionStatus: 'invalid_login',
+        error: 'Saved credentials are incomplete',
+      }
+    }
+
+    const loginResponse = await requestJson(new URL('/api/auth/login', `${profile.baseUrl}/`), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: savedUsername,
+        password: savedPassword,
+      }),
+    })
+
+    if (!loginResponse.ok) {
+      return {
+        ...baseState,
+        error: `HTTP ${loginResponse.statusCode}`,
+      }
+    }
+
+    if (loginResponse.payload?.ok === false) {
+      return {
+        ...baseState,
+        connectionStatus: 'invalid_login',
+        error: String(loginResponse.payload.error || 'Invalid username or password'),
+      }
+    }
+
+    captureSessionCookie(profile.id, loginResponse.headers['set-cookie'], false)
+    const resolvedUsername = String(loginResponse.payload?.username || savedUsername).trim().toLowerCase()
+    if (resolvedUsername && resolvedUsername !== profile.username) {
+      updateStoredProfile(profile.id, { username: resolvedUsername })
     }
 
     return {
       authenticated: true,
-      userId: String(payload.user.id || ''),
-      username: String(payload.user.username || ''),
-      captureSessionId: String(payload.user.captureSessionId || ''),
+      userId: String(loginResponse.payload?.id || ''),
+      username: String(loginResponse.payload?.username || savedUsername),
+      captureSessionId: String(loginResponse.payload?.captureSessionId || ''),
+      connectionStatus: 'connected',
       error: '',
     }
   } catch (error) {
     return {
-      authenticated: false,
-      userId: null,
-      username: '',
-      captureSessionId: '',
+      ...baseState,
       error: error.message || 'Unable to reach server',
     }
   }
@@ -280,7 +446,7 @@ async function refreshAllProfileAuthStates() {
   }
 }
 
-function captureSessionCookie(profileId, setCookieHeader) {
+function captureSessionCookie(profileId, setCookieHeader, refresh = true) {
   const headers = Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
   let changed = false
 
@@ -310,9 +476,11 @@ function captureSessionCookie(profileId, setCookieHeader) {
 
   if (changed) {
     writeDesktopState()
-    void refreshProfileAuthState(profileId).then(() => {
-      broadcastDesktopServerState()
-    })
+    if (refresh) {
+      void refreshProfileAuthState(profileId).then(() => {
+        broadcastDesktopServerState()
+      })
+    }
   }
 }
 
@@ -530,16 +698,58 @@ function openPanelWindow(options = {}) {
 }
 
 async function upsertServerProfile(id, payload) {
-  const nextProfile = normalizeServerProfile(payload, id || randomUUID())
+  const existingProfile = id ? desktopState.profiles.find((profile) => profile.id === id) || null : null
+  const mergedProfile = {
+    ...(existingProfile || {}),
+    ...(payload || {}),
+  }
+  if (existingProfile && typeof payload?.password === 'string' && !payload.password) {
+    delete mergedProfile.password
+  }
+
+  const nextProfile = normalizeServerProfile(mergedProfile, id || randomUUID())
   if (!nextProfile) {
-    throw new Error('A valid server name and base URL are required')
+    throw new Error('A valid server URL, username, and password are required')
+  }
+
+  if (!nextProfile.username || !nextProfile.passwordEncrypted) {
+    throw new Error('A valid server URL, username, and password are required')
   }
 
   const duplicate = desktopState.profiles.find(
-    (profile) => profile.baseUrl === nextProfile.baseUrl && profile.id !== nextProfile.id,
+    (profile) =>
+      profile.baseUrl === nextProfile.baseUrl &&
+      profile.username === nextProfile.username &&
+      profile.id !== nextProfile.id,
   )
   if (duplicate) {
-    throw new Error('A server with that base URL already exists')
+    throw new Error('That account already exists for this server')
+  }
+
+  let registrationCookies = null
+
+  if (payload?.authMode === 'register') {
+    const registerResponse = await requestJson(new URL('/api/auth/register', `${nextProfile.baseUrl}/`), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: nextProfile.username,
+        password: getStoredPassword(nextProfile),
+      }),
+    })
+
+    if (!registerResponse.ok && !registerResponse.payload) {
+      throw new Error(`Unable to register on that server (HTTP ${registerResponse.statusCode})`)
+    }
+
+    if (registerResponse.payload?.ok === false) {
+      throw new Error(String(registerResponse.payload.error || 'Unable to register that account'))
+    }
+
+    registrationCookies = registerResponse.headers?.['set-cookie'] || null
   }
 
   const existingIndex = desktopState.profiles.findIndex((profile) => profile.id === nextProfile.id)
@@ -553,7 +763,13 @@ async function upsertServerProfile(id, payload) {
     desktopState.selectedProfileId = nextProfile.id
   }
 
-  writeDesktopState()
+  delete desktopState.sessionCookiesByProfileId[nextProfile.id]
+  if (registrationCookies) {
+    captureSessionCookie(nextProfile.id, registrationCookies, false)
+  } else {
+    writeDesktopState()
+  }
+
   await refreshProfileAuthState(nextProfile.id)
   broadcastDesktopServerState()
   return getDesktopServerState()
@@ -580,6 +796,166 @@ async function selectServerProfile(id) {
   await refreshProfileAuthState(id)
   broadcastDesktopServerState()
   return getDesktopServerState()
+}
+
+async function listProjectsForProfile(profileId) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const targetUrl = new URL('/api/projects', `${profile.baseUrl}/`)
+  const headers = {
+    accept: 'application/json',
+  }
+  const cookieHeader = getStoredCookieHeader(profile.id)
+  if (cookieHeader) {
+    headers.cookie = cookieHeader
+  }
+
+  const response = await requestJson(targetUrl, { headers })
+  if (!response.ok) {
+    throw new Error(`Unable to load projects for that server profile (HTTP ${response.statusCode})`)
+  }
+  return Array.isArray(response.payload) ? response.payload : []
+}
+
+async function createProjectForProfile(profileId, name) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const projectName = String(name || '').trim()
+  if (!projectName) {
+    throw new Error('Project name is required')
+  }
+
+  const targetUrl = new URL('/api/projects', `${profile.baseUrl}/`)
+  const headers = {
+    accept: 'application/json',
+    'content-type': 'application/json',
+  }
+  const cookieHeader = getStoredCookieHeader(profile.id)
+  if (cookieHeader) {
+    headers.cookie = cookieHeader
+  }
+
+  const response = await requestJson(targetUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: projectName,
+      description: '',
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(String(response.payload?.error || `Unable to create a project on that server (HTTP ${response.statusCode})`))
+  }
+
+  return response.payload
+}
+
+async function patchProfileAccountUsername(profileId, username) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const response = await requestJson(new URL('/api/account/username', `${profile.baseUrl}/`), {
+    method: 'PATCH',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      cookie: getStoredCookieHeader(profile.id),
+    },
+    body: JSON.stringify({ username }),
+  })
+
+  if (!response.ok && !response.payload) {
+    throw new Error(`Unable to change username for that server profile (HTTP ${response.statusCode})`)
+  }
+  if (response.payload?.ok === false) {
+    throw new Error(String(response.payload.error || 'Unable to change username'))
+  }
+
+  const resolvedUsername = String(response.payload?.username || username || '').trim().toLowerCase()
+  if (resolvedUsername) {
+    updateStoredProfile(profile.id, { username: resolvedUsername })
+  }
+  await refreshProfileAuthState(profile.id)
+  broadcastDesktopServerState()
+  return {
+    ok: true,
+    user: response.payload || null,
+    desktopState: getDesktopServerState(),
+  }
+}
+
+async function patchProfileAccountPassword(profileId, currentPassword, newPassword) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const response = await requestJson(new URL('/api/account/password', `${profile.baseUrl}/`), {
+    method: 'PATCH',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      cookie: getStoredCookieHeader(profile.id),
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+
+  if (!response.ok && response.statusCode !== 204 && !response.payload) {
+    throw new Error(`Unable to change password for that server profile (HTTP ${response.statusCode})`)
+  }
+  if (response.payload?.ok === false) {
+    throw new Error(String(response.payload.error || 'Unable to change password'))
+  }
+
+  updateStoredProfile(profile.id, { password: newPassword })
+  await refreshProfileAuthState(profile.id)
+  broadcastDesktopServerState()
+  return {
+    ok: true,
+    desktopState: getDesktopServerState(),
+  }
+}
+
+async function deleteProfileAccount(profileId, username) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const response = await requestJson(new URL('/api/account', `${profile.baseUrl}/`), {
+    method: 'DELETE',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      cookie: getStoredCookieHeader(profile.id),
+    },
+    body: JSON.stringify({ username }),
+  })
+
+  if (!response.ok && response.statusCode !== 204 && !response.payload) {
+    throw new Error(`Unable to delete that server account (HTTP ${response.statusCode})`)
+  }
+  if (response.payload?.ok === false) {
+    throw new Error(String(response.payload.error || 'Unable to delete account'))
+  }
+
+  delete desktopState.sessionCookiesByProfileId[profile.id]
+  writeDesktopState()
+  await refreshProfileAuthState(profile.id)
+  broadcastDesktopServerState()
+  return {
+    ok: true,
+    desktopState: getDesktopServerState(),
+  }
 }
 
 function getEventWindow(event) {
@@ -610,7 +986,7 @@ ipcMain.handle('desktop:get-window-state', (event) => {
   return { maximized: Boolean(window?.isMaximized()) }
 })
 ipcMain.handle('desktop:get-server-state', async () => {
-  await refreshAllProfileAuthStates()
+  await refreshAndBroadcastDesktopServerState()
   return getDesktopServerState()
 })
 ipcMain.handle('desktop:create-server-profile', (_event, profile) => upsertServerProfile(null, profile))
@@ -619,6 +995,23 @@ ipcMain.handle('desktop:update-server-profile', (_event, payload) =>
 )
 ipcMain.handle('desktop:delete-server-profile', (_event, id) => deleteServerProfile(String(id || '').trim()))
 ipcMain.handle('desktop:select-server-profile', (_event, id) => selectServerProfile(String(id || '').trim()))
+ipcMain.handle('desktop:create-project-for-profile', (_event, payload) =>
+  createProjectForProfile(String(payload?.id || '').trim(), String(payload?.name || '')),
+)
+ipcMain.handle('desktop:list-projects-for-profile', (_event, id) => listProjectsForProfile(String(id || '').trim()))
+ipcMain.handle('desktop:change-profile-account-username', (_event, payload) =>
+  patchProfileAccountUsername(String(payload?.id || '').trim(), String(payload?.username || '').trim()),
+)
+ipcMain.handle('desktop:change-profile-account-password', (_event, payload) =>
+  patchProfileAccountPassword(
+    String(payload?.id || '').trim(),
+    String(payload?.currentPassword || ''),
+    String(payload?.newPassword || ''),
+  ),
+)
+ipcMain.handle('desktop:delete-profile-account', (_event, payload) =>
+  deleteProfileAccount(String(payload?.id || '').trim(), String(payload?.username || '').trim()),
+)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -633,12 +1026,14 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
+  stopProfileStatusPolling()
   desktopProxyServer?.close()
 })
 
 await app.whenReady()
 readDesktopState()
 await startDesktopProxy()
-await refreshAllProfileAuthStates()
+await refreshAndBroadcastDesktopServerState()
+startProfileStatusPolling()
 logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''}`)
 createMainWindow()

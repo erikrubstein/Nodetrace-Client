@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
+import IconButton from './IconButton'
+import { GearIcon, PlusIcon, UsersIcon, WarningIcon } from './icons'
 
 export default function AppDialogs({
   accountDialog,
   accountForm,
+  accountDialogUsername = '',
   accountStatus,
   applyTemplateConfirmation,
   busy,
@@ -15,6 +18,8 @@ export default function AppDialogs({
   createProject,
   currentUser,
   desktopEnvironment = false,
+  desktopProjectPickerLoading = false,
+  desktopProjectPickerProjects = [],
   desktopServerProfiles = [],
   deleteNode,
   deleteAccount,
@@ -45,6 +50,7 @@ export default function AppDialogs({
   newNodeDialog,
   newNodeName,
   onOpenManageAccounts = null,
+  onOpenDesktopProject = null,
   onSelectDesktopServerProfile = null,
   projects,
   renameProject,
@@ -53,6 +59,7 @@ export default function AppDialogs({
   selectedNode,
   selectedDesktopServerProfileId = null,
   selectedProjectId,
+  serverDisconnectDialogOpen = false,
   sessionDialogOpen,
   setAccountDialog,
   setAccountForm,
@@ -69,10 +76,11 @@ export default function AppDialogs({
   setSessionDialogOpen,
   setShowProjectDialog,
   setShowProjectId,
-  projectName,
+  projectName = '',
   setProjectName,
   setMergePhotoConfirmation,
   showProjectDialog,
+  handleServerDisconnectDismiss,
   submitNewNode,
   submitTemplateDialog,
   transferProgress,
@@ -81,41 +89,89 @@ export default function AppDialogs({
   templateDialog,
   setTemplateDialog,
 }) {
-  const [openProjectSearch, setOpenProjectSearch] = useState('')
+  const [openProjectFilter, setOpenProjectFilter] = useState(null)
+  const [connectedAccountFilter, setConnectedAccountFilter] = useState(false)
+  const [showProjectLoadingNotice, setShowProjectLoadingNotice] = useState(false)
+  const [collaboratorTooltip, setCollaboratorTooltip] = useState(null)
+  const collaboratorTooltipHideTimeoutRef = useRef(null)
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setShowProjectLoadingNotice(desktopProjectPickerLoading)
+    }, desktopProjectPickerLoading ? 140 : 0)
+
+    return () => {
+      window.clearTimeout(handle)
+    }
+  }, [desktopProjectPickerLoading])
+
+  useEffect(() => {
+    if (!collaboratorTooltip || collaboratorTooltip.visible) {
+      return undefined
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setCollaboratorTooltip((current) => (current ? { ...current, visible: true } : current))
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [collaboratorTooltip])
+
+  useEffect(() => {
+    return () => {
+      if (collaboratorTooltipHideTimeoutRef.current != null) {
+        window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const openProjectSource = desktopEnvironment ? desktopProjectPickerProjects : projects
+  const selectedDesktopServerProfile = useMemo(
+    () => desktopServerProfiles.find((profile) => profile.id === selectedDesktopServerProfileId) || null,
+    [desktopServerProfiles, selectedDesktopServerProfileId],
+  )
+  const openProjectUserId = desktopEnvironment
+    ? selectedDesktopServerProfile?.userId || null
+    : currentUser?.id || null
+  const canOpenProjectsForSelectedProfile = !desktopEnvironment || selectedDesktopServerProfile?.connectionStatus === 'connected'
+  const suppressOpenProjectError =
+    showProjectDialog === 'open' &&
+    desktopEnvironment &&
+    selectedDesktopServerProfile?.connectionStatus !== 'connected' &&
+    /^Desktop proxy request failed/i.test(String(error || ''))
   const sortedProjects = useMemo(
     () =>
-      [...projects].sort((left, right) =>
+      [...openProjectSource].sort((left, right) =>
         String(left?.name || '').localeCompare(String(right?.name || ''), undefined, {
           sensitivity: 'base',
           numeric: true,
         }),
       ),
-    [projects],
+    [openProjectSource],
+  )
+  const visibleDesktopAccounts = useMemo(
+    () =>
+      desktopServerProfiles.filter((profile) =>
+        connectedAccountFilter ? profile.connectionStatus === 'connected' : true,
+      ),
+    [connectedAccountFilter, desktopServerProfiles],
   )
 
-  const filteredProjects = useMemo(() => {
-    const query = openProjectSearch.toLowerCase()
-    if (!query) {
-      return sortedProjects
-    }
-
-    return sortedProjects.filter((project) => String(project?.name || '').toLowerCase().includes(query))
-  }, [openProjectSearch, sortedProjects])
-
-  const selectedDesktopServerProfile = useMemo(
-    () => desktopServerProfiles.find((profile) => profile.id === selectedDesktopServerProfileId) || null,
-    [desktopServerProfiles, selectedDesktopServerProfileId],
-  )
-
-  const ownedProjects = useMemo(
-    () => filteredProjects.filter((project) => project.ownerUserId && project.ownerUserId === currentUser?.id),
-    [currentUser?.id, filteredProjects],
-  )
-
-  const collaboratorProjects = useMemo(
-    () => filteredProjects.filter((project) => !project.ownerUserId || project.ownerUserId !== currentUser?.id),
-    [currentUser?.id, filteredProjects],
+  const visibleProjects = useMemo(
+    () =>
+      sortedProjects.filter((project) => {
+        const owned = Boolean(project?.ownerUserId && project.ownerUserId === openProjectUserId)
+        if (openProjectFilter === 'owned') {
+          return owned
+        }
+        if (openProjectFilter === 'collaborator') {
+          return !owned
+        }
+        return true
+      }),
+    [openProjectFilter, openProjectUserId, sortedProjects],
   )
 
   const importableProjects = useMemo(
@@ -132,34 +188,40 @@ export default function AppDialogs({
 
   const canCloseOpenProjectDialog = Boolean(tree?.project?.id)
 
-  function renderProjectSection(title, items) {
-    if (!items.length) {
-      return null
-    }
-
-    return (
-      <div className="project-picker__section" key={title}>
-        <div className="project-picker__section-title">{title}</div>
-        <div className="project-list">
-          {items.map((project) => (
-            <button
-              key={project.id}
-              className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
-              onClick={() => {
-                setOpenProjectSearch('')
-                setShowProjectId(project.id)
-                setShowProjectDialog(null)
-              }}
-              type="button"
-            >
-              <span>{project.name}</span>
-              <small>{project.node_count} nodes</small>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
+  function toggleOpenProjectFilter(filterKey) {
+    setOpenProjectFilter((current) => (current === filterKey ? null : filterKey))
   }
+
+  function openDesktopAccountManager(profileId) {
+    onOpenManageAccounts?.(profileId)
+  }
+
+  function showCollaboratorTooltip(event, ownerUsername) {
+    if (collaboratorTooltipHideTimeoutRef.current != null) {
+      window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
+      collaboratorTooltipHideTimeoutRef.current = null
+    }
+    const anchorRect = event.currentTarget.getBoundingClientRect()
+    setCollaboratorTooltip({
+      text: `Owner: ${ownerUsername || 'Unknown'}`,
+      top: anchorRect.bottom + 8,
+      left: anchorRect.left + anchorRect.width / 2,
+      visible: false,
+    })
+  }
+
+  function hideCollaboratorTooltip() {
+    setCollaboratorTooltip((current) => (current ? { ...current, visible: false } : current))
+    if (collaboratorTooltipHideTimeoutRef.current != null) {
+      window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
+    }
+    collaboratorTooltipHideTimeoutRef.current = window.setTimeout(() => {
+      setCollaboratorTooltip(null)
+      collaboratorTooltipHideTimeoutRef.current = null
+    }, 120)
+  }
+
+  const resolvedAccountDialogUsername = accountDialogUsername || currentUser?.username || ''
 
   return (
     <>
@@ -168,7 +230,7 @@ export default function AppDialogs({
           <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="dialog__title">Manage Account</div>
             <div className="inspector__notice">
-              Signed in as <strong>{currentUser?.username || 'Unknown user'}</strong>
+              Signed in as <strong>{resolvedAccountDialogUsername || 'Unknown user'}</strong>
             </div>
             <div className="field-stack">
               <button
@@ -253,7 +315,12 @@ export default function AppDialogs({
               handleDialogEnter(
                 event,
                 changePassword,
-                Boolean(accountForm.currentPassword && accountForm.newPassword) && !busy,
+                Boolean(
+                  accountForm.currentPassword &&
+                    accountForm.newPassword &&
+                    accountForm.confirmPassword &&
+                    accountForm.newPassword === accountForm.confirmPassword,
+                ) && !busy,
               )
             }
             role="dialog"
@@ -274,7 +341,16 @@ export default function AppDialogs({
               type="password"
               value={accountForm.newPassword}
             />
+            <input
+              onChange={(event) => setAccountForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+              placeholder="Retype new password"
+              type="password"
+              value={accountForm.confirmPassword || ''}
+            />
             {error ? <div className="inspector__notice error">{error}</div> : null}
+            {!error && accountForm.confirmPassword && accountForm.newPassword !== accountForm.confirmPassword ? (
+              <div className="inspector__notice error">New passwords do not match.</div>
+            ) : null}
             {!error && accountStatus ? <div className="inspector__notice">{accountStatus}</div> : null}
             <div className="dialog__actions">
               <button className="ghost-button" disabled={busy} onClick={() => setAccountDialog(null)} type="button">
@@ -282,7 +358,13 @@ export default function AppDialogs({
               </button>
               <button
                 className="primary-button"
-                disabled={busy || !accountForm.currentPassword || !accountForm.newPassword}
+                disabled={
+                  busy ||
+                  !accountForm.currentPassword ||
+                  !accountForm.newPassword ||
+                  !accountForm.confirmPassword ||
+                  accountForm.newPassword !== accountForm.confirmPassword
+                }
                 onClick={changePassword}
                 type="button"
               >
@@ -302,14 +384,17 @@ export default function AppDialogs({
               handleDialogEnter(
                 event,
                 deleteAccount,
-                accountForm.deleteConfirmation === currentUser?.username && !busy,
+                accountForm.deleteConfirmation === resolvedAccountDialogUsername && !busy,
               )
             }
             role="dialog"
           >
             <div className="dialog__title">Delete Account</div>
             <div className="inspector__notice">
-              Type <strong>{currentUser?.username}</strong> to permanently delete this account.
+              Type <strong>{resolvedAccountDialogUsername}</strong> to permanently delete this account from the server.
+            </div>
+            <div className="inspector__notice error">
+              This is not just removing a saved login from this client. It deletes the real server account and any server-side access tied to it.
             </div>
             <input
               autoFocus
@@ -328,7 +413,7 @@ export default function AppDialogs({
               </button>
               <button
                 className="danger-button"
-                disabled={busy || accountForm.deleteConfirmation !== currentUser?.username}
+                disabled={busy || accountForm.deleteConfirmation !== resolvedAccountDialogUsername}
                 onClick={deleteAccount}
                 type="button"
               >
@@ -446,105 +531,238 @@ export default function AppDialogs({
             if (!canCloseOpenProjectDialog) {
               return
             }
-            setOpenProjectSearch('')
             setShowProjectDialog(null)
           }}
           role="presentation"
         >
           <div
-            className="dialog dialog--wide"
+            className="dialog dialog--wide dialog--frameless project-picker-dialog"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <div className="dialog__title">Open Project</div>
             <div className={`project-picker${desktopEnvironment ? ' project-picker--desktop' : ''}`}>
               {desktopEnvironment ? (
-                <div className="project-picker__pane project-picker__pane--servers">
-                  <div className="project-picker__section-title">Servers</div>
-                  <div className="project-list">
-                    {desktopServerProfiles.length ? (
-                      desktopServerProfiles.map((profile) => {
-                        const selected = profile.id === selectedDesktopServerProfileId
-                        return (
-                          <button
-                            key={profile.id}
-                            className={`project-row project-row--server ${selected ? 'active' : ''}`}
-                            disabled={busy || !profile.authenticated}
-                            onClick={() => void onSelectDesktopServerProfile?.(profile.id)}
-                            type="button"
-                          >
-                            <span>{profile.name}</span>
-                            <small>{profile.authenticated ? profile.username : 'Sign in required'}</small>
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <div className="inspector__notice">No desktop servers saved yet.</div>
-                    )}
+                <div className="project-picker__card project-picker__card--servers">
+                  <div className="project-picker__card-header">
+                    <div className="project-picker__section-title">Select Server Profile</div>
+                    {onOpenManageAccounts ? (
+                      <IconButton
+                        className="tool-button"
+                        disabled={busy}
+                        onClick={onOpenManageAccounts}
+                        tooltip="Manage Server Profiles"
+                      >
+                        <GearIcon />
+                      </IconButton>
+                    ) : null}
                   </div>
-                  {onOpenManageAccounts ? (
-                    <button className="ghost-button" disabled={busy} onClick={onOpenManageAccounts} type="button">
-                      Manage Accounts
-                    </button>
-                  ) : null}
+                  <div className="project-picker__card-body project-picker__card-body--servers project-picker__card-body--server-filtered">
+                    <div className="project-picker__filters">
+                      <button
+                        className={`project-picker__filter ${connectedAccountFilter ? 'is-active' : ''}`}
+                        disabled={busy}
+                        onClick={() => setConnectedAccountFilter((current) => !current)}
+                        type="button"
+                      >
+                        Connected
+                      </button>
+                    </div>
+                    <div className="project-picker__divider" />
+                    <div className="project-list project-list--fill">
+                      {visibleDesktopAccounts.length ? (
+                        visibleDesktopAccounts.map((profile) => {
+                          const selected = profile.id === selectedDesktopServerProfileId
+                          const hasWarning = profile.connectionStatus !== 'connected'
+                          const warningClass =
+                            profile.connectionStatus === 'invalid_login'
+                              ? 'project-row__warning-inline--invalid'
+                              : 'project-row__warning-inline--disconnected'
+                          return (
+                            <div
+                              key={profile.id}
+                              className={`project-row project-row--account ${selected ? 'active' : ''} ${hasWarning ? 'project-row--warning' : ''}`}
+                            >
+                              <button
+                                className="project-row__main-button"
+                                disabled={busy}
+                                onClick={() => {
+                                  void onSelectDesktopServerProfile?.(profile.id)
+                                }}
+                                type="button"
+                              >
+                                <span className="project-row__account-meta">
+                                  <span>{profile.username || profile.baseUrl || 'Server Profile'}</span>
+                                  <small>{profile.baseUrl}</small>
+                                </span>
+                              </button>
+                              {hasWarning ? (
+                                <span className={`project-row__warning-inline ${warningClass}`} aria-hidden="true">
+                                  <WarningIcon />
+                                </span>
+                              ) : null}
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="inspector__notice">
+                          {connectedAccountFilter ? 'No connected server profiles found.' : 'No desktop server profiles saved yet.'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
-              <div className="project-picker__pane project-picker__pane--projects">
-                <div className="project-picker__toolbar">
-                  <input
-                    autoFocus={!desktopEnvironment}
-                    onChange={(event) => setOpenProjectSearch(event.target.value)}
-                    placeholder="Search projects"
-                    value={openProjectSearch}
-                  />
+              <div className="project-picker__card project-picker__card--projects">
+                <div className="project-picker__card-header">
+                  <div className="project-picker__section-title">Open Project</div>
+                  <IconButton
+                    className="tool-button"
+                    disabled={busy || (desktopEnvironment && !canOpenProjectsForSelectedProfile)}
+                    onClick={() => {
+                      setProjectName('')
+                      setShowProjectDialog('create')
+                    }}
+                    tooltip="Create Project"
+                  >
+                    <PlusIcon />
+                  </IconButton>
                 </div>
-                <div className="project-picker__divider" />
-                {desktopEnvironment && selectedDesktopServerProfile && !selectedDesktopServerProfile.authenticated ? (
-                  <div className="inspector__notice">
-                    Sign in to <strong>{selectedDesktopServerProfile.name}</strong> before opening projects on that server.
-                  </div>
-                ) : ownedProjects.length || collaboratorProjects.length ? (
-                  <div className="project-picker__sections">
-                    {renderProjectSection('Owned Projects', ownedProjects)}
-                    {renderProjectSection('Collaborator Projects', collaboratorProjects)}
-                  </div>
-                ) : (
-                  <div className="inspector__notice">
-                    {openProjectSearch ? 'No projects match that search.' : 'No projects available on this server yet.'}
-                  </div>
-                )}
+                  <div className="project-picker__card-body">
+                    <div className="project-picker__filters">
+                      <button
+                        className={`project-picker__filter ${openProjectFilter === 'owned' ? 'is-active' : ''}`}
+                        disabled={busy}
+                        onClick={() => toggleOpenProjectFilter('owned')}
+                        type="button"
+                      >
+                        Owned
+                      </button>
+                      <button
+                        className={`project-picker__filter ${openProjectFilter === 'collaborator' ? 'is-active' : ''}`}
+                        disabled={busy}
+                        onClick={() => toggleOpenProjectFilter('collaborator')}
+                        type="button"
+                      >
+                        Collaborator
+                      </button>
+                    </div>
+                    <div className="project-picker__divider" />
+                  {desktopEnvironment && !selectedDesktopServerProfile ? (
+                    <div className="inspector__notice">Add a server profile before opening projects.</div>
+                  ) : desktopEnvironment && selectedDesktopServerProfile?.connectionStatus !== 'connected' ? (
+                    <div className="project-picker__state-stack">
+                      <div className="inspector__notice">
+                        {selectedDesktopServerProfile?.connectionStatus === 'invalid_login' ? (
+                          <>
+                            <strong>{selectedDesktopServerProfile?.username || 'This server profile'}</strong> has invalid login
+                            credentials. Re-authenticate or fix it before opening projects.
+                          </>
+                        ) : (
+                          <>
+                            <strong>{selectedDesktopServerProfile?.username || 'This server profile'}</strong> is disconnected.
+                            Reconnect the server to view its projects.
+                          </>
+                        )}
+                      </div>
+                      <div className="project-picker__state-actions">
+                        <button
+                          className="ghost-button"
+                          disabled={busy}
+                          onClick={() => void openDesktopAccountManager(selectedDesktopServerProfile?.id)}
+                          type="button"
+                        >
+                          Manage Server Profile
+                        </button>
+                      </div>
+                    </div>
+                  ) : desktopProjectPickerLoading && showProjectLoadingNotice ? (
+                    <div className="inspector__notice">Loading projects...</div>
+                  ) : desktopProjectPickerLoading ? (
+                    <div className="project-picker__loading-placeholder" aria-hidden="true" />
+                  ) : visibleProjects.length ? (
+                    <div className="project-list project-list--fill">
+                      {visibleProjects.map((project) => {
+                        const collaboratorProject = !(project?.ownerUserId && project.ownerUserId === openProjectUserId)
+                        return (
+                          <button
+                            key={project.id}
+                            className={`project-row ${project.id === selectedProjectId ? 'active' : ''}`}
+                            onClick={() => {
+                              if (desktopEnvironment) {
+                                void onOpenDesktopProject?.(selectedDesktopServerProfile?.id, project.id)
+                                return
+                              }
+                              setShowProjectId(project.id)
+                              setShowProjectDialog(null)
+                            }}
+                            disabled={!canOpenProjectsForSelectedProfile}
+                            type="button"
+                          >
+                            <span className="project-row__name">
+                                <span>{project.name}</span>
+                              {collaboratorProject ? (
+                                <span
+                                  className="project-row__icon-wrap project-row__collaborator-indicator"
+                                  onMouseEnter={(event) => showCollaboratorTooltip(event, project.ownerUsername)}
+                                  onMouseLeave={hideCollaboratorTooltip}
+                                  onFocus={(event) => showCollaboratorTooltip(event, project.ownerUsername)}
+                                  onBlur={hideCollaboratorTooltip}
+                                >
+                                  <span className="project-row__icon project-row__icon-button" aria-hidden="true">
+                                    <UsersIcon />
+                                  </span>
+                                </span>
+                              ) : null}
+                            </span>
+                            <small>{project.node_count} nodes</small>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="inspector__notice">
+                      {openProjectSource.length
+                        ? 'No projects match the selected filter.'
+                        : 'No projects available on this server profile yet.'}
+                    </div>
+                  )}
+                  {canCloseOpenProjectDialog ? (
+                    <div className="project-picker__card-actions">
+                      <button
+                        className="ghost-button"
+                        disabled={busy}
+                        onClick={() => {
+                          setShowProjectDialog(null)
+                        }}
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
-            {error ? <div className="inspector__notice error">{error}</div> : null}
-            <div className="dialog__actions project-picker__actions">
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => {
-                  setOpenProjectSearch('')
-                  setProjectName('')
-                  setShowProjectDialog('create')
-                }}
-                type="button"
-              >
-                Create Project
-              </button>
-              {canCloseOpenProjectDialog ? (
-                <button
-                  className="ghost-button"
-                  disabled={busy}
-                  onClick={() => {
-                    setOpenProjectSearch('')
-                    setShowProjectDialog(null)
-                  }}
-                  type="button"
-                >
-                  Close
-                </button>
-              ) : null}
-            </div>
+            {error && !suppressOpenProjectError ? <div className="inspector__notice error">{error}</div> : null}
           </div>
+        </div>
+      ) : null}
+
+      {serverDisconnectDialogOpen ? (
+        <div className="dialog-backdrop" role="presentation">
+          <ConfirmDialog
+            confirmLabel="Go To Projects"
+            confirmTone="ghost"
+            onConfirm={() => {
+              handleServerDisconnectDismiss?.()
+            }}
+            title="Server Profile Disconnected"
+          >
+            <div className="inspector__notice">
+              The server profile for the current project disconnected.
+            </div>
+          </ConfirmDialog>
         </div>
       ) : null}
 
@@ -804,6 +1022,16 @@ export default function AppDialogs({
               ))}
             </div>
             {error ? <div className="inspector__notice error">{error}</div> : null}
+            <div className="dialog__actions">
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setShowProjectDialog(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1048,6 +1276,19 @@ export default function AppDialogs({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {collaboratorTooltip ? (
+        <div
+          aria-hidden="true"
+          className={`icon-tooltip icon-tooltip--floating ${collaboratorTooltip.visible ? 'icon-tooltip--visible' : ''}`}
+          style={{
+            top: `${collaboratorTooltip.top}px`,
+            left: `${collaboratorTooltip.left}px`,
+          }}
+        >
+          {collaboratorTooltip.text}
         </div>
       ) : null}
     </>
