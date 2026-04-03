@@ -24,6 +24,7 @@ export default function TopBar({
   pendingUploadParentId,
   onPresenceSelect,
   presenceUsers,
+  projectLoading = false,
   projectName,
   redo,
   manageAccountsLabel = '',
@@ -397,7 +398,14 @@ export default function TopBar({
         </div>
 
         <span className="topbar__separator">|</span>
-        <div className="project-chip">{projectName || 'No project'}</div>
+        <div className={`project-chip ${projectLoading ? 'project-chip--loading' : ''}`.trim()}>
+          <span className="project-chip__label">{projectName || 'No project'}</span>
+          {projectLoading ? (
+            <span aria-hidden="true" className="project-chip__loading-indicator">
+              <span className="project-chip__loading-bar" />
+            </span>
+          ) : null}
+        </div>
         <input
           ref={fileInputRef}
           accept="image/*"

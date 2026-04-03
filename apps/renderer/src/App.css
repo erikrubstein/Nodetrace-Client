@@ -1111,9 +1111,57 @@ body.capture-route #root {
 }
 
 .project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.82rem;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.project-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-chip--loading {
+  color: var(--text);
+}
+
+.project-chip__loading-indicator {
+  position: relative;
+  width: 34px;
+  height: 4px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--menu-active);
+}
+
+.project-chip__loading-bar {
+  position: absolute;
+  inset: 0 auto 0 -40%;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--text);
+  animation: project-chip-loading 1.05s ease-in-out infinite;
+}
+
+@keyframes project-chip-loading {
+  0% {
+    transform: translateX(0);
+    opacity: 0.65;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(185%);
+    opacity: 0.65;
+  }
 }
 
 .topbar__separator {

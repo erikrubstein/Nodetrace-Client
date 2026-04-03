@@ -252,6 +252,16 @@ function MainApp() {
     () => desktopServerState.profiles.find((profile) => profile.id === desktopServerState.selectedProfileId) || null,
     [desktopServerState.profiles, desktopServerState.selectedProfileId],
   )
+  const selectedProjectSummary = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) || null,
+    [projects, selectedProjectId],
+  )
+  const activeProjectDisplayName = tree?.project?.name || selectedProjectSummary?.name || ''
+  const projectTreeLoading = Boolean(
+    currentUser &&
+    selectedProjectId &&
+    (!tree?.project || tree.project.id !== selectedProjectId),
+  )
   const managedDesktopAccountProfile = useMemo(() => {
     if (!desktopEnvironment) {
       return null
@@ -294,8 +304,8 @@ function MainApp() {
   }, [theme])
 
   useEffect(() => {
-    document.title = tree?.project?.name ? `Nodetrace | ${tree.project.name}` : 'Nodetrace'
-  }, [tree?.project?.name])
+    document.title = activeProjectDisplayName ? `Nodetrace | ${activeProjectDisplayName}` : 'Nodetrace'
+  }, [activeProjectDisplayName])
 
   useEffect(() => {
     treeRef.current = tree
@@ -4565,7 +4575,8 @@ function MainApp() {
         pendingUploadMode={pendingUploadMode}
         pendingUploadParentId={pendingUploadParentId}
         presenceUsers={remotePresenceUsers}
-        projectName={tree?.project?.name}
+        projectLoading={projectTreeLoading}
+        projectName={activeProjectDisplayName}
         desktopWindowMaximized={desktopWindowMaximized}
         redo={redo}
         invertSelection={invertEffectiveSelection}
