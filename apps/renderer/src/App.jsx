@@ -259,7 +259,10 @@ function MainApp() {
     () => projects.find((project) => project.id === selectedProjectId) || null,
     [projects, selectedProjectId],
   )
-  const activeProjectDisplayName = tree?.project?.name || selectedProjectSummary?.name || ''
+  const activeProjectDisplayName =
+    selectedProjectId && tree?.project?.id !== selectedProjectId
+      ? selectedProjectSummary?.name || tree?.project?.name || ''
+      : tree?.project?.name || selectedProjectSummary?.name || ''
   const projectTreeLoading = Boolean(
     currentUser &&
     selectedProjectId &&
@@ -1151,7 +1154,6 @@ function MainApp() {
     pendingInitialCanvasFitRef.current = false
     loadedUiSignatureRef.current = ''
     pendingUiSignatureRef.current = null
-    setLoadedImages({})
   }, [selectedProjectId])
 
   useEffect(() => {
