@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
 import IconButton from './IconButton'
 import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, PathIcon, RootNodeIcon } from './icons'
@@ -66,66 +66,54 @@ export default function CanvasWorkspace({
     }
     return null
   }, [canvasIsolationMode, searchResultNodeIds, selectedNodePathIds])
-  const pathContainerRef = useRef(null)
-  const pathMeasureRef = useRef(null)
-  const [visiblePathStart, setVisiblePathStart] = useState(0)
+  const pathScrollRef = useRef(null)
+  const pathScrollTargetRef = useRef(0)
 
   useLayoutEffect(() => {
-    function recomputeVisiblePath() {
-      const container = pathContainerRef.current
-      const measurer = pathMeasureRef.current
-      if (!container || !measurer || !selectedNodePath?.length) {
-        setVisiblePathStart(0)
-        return
-      }
-
-      const segmentWidths = Array.from(measurer.querySelectorAll('[data-path-segment="true"]')).map((element) =>
-        Math.ceil(element.getBoundingClientRect().width),
-      )
-      const ellipsisWidth = Math.ceil(
-        measurer.querySelector('[data-path-ellipsis="true"]')?.getBoundingClientRect().width || 0,
-      )
-      const availableWidth = Math.floor(container.parentElement?.getBoundingClientRect().width || 0)
-
-      if (!segmentWidths.length || availableWidth <= 0) {
-        setVisiblePathStart(0)
-        return
-      }
-
-      let startIndex = segmentWidths.length - 1
-      let usedWidth = segmentWidths[startIndex] || 0
-      while (startIndex > 0 && usedWidth + segmentWidths[startIndex - 1] <= availableWidth) {
-        startIndex -= 1
-        usedWidth += segmentWidths[startIndex]
-      }
-
-      if (startIndex > 0) {
-        while (startIndex < segmentWidths.length - 1 && usedWidth + ellipsisWidth > availableWidth) {
-          usedWidth -= segmentWidths[startIndex]
-          startIndex += 1
-        }
-      }
-
-      setVisiblePathStart(startIndex)
+    const element = pathScrollRef.current
+    if (!element) {
+      return
     }
-
-    recomputeVisiblePath()
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined' && pathContainerRef.current
-        ? new ResizeObserver(() => recomputeVisiblePath())
-        : null
-    if (resizeObserver && pathContainerRef.current) {
-      resizeObserver.observe(pathContainerRef.current)
-    }
-    window.addEventListener('resize', recomputeVisiblePath)
-    return () => {
-      resizeObserver?.disconnect()
-      window.removeEventListener('resize', recomputeVisiblePath)
-    }
+    const nextScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
+    pathScrollTargetRef.current = nextScrollLeft
+    element.scrollLeft = nextScrollLeft
   }, [selectedNodeId, selectedNodePath])
 
-  const visiblePath = selectedNodePath.slice(visiblePathStart)
-  const showLeadingEllipsis = visiblePathStart > 0
+  useEffect(() => {
+    const element = pathScrollRef.current
+    if (!element) {
+      return undefined
+    }
+
+    const wheelListener = (event) => {
+      const canScrollHorizontally = element.scrollWidth > element.clientWidth
+      if (!canScrollHorizontally) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+
+      const delta = event.deltaX || event.deltaY
+      const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
+      const currentScrollLeft =
+        Number.isFinite(pathScrollTargetRef.current) && pathScrollTargetRef.current > 0
+          ? pathScrollTargetRef.current
+          : element.scrollLeft
+      const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, currentScrollLeft + delta))
+      pathScrollTargetRef.current = nextScrollLeft
+      element.scrollTo({
+        left: nextScrollLeft,
+        behavior: 'smooth',
+      })
+    }
+
+    element.addEventListener('wheel', wheelListener, { passive: false, capture: true })
+    return () => {
+      element.removeEventListener('wheel', wheelListener, true)
+    }
+  }, [])
 
   return (
     <section
@@ -428,12 +416,16 @@ export default function CanvasWorkspace({
       ) : null}
       <div className="canvas-caption canvas-caption--left">
         {selectedNodePath?.length ? (
-          <>
-            <div ref={pathContainerRef} className="canvas-caption__path" role="navigation" aria-label="Selected node path">
-              {showLeadingEllipsis ? <span className="canvas-caption__ellipsis">...</span> : null}
-              {visiblePath.map((entry, index) => (
+            <div
+              ref={pathScrollRef}
+              className="canvas-caption__path"
+              role="navigation"
+              aria-label="Selected node path"
+            >
+              <div className="canvas-caption__path-track">
+                {selectedNodePath.map((entry, index) => (
                 <span key={entry.id} className="canvas-caption__segment">
-                  {showLeadingEllipsis || index > 0 ? <span className="canvas-caption__separator">{'>'}</span> : null}
+                    {index > 0 ? <span className="canvas-caption__separator">{'>'}</span> : null}
                   <button
                     className={`canvas-caption__node ${entry.id === selectedNodePath[selectedNodePath.length - 1]?.id ? 'is-selected' : ''}`}
                     onPointerDown={(event) => {
@@ -450,18 +442,9 @@ export default function CanvasWorkspace({
                     {entry.name}
                   </button>
                 </span>
-              ))}
+                ))}
+              </div>
             </div>
-            <div ref={pathMeasureRef} className="canvas-caption__path-measure" aria-hidden="true">
-              <span className="canvas-caption__ellipsis" data-path-ellipsis="true">...</span>
-              {selectedNodePath.map((entry, index) => (
-                <span key={entry.id} className="canvas-caption__segment" data-path-segment="true">
-                  {index > 0 ? <span className="canvas-caption__separator">{'>'}</span> : null}
-                  <span className="canvas-caption__node">{entry.name}</span>
-                </span>
-              ))}
-            </div>
-          </>
         ) : (
           'No node selected'
         )}

@@ -1612,8 +1612,8 @@ body.capture-route #root {
 
 .canvas-caption--left {
   left: 12px;
-  right: 180px;
   max-width: calc(50% - 12px);
+  width: fit-content;
   text-align: left;
 }
 
@@ -1629,8 +1629,23 @@ body.capture-route #root {
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  pointer-events: auto;
+  overscroll-behavior-x: contain;
+}
+
+.canvas-caption__path::-webkit-scrollbar {
+  display: none;
+}
+
+.canvas-caption__path-track {
+  min-width: max-content;
+  display: inline-flex;
+  align-items: center;
 }
 
 .canvas-caption__segment {
@@ -1639,7 +1654,6 @@ body.capture-route #root {
   flex: 0 0 auto;
 }
 
-.canvas-caption__ellipsis,
 .canvas-caption__separator {
   color: var(--muted);
   flex: 0 0 auto;
@@ -1663,17 +1677,6 @@ body.capture-route #root {
 .canvas-caption__node.is-selected {
   text-decoration: underline;
   text-underline-offset: 0.14em;
-}
-
-.canvas-caption__path-measure {
-  position: absolute;
-  left: -9999px;
-  top: -9999px;
-  visibility: hidden;
-  pointer-events: none;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
 }
 
 .drop-overlay {

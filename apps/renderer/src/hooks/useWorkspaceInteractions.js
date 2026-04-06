@@ -531,6 +531,9 @@ export default function useWorkspaceInteractions({
     }
 
     const wheelListener = (event) => {
+      if (event.target instanceof Element && event.target.closest('.canvas-caption__path')) {
+        return
+      }
       event.preventDefault()
       const rect = viewportRef.current?.getBoundingClientRect()
       if (!rect) {
