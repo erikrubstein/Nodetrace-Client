@@ -2927,6 +2927,19 @@ button:disabled {
   overflow: visible;
 }
 
+.project-row__collaborator-indicator .icon-tooltip {
+  top: calc(100% + 8px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.project-row__collaborator-indicator:hover .icon-tooltip,
+.project-row__collaborator-indicator:focus-within .icon-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .project-row__icon-button {
   width: auto;
   min-width: 0;

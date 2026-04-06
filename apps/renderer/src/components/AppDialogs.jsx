@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
 import IconButton from './IconButton'
 import { GearIcon, PlusIcon, UsersIcon, WarningIcon } from './icons'
@@ -92,8 +92,6 @@ export default function AppDialogs({
   const [openProjectFilter, setOpenProjectFilter] = useState(null)
   const [connectedAccountFilter, setConnectedAccountFilter] = useState(false)
   const [showProjectLoadingNotice, setShowProjectLoadingNotice] = useState(false)
-  const [collaboratorTooltip, setCollaboratorTooltip] = useState(null)
-  const collaboratorTooltipHideTimeoutRef = useRef(null)
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -104,28 +102,6 @@ export default function AppDialogs({
       window.clearTimeout(handle)
     }
   }, [desktopProjectPickerLoading])
-
-  useEffect(() => {
-    if (!collaboratorTooltip || collaboratorTooltip.visible) {
-      return undefined
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setCollaboratorTooltip((current) => (current ? { ...current, visible: true } : current))
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [collaboratorTooltip])
-
-  useEffect(() => {
-    return () => {
-      if (collaboratorTooltipHideTimeoutRef.current != null) {
-        window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
-      }
-    }
-  }, [])
 
   const openProjectSource = desktopEnvironment ? desktopProjectPickerProjects : projects
   const selectedDesktopServerProfile = useMemo(
@@ -194,31 +170,6 @@ export default function AppDialogs({
 
   function openDesktopAccountManager(profileId) {
     onOpenManageAccounts?.(profileId)
-  }
-
-  function showCollaboratorTooltip(event, ownerUsername) {
-    if (collaboratorTooltipHideTimeoutRef.current != null) {
-      window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
-      collaboratorTooltipHideTimeoutRef.current = null
-    }
-    const anchorRect = event.currentTarget.getBoundingClientRect()
-    setCollaboratorTooltip({
-      text: `Owner: ${ownerUsername || 'Unknown'}`,
-      top: anchorRect.bottom + 8,
-      left: anchorRect.left + anchorRect.width / 2,
-      visible: false,
-    })
-  }
-
-  function hideCollaboratorTooltip() {
-    setCollaboratorTooltip((current) => (current ? { ...current, visible: false } : current))
-    if (collaboratorTooltipHideTimeoutRef.current != null) {
-      window.clearTimeout(collaboratorTooltipHideTimeoutRef.current)
-    }
-    collaboratorTooltipHideTimeoutRef.current = window.setTimeout(() => {
-      setCollaboratorTooltip(null)
-      collaboratorTooltipHideTimeoutRef.current = null
-    }, 120)
   }
 
   const resolvedAccountDialogUsername = accountDialogUsername || currentUser?.username || ''
@@ -702,15 +653,12 @@ export default function AppDialogs({
                             <span className="project-row__name">
                                 <span>{project.name}</span>
                               {collaboratorProject ? (
-                                <span
-                                  className="project-row__icon-wrap project-row__collaborator-indicator"
-                                  onMouseEnter={(event) => showCollaboratorTooltip(event, project.ownerUsername)}
-                                  onMouseLeave={hideCollaboratorTooltip}
-                                  onFocus={(event) => showCollaboratorTooltip(event, project.ownerUsername)}
-                                  onBlur={hideCollaboratorTooltip}
-                                >
+                                <span className="icon-button-wrap project-row__icon-wrap project-row__collaborator-indicator">
                                   <span className="project-row__icon project-row__icon-button" aria-hidden="true">
                                     <UsersIcon />
+                                  </span>
+                                  <span aria-hidden="true" className="icon-tooltip project-row__icon-tooltip">
+                                    {`Owner: ${project.ownerUsername || 'Unknown'}`}
                                   </span>
                                 </span>
                               ) : null}
@@ -1279,18 +1227,6 @@ export default function AppDialogs({
         </div>
       ) : null}
 
-      {collaboratorTooltip ? (
-        <div
-          aria-hidden="true"
-          className={`icon-tooltip icon-tooltip--floating ${collaboratorTooltip.visible ? 'icon-tooltip--visible' : ''}`}
-          style={{
-            top: `${collaboratorTooltip.top}px`,
-            left: `${collaboratorTooltip.left}px`,
-          }}
-        >
-          {collaboratorTooltip.text}
-        </div>
-      ) : null}
     </>
   )
 }
