@@ -1993,9 +1993,38 @@ body.capture-route #root {
 
 .preview-panel__actions {
   display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.preview-panel__actions::-webkit-scrollbar {
+  display: none;
+}
+
+.preview-panel__action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.preview-panel__action-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.preview-panel__action-buttons {
+  display: flex;
   gap: 6px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .preview-panel__media-strip {
@@ -2042,6 +2071,10 @@ body.capture-route #root {
 
 .preview-panel__tool-button.is-active:hover:not(:disabled) {
   color: var(--text);
+}
+
+.settings-panel__access-toggle {
+  margin-bottom: 8px;
 }
 
 .camera-panel {

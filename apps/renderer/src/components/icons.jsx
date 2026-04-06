@@ -66,6 +66,10 @@ export function UsersIcon() {
   return <i aria-hidden="true" className="fa-solid fa-users" />
 }
 
+export function GlobeIcon() {
+  return <i aria-hidden="true" className="fa-solid fa-globe" />
+}
+
 export function WarningIcon() {
   return <i aria-hidden="true" className="fa-solid fa-triangle-exclamation" />
 }

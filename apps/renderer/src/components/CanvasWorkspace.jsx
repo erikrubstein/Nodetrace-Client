@@ -39,6 +39,7 @@ export default function CanvasWorkspace({
   selectedNodeId,
   setCollapsed,
   setContextMenu,
+  setMergePhotoConfirmation,
   setDeleteNodeOpen,
   setDragActive,
   setPendingUploadMode,
@@ -518,6 +519,27 @@ export default function CanvasWorkspace({
               type="button"
             >
               {contextMenuNode?.collapsed ? 'Expand' : 'Collapse'}
+            </button>
+          ) : null}
+          {contextMenuNode?.parent_id != null && !contextMenuNode?.children?.length && contextMenuNode?.hasImage ? (
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={() => {
+                const parentNode = tree?.nodes.find((node) => node.id === contextMenuNode.parent_id)
+                setContextMenu(null)
+                setMergePhotoConfirmation?.({
+                  sourceNodeId: contextMenuNode.id,
+                  sourceNodeName: contextMenuNode.name,
+                  targetNodeId: contextMenuNode.parent_id,
+                  targetNodeName: parentNode?.name || 'the parent node',
+                })
+              }}
+              type="button"
+            >
+              Convert To Photo
             </button>
           ) : null}
           <button

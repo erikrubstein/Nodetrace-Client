@@ -30,7 +30,7 @@ function tooltipButton({ active = false, disabled = false, iconClassName, label,
 export default function PreviewPanel({
   beginPreviewPan,
   busy,
-  extractNodeMediaToSibling,
+  extractNodeMediaToChild,
   patchNodeMediaEdits,
   previewTransform,
   previewViewportRef,
@@ -507,101 +507,123 @@ export default function PreviewPanel({
     }
   }
 
-  const toolButtons = [
-    tooltipButton({
-      disabled: !hasImage || busy || !imageReady,
-      iconClassName: 'fa-solid fa-download',
-      label: 'Download Image',
-      onClick: handleDownload,
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy || !imageReady,
-      iconClassName: 'fa-solid fa-copy',
-      label: 'Copy Image',
-      onClick: handleCopy,
-    }),
-    tooltipButton({
-      disabled: !hasImage,
-      iconClassName: 'fa-solid fa-expand',
-      label: 'Fit View',
-      onClick: fitPreviewView,
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy,
-      iconClassName: 'fa-solid fa-rotate-right',
-      label: 'Rotate 90 Degrees',
-      onClick: () => updateEdit('rotationTurns', (localEdits.rotationTurns + 1) % 4),
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy || !hasCrop,
-      iconClassName: 'fa-solid fa-eraser',
-      label: 'Reset Crop',
-      onClick: resetCrop,
-    }),
-    tooltipButton({
-      active: cropMode,
-      disabled: !hasImage || busy || !imageReady,
-      iconClassName: 'fa-solid fa-crop-simple',
-      label: cropMode ? 'Crop Mode Active' : 'Crop Image',
-      onClick: () => {
-        setCropMode((current) => !current)
-        setCropSelection(null)
-      },
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy || !hasAdjustmentChanges,
-      iconClassName: 'fa-solid fa-sliders',
-      label: 'Reset Adjustments',
-      onClick: resetAdjustments,
-    }),
-    tooltipButton({
-      active: localEdits.invert,
-      disabled: !hasImage || busy,
-      iconClassName: 'fa-solid fa-circle-half-stroke',
-      label: 'Invert Colors',
-      onClick: () => updateEdit('invert', !localEdits.invert),
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy || selectedMedia?.isPrimary,
-      iconClassName: 'fa-solid fa-star',
-      label: 'Make Main Photo',
-      onClick: async () => {
-        try {
-          await setPrimaryMedia(selectedNode.id, selectedMedia.id)
-        } catch (error) {
-          setError(error.message || 'Unable to update the main photo.')
-        }
-      },
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy,
-      iconClassName: 'fa-solid fa-up-right-from-square',
-      label: 'Convert Photo To Sibling Node',
-      onClick: async () => {
-        try {
-          await extractNodeMediaToSibling(selectedNode.id, selectedMedia.id)
-        } catch (error) {
-          setError(error.message || 'Unable to convert the selected photo into a node.')
-        }
-      },
-    }),
-    tooltipButton({
-      disabled: !hasImage || busy,
-      iconClassName: 'fa-solid fa-trash',
-      label: 'Remove Photo',
-      onClick: async () => {
-        try {
-          await removeNodeMedia(selectedNode.id, selectedMedia.id)
-        } catch (error) {
-          setError(error.message || 'Unable to remove the selected photo.')
-        }
-      },
-    }),
+  const actionGroups = [
+    {
+      label: 'File',
+      actions: [
+        tooltipButton({
+          disabled: !hasImage || busy || !imageReady,
+          iconClassName: 'fa-solid fa-download',
+          label: 'Download Image',
+          onClick: handleDownload,
+        }),
+        tooltipButton({
+          disabled: !hasImage || busy || !imageReady,
+          iconClassName: 'fa-solid fa-copy',
+          label: 'Copy Image',
+          onClick: handleCopy,
+        }),
+        tooltipButton({
+          disabled: !hasImage,
+          iconClassName: 'fa-solid fa-expand',
+          label: 'Fit View',
+          onClick: fitPreviewView,
+        }),
+      ],
+    },
+    {
+      label: 'Adjust',
+      actions: [
+        tooltipButton({
+          disabled: !hasImage || busy,
+          iconClassName: 'fa-solid fa-rotate-right',
+          label: 'Rotate 90 Degrees',
+          onClick: () => updateEdit('rotationTurns', (localEdits.rotationTurns + 1) % 4),
+        }),
+        tooltipButton({
+          active: cropMode,
+          disabled: !hasImage || busy || !imageReady,
+          iconClassName: 'fa-solid fa-crop-simple',
+          label: cropMode ? 'Crop Mode Active' : 'Crop Image',
+          onClick: () => {
+            setCropMode((current) => !current)
+            setCropSelection(null)
+          },
+        }),
+        tooltipButton({
+          disabled: !hasImage || busy || !hasCrop,
+          iconClassName: 'fa-solid fa-eraser',
+          label: 'Reset Crop',
+          onClick: resetCrop,
+        }),
+        tooltipButton({
+          active: localEdits.invert,
+          disabled: !hasImage || busy,
+          iconClassName: 'fa-solid fa-circle-half-stroke',
+          label: 'Invert Colors',
+          onClick: () => updateEdit('invert', !localEdits.invert),
+        }),
+        tooltipButton({
+          disabled: !hasImage || busy || !hasAdjustmentChanges,
+          iconClassName: 'fa-solid fa-sliders',
+          label: 'Reset Adjustments',
+          onClick: resetAdjustments,
+        }),
+      ],
+    },
+    {
+      label: 'Photo',
+      actions: [
+        tooltipButton({
+          disabled: !hasImage || busy || selectedMedia?.isPrimary,
+          iconClassName: 'fa-solid fa-star',
+          label: 'Make Main Photo',
+          onClick: async () => {
+            try {
+              await setPrimaryMedia(selectedNode.id, selectedMedia.id)
+            } catch (error) {
+              setError(error.message || 'Unable to update the main photo.')
+            }
+          },
+        }),
+        tooltipButton({
+          disabled: !hasImage || busy,
+          iconClassName: 'fa-solid fa-turn-down',
+          label: 'Convert Photo To Child Node',
+          onClick: async () => {
+            try {
+              await extractNodeMediaToChild(selectedNode.id, selectedMedia.id)
+            } catch (error) {
+              setError(error.message || 'Unable to convert the selected photo into a child node.')
+            }
+          },
+        }),
+        tooltipButton({
+          disabled: !hasImage || busy,
+          iconClassName: 'fa-solid fa-trash',
+          label: 'Remove Photo',
+          onClick: async () => {
+            try {
+              await removeNodeMedia(selectedNode.id, selectedMedia.id)
+            } catch (error) {
+              setError(error.message || 'Unable to remove the selected photo.')
+            }
+          },
+        }),
+      ],
+    },
   ]
 
   return (
     <div className="preview-panel">
-      <div className="preview-panel__actions">{toolButtons}</div>
+      <div className="preview-panel__actions">
+        {actionGroups.map((group) => (
+          <div key={group.label} className="preview-panel__action-group">
+            <div className="preview-panel__action-label">{group.label}</div>
+            <div className="preview-panel__action-buttons">{group.actions}</div>
+          </div>
+        ))}
+      </div>
       {mediaItems.length > 1 ? (
         <div className="preview-panel__media-strip">
           {mediaItems.map((mediaItem) => (

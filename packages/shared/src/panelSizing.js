@@ -1,7 +1,7 @@
 export const DEFAULT_PANEL_MIN_WIDTH = 320
 
 export const panelMinWidths = {
-  preview: 420,
+  preview: 520,
   camera: 420,
   search: 340,
   templates: 520,
@@ -12,7 +12,7 @@ export const panelMinWidths = {
 }
 
 export const panelInitialWidths = {
-  preview: 760,
+  preview: 820,
   camera: 720,
   search: 420,
   templates: 760,

@@ -1932,7 +1932,7 @@ function MainApp() {
     }
   }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
 
-  const extractNodeMediaToSiblingRequest = useCallback(async (nodeId, mediaId) => {
+  const extractNodeMediaToChildRequest = useCallback(async (nodeId, mediaId) => {
     if (!nodeId || !mediaId || !selectedProjectId) {
       return null
     }
@@ -3325,6 +3325,7 @@ function MainApp() {
               project: {
                 ...current.project,
                 ownerUsername: payload.owner?.username || current.project.ownerUsername,
+                isPublic: Boolean(payload.isPublic),
                 collaborators: payload.collaborators || [],
                 canManageUsers: payload.canManageUsers,
               },
@@ -3357,12 +3358,36 @@ function MainApp() {
               project: {
                 ...current.project,
                 ownerUsername: payload.owner?.username || current.project.ownerUsername,
+                isPublic: Boolean(payload.isPublic),
                 collaborators: payload.collaborators || [],
                 canManageUsers: payload.canManageUsers,
               },
             }
           : current,
       )
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function persistProjectAccess(isPublic) {
+    if (!selectedProjectId) {
+      return
+    }
+
+    setBusy(true)
+    setError('')
+    try {
+      const payload = await api(`/api/projects/${selectedProjectId}/access`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic }),
+      })
+      applyProjectUpdate(payload)
+      setCollaboratorUsername('')
+      setStatus(isPublic ? 'Project is now public.' : 'Project is now private.')
     } catch (submitError) {
       setError(submitError.message)
     } finally {
@@ -4313,7 +4338,7 @@ function MainApp() {
             <PreviewPanel
               beginPreviewPan={beginPreviewPan}
               busy={busy}
-              extractNodeMediaToSibling={extractNodeMediaToSiblingRequest}
+              extractNodeMediaToChild={extractNodeMediaToChildRequest}
               patchNodeMediaEdits={saveNodeMediaEdits}
               previewTransform={previewTransform}
               previewViewportRef={previewViewportRef}
@@ -4450,7 +4475,7 @@ function MainApp() {
       },
       settings: {
         id: 'settings',
-        title: 'Settings',
+        title: 'Project Settings',
         icon: <GearIcon />,
         content: (
           <SettingsPanel
@@ -4483,7 +4508,7 @@ function MainApp() {
       },
       collaborators: {
         id: 'collaborators',
-        title: 'Collaborators',
+        title: 'Project Access',
         icon: <UsersIcon />,
         content: (
           <CollaboratorsPanel
@@ -4495,7 +4520,9 @@ function MainApp() {
             collaborators={tree?.project?.collaborators || []}
             currentUsername={currentUser?.username || ''}
             error={error}
+            isPublic={Boolean(tree?.project?.isPublic)}
             ownerUsername={tree?.project?.ownerUsername || ''}
+            persistProjectAccess={persistProjectAccess}
             removeCollaborator={removeCollaborator}
             setCollaboratorUsername={setCollaboratorUsername}
           />
@@ -4906,6 +4933,7 @@ function MainApp() {
           selectedNodeId={selectedNodeId}
           setCollapsed={setCollapsed}
           setContextMenu={setContextMenu}
+          setMergePhotoConfirmation={setMergePhotoConfirmation}
           setDeleteNodeOpen={setDeleteNodeOpen}
           setDragActive={setDragActive}
           setPendingUploadMode={setPendingUploadMode}

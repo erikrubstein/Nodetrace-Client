@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
 import IconButton from './IconButton'
-import { GearIcon, PlusIcon, UsersIcon, WarningIcon } from './icons'
+import { GearIcon, GlobeIcon, PlusIcon, UsersIcon, WarningIcon } from './icons'
 
 export default function AppDialogs({
   accountDialog,
@@ -595,7 +595,7 @@ export default function AppDialogs({
                         onClick={() => toggleOpenProjectFilter('collaborator')}
                         type="button"
                       >
-                        Collaborator
+                        Not Owned
                       </button>
                     </div>
                     <div className="project-picker__divider" />
@@ -634,7 +634,10 @@ export default function AppDialogs({
                   ) : visibleProjects.length ? (
                     <div className="project-list project-list--fill">
                       {visibleProjects.map((project) => {
-                        const collaboratorProject = !(project?.ownerUserId && project.ownerUserId === openProjectUserId)
+                        const ownedProject = Boolean(project?.ownerUserId && project.ownerUserId === openProjectUserId)
+                        const publicProject = Boolean(project?.isPublic)
+                        const showPublicIndicator = publicProject && !ownedProject
+                        const collaboratorProject = !ownedProject && !publicProject
                         return (
                           <button
                             key={project.id}
@@ -651,8 +654,17 @@ export default function AppDialogs({
                             type="button"
                           >
                             <span className="project-row__name">
-                                <span>{project.name}</span>
-                              {collaboratorProject ? (
+                              <span>{project.name}</span>
+                              {showPublicIndicator ? (
+                                <span className="icon-button-wrap project-row__icon-wrap project-row__collaborator-indicator">
+                                  <span className="project-row__icon project-row__icon-button" aria-hidden="true">
+                                    <GlobeIcon />
+                                  </span>
+                                  <span aria-hidden="true" className="icon-tooltip project-row__icon-tooltip">
+                                    {`Owner: ${project.ownerUsername || 'Unknown'}`}
+                                  </span>
+                                </span>
+                              ) : collaboratorProject ? (
                                 <span className="icon-button-wrap project-row__icon-wrap project-row__collaborator-indicator">
                                   <span className="project-row__icon project-row__icon-button" aria-hidden="true">
                                     <UsersIcon />
@@ -1032,7 +1044,7 @@ export default function AppDialogs({
             onCancel={() => setMergePhotoConfirmation(null)}
             onConfirm={confirmMergeNodeIntoPhoto}
             onKeyDown={(event) => handleDialogEnter(event, confirmMergeNodeIntoPhoto, !busy)}
-            title="Convert To Additional Photo"
+            title="Convert To Photo"
           >
             <div className="inspector__notice">
               Move the main photo from <strong>{mergePhotoConfirmation.sourceNodeName}</strong> onto{' '}
@@ -1230,3 +1242,4 @@ export default function AppDialogs({
     </>
   )
 }
+
