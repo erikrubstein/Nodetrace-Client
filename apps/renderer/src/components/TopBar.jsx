@@ -9,6 +9,7 @@ import {
 const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
 export default function TopBar({
+  appVersion = '0.0.0',
   busy,
   canCollapseRecursively = false,
   canCollapseSelected = false,
@@ -32,7 +33,6 @@ export default function TopBar({
   projectLoading = false,
   projectName,
   redo,
-  manageAccountsLabel = '',
   appendChildren,
   appendParents,
   appendSearchResults,
@@ -63,7 +63,8 @@ export default function TopBar({
   tree,
   undo,
   uploadFiles,
-  onManageAccounts = null,
+  onCheckForUpdates = null,
+  onOpenSettings = null,
   onDesktopClose,
   onDesktopMinimize,
   onDesktopToggleMaximize,
@@ -105,6 +106,29 @@ export default function TopBar({
                 Open Project
               </button>
               <div className="menu-submenu-wrap">
+                <button className="menu-item" disabled={busy} type="button">
+                  <span>Import</span>
+                  <span aria-hidden="true" className="menu-submenu-caret">
+                    <i className="fa-solid fa-chevron-right" />
+                  </span>
+                </button>
+                <div className="menu-panel menu-panel--submenu">
+                  <button
+                    className="menu-item"
+                    disabled={busy}
+                    onClick={() => {
+                      setImportProjectName('')
+                      setImportArchiveFile(null)
+                      setShowProjectDialog('import')
+                      setOpenMenu(null)
+                    }}
+                    type="button"
+                  >
+                    Project
+                  </button>
+                </div>
+              </div>
+              <div className="menu-submenu-wrap">
                 <button className="menu-item" disabled={!selectedProjectId || busy} type="button">
                   <span>Export</span>
                   <span aria-hidden="true" className="menu-submenu-caret">
@@ -116,70 +140,31 @@ export default function TopBar({
                     className="menu-item"
                     disabled={!selectedProjectId || busy}
                     onClick={() => {
+                      setExportFileName(tree?.project?.name || 'project')
+                      setShowProjectDialog('export')
+                      setOpenMenu(null)
+                    }}
+                    type="button"
+                  >
+                    Project
+                  </button>
+                  <button
+                    className="menu-item"
+                    disabled={!selectedProjectId || busy}
+                    onClick={() => {
                       setExportFileName(`${tree?.project?.name || 'project'}-media`)
                       setShowProjectDialog('export-media')
                       setOpenMenu(null)
                     }}
                     type="button"
                   >
-                    Export Media Tree
+                    Media Tree
                   </button>
                 </div>
               </div>
-              <button
-                className="menu-item"
-                disabled={!selectedProjectId || busy}
-                onClick={() => {
-                  setExportFileName(tree?.project?.name || 'project')
-                  setShowProjectDialog('export')
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                Export Project
-              </button>
-              <button
-                className="menu-item"
-                disabled={busy}
-                onClick={() => {
-                  setImportProjectName('')
-                  setImportArchiveFile(null)
-                  setShowProjectDialog('import')
-                  setOpenMenu(null)
-                }}
-                type="button"
-              >
-                Import Project
-              </button>
             </div>
           ) : null}
         </div>
-
-        {onManageAccounts ? (
-          <div className="menu-wrap">
-            <button
-              className={`menu-trigger ${openMenu === 'accounts' ? 'active' : ''}`}
-              onClick={() => setOpenMenu((current) => (current === 'accounts' ? null : 'accounts'))}
-              type="button"
-            >
-              Accounts
-            </button>
-            {openMenu === 'accounts' ? (
-              <div className="menu-panel">
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    onManageAccounts()
-                    setOpenMenu(null)
-                  }}
-                  type="button"
-                >
-                  {manageAccountsLabel || 'Manage Account'}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className="menu-wrap">
           <button
@@ -490,6 +475,55 @@ export default function TopBar({
         </div>
 
         <div className="menu-wrap">
+          <button
+            className={`menu-trigger ${openMenu === 'settings' ? 'active' : ''}`}
+            onClick={() => setOpenMenu((current) => (current === 'settings' ? null : 'settings'))}
+            type="button"
+          >
+            Settings
+          </button>
+          {openMenu === 'settings' ? (
+            <div className="menu-panel">
+              <button
+                className="menu-item"
+                onClick={() => {
+                  onOpenSettings?.()
+                  setOpenMenu(null)
+                }}
+                type="button"
+              >
+                Open Settings
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="menu-wrap">
+          <button
+            className={`menu-trigger ${openMenu === 'help' ? 'active' : ''}`}
+            onClick={() => setOpenMenu((current) => (current === 'help' ? null : 'help'))}
+            type="button"
+          >
+            Help
+          </button>
+          {openMenu === 'help' ? (
+            <div className="menu-panel">
+              <button
+                className="menu-item"
+                disabled={busy}
+                onClick={() => {
+                  onCheckForUpdates?.()
+                  setOpenMenu(null)
+                }}
+                type="button"
+              >
+                Check For Updates
+              </button>
+              <button className="menu-item" disabled type="button">
+                {`Version ${appVersion}`}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <span className="topbar__separator">|</span>

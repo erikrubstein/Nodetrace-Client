@@ -5,6 +5,8 @@ import { GearIcon, GlobeIcon, PlusIcon, UsersIcon, WarningIcon } from './icons'
 
 export default function AppDialogs({
   accountDialog,
+  appDialog = null,
+  appVersion = '0.0.0',
   accountForm,
   accountDialogUsername = '',
   accountStatus,
@@ -50,6 +52,7 @@ export default function AppDialogs({
   newNodeDialog,
   newNodeName,
   onOpenManageAccounts = null,
+  onCheckForUpdates = null,
   onOpenDesktopProject = null,
   onSelectDesktopServerProfile = null,
   projects,
@@ -62,6 +65,7 @@ export default function AppDialogs({
   serverDisconnectDialogOpen = false,
   sessionDialogOpen,
   setAccountDialog,
+  setAppDialog,
   setAccountForm,
   setApplyTemplateConfirmation,
   setDeleteNodeOpen,
@@ -88,6 +92,7 @@ export default function AppDialogs({
   bulkSelectionCount,
   templateDialog,
   setTemplateDialog,
+  updateStatus = '',
 }) {
   const [openProjectFilter, setOpenProjectFilter] = useState(null)
   const [connectedAccountFilter, setConnectedAccountFilter] = useState(false)
@@ -176,6 +181,59 @@ export default function AppDialogs({
 
   return (
     <>
+      {appDialog === 'settings' ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setAppDialog(null)} role="presentation">
+          <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="dialog__title">Settings</div>
+            <div className="field-stack">
+              {desktopEnvironment ? (
+                <button
+                  className="ghost-button"
+                  disabled={busy}
+                  onClick={() => {
+                    setAppDialog(null)
+                    onOpenManageAccounts?.()
+                  }}
+                  type="button"
+                >
+                  Manage Server Profiles
+                </button>
+              ) : null}
+              <div className="inspector__notice">More settings will live here.</div>
+            </div>
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setAppDialog(null)} type="button">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {appDialog === 'updates' ? (
+        <div className="dialog-backdrop" onClick={() => !busy && setAppDialog(null)} role="presentation">
+          <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="dialog__title">Check For Updates</div>
+            <div className="field-stack">
+              <div className="inspector__notice">
+                Current version: <strong>{appVersion}</strong>
+              </div>
+              <div className="inspector__notice">
+                {updateStatus || 'Checking for updates...'}
+              </div>
+            </div>
+            <div className="dialog__actions">
+              <button className="ghost-button" disabled={busy} onClick={() => setAppDialog(null)} type="button">
+                Close
+              </button>
+              <button className="primary-button" disabled={busy} onClick={() => void onCheckForUpdates?.()} type="button">
+                Check Again
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {accountDialog === 'overview' ? (
         <div className="dialog-backdrop" onClick={() => !busy && setAccountDialog(null)} role="presentation">
           <div className="dialog" onClick={(event) => event.stopPropagation()} role="dialog">

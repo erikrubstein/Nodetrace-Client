@@ -23,6 +23,7 @@ import useProjectSync from './hooks/useProjectSync'
 import useUndoRedo from './hooks/useUndoRedo'
 import useWorkspaceInteractions from './hooks/useWorkspaceInteractions'
 import { ApiError, api, configureApiBaseUrl, uploadWithProgress } from './lib/api'
+import { APP_UPDATE_REPO, APP_VERSION, compareSemanticVersions } from './lib/appInfo'
 import { defaultProjectSettings, defaultUserProjectUi, getPanelMinWidth, panelIds, SIDEBAR_RAIL_WIDTH } from './lib/constants'
 import {
   closeDesktopWindow,
@@ -157,6 +158,7 @@ function MainApp() {
   const [poppedOutPanelIds, setPoppedOutPanelIds] = useState([])
   const [openMenu, setOpenMenu] = useState(null)
   const [showProjectDialog, setShowProjectDialog] = useState(null)
+  const [appDialog, setAppDialog] = useState(null)
   const [templateDialog, setTemplateDialog] = useState(null)
   const [importTemplateDialog, setImportTemplateDialog] = useState(null)
   const [selectedTemplateEditorId, setSelectedTemplateEditorId] = useState(null)
@@ -208,6 +210,7 @@ function MainApp() {
   const [collaboratorUsername, setCollaboratorUsername] = useState('')
   const [accountDialog, setAccountDialog] = useState(null)
   const [accountStatus, setAccountStatus] = useState('')
+  const [updateStatus, setUpdateStatus] = useState('')
   const [aiFillNodeId, setAiFillNodeId] = useState(null)
   const [accountForm, setAccountForm] = useState({
     username: '',
@@ -1192,6 +1195,40 @@ function MainApp() {
     }
     setAccountDialog('overview')
   }, [desktopEnvironment, refreshDesktopServerState, showProjectDialog])
+
+  const openAppSettings = useCallback(() => {
+    setError('')
+    setAppDialog('settings')
+  }, [])
+
+  const checkForUpdates = useCallback(async () => {
+    setError('')
+    setUpdateStatus('Checking for updates...')
+    setAppDialog('updates')
+    try {
+      const response = await fetch(`https://api.github.com/repos/${APP_UPDATE_REPO}/releases/latest`, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+        },
+      })
+      if (!response.ok) {
+        throw new Error(response.status === 404 ? 'No published releases found.' : 'Unable to check for updates.')
+      }
+      const release = await response.json()
+      const latestVersion = String(release?.tag_name || release?.name || '').trim().replace(/^v/i, '')
+      if (!latestVersion) {
+        throw new Error('Latest release version is unavailable.')
+      }
+      const comparison = compareSemanticVersions(latestVersion, APP_VERSION)
+      if (comparison > 0) {
+        setUpdateStatus(`Version ${latestVersion} is available.`)
+      } else {
+        setUpdateStatus(`You are up to date on version ${APP_VERSION}.`)
+      }
+    } catch (loadError) {
+      setUpdateStatus(loadError.message || 'Unable to check for updates.')
+    }
+  }, [])
 
   const closeDesktopServerManager = useCallback(() => {
     const returnTarget = desktopServerDialogReturnTarget
@@ -4584,6 +4621,8 @@ function MainApp() {
         accountDialogUsername={managedDesktopAccountProfile?.username || currentUser?.username || ''}
         accountForm={accountForm}
         accountStatus={accountStatus}
+        appDialog={appDialog}
+        appVersion={APP_VERSION}
         applyTemplateConfirmation={applyTemplateConfirmation}
         bulkSelectionCount={bulkSelectionCount}
         bulkTemplateCount={selectionNodesWithTemplates.length}
@@ -4627,6 +4666,7 @@ function MainApp() {
         mobileConnectionCount={mobileConnectionCount}
         newNodeDialog={newNodeDialog}
         newNodeName={newNodeName}
+        onCheckForUpdates={checkForUpdates}
         onOpenManageAccounts={openAccountManager}
         onOpenDesktopProject={openDesktopProjectFromPicker}
         onSelectDesktopServerProfile={browseProjectPickerProfile}
@@ -4640,6 +4680,7 @@ function MainApp() {
         serverDisconnectDialogOpen={serverDisconnectDialogOpen}
         sessionDialogOpen={sessionDialogOpen}
         setAccountDialog={setAccountDialog}
+        setAppDialog={setAppDialog}
         setAccountForm={setAccountForm}
         setApplyTemplateConfirmation={setApplyTemplateConfirmation}
         setDeleteNodeOpen={setDeleteNodeOpen}
@@ -4670,6 +4711,7 @@ function MainApp() {
         templateDialog={templateDialog}
         transferProgress={transferProgress}
         tree={tree}
+        updateStatus={updateStatus}
       />
     )
   }
@@ -4785,6 +4827,7 @@ function MainApp() {
   return (
     <div className="app-shell" data-theme={theme}>
       <TopBar
+        appVersion={APP_VERSION}
         appendChildren={appendChildren}
         appendParents={appendParents}
         appendSearchResults={appendSearchResults}
@@ -4814,7 +4857,6 @@ function MainApp() {
         desktopWindowMaximized={desktopWindowMaximized}
         redo={redo}
         invertSelection={invertEffectiveSelection}
-        manageAccountsLabel={desktopEnvironment ? 'Manage Server Profiles' : 'Manage Account'}
         canvasIsolationMode={canvasIsolationMode}
         rightSidebarOpen={effectiveRightSidebarOpen}
         selectedNode={selectedNode}
@@ -4842,6 +4884,8 @@ function MainApp() {
         theme={theme}
         triggerAddPhoto={triggerAddPhoto}
         triggerAddPhotoNode={triggerAddPhotoNode}
+        onCheckForUpdates={checkForUpdates}
+        onOpenSettings={openAppSettings}
         togglePathIsolation={() =>
           setCanvasIsolationMode((current) => (current === 'path' ? 'none' : 'path'))
         }
@@ -4852,7 +4896,6 @@ function MainApp() {
         tree={tree}
         undo={undo}
         uploadFiles={uploadFiles}
-        onManageAccounts={openAccountManager}
         onDesktopClose={() => closeDesktopWindow()}
         onDesktopMinimize={() => minimizeDesktopWindow()}
         onDesktopToggleMaximize={() => toggleMaximizeDesktopWindow()}
