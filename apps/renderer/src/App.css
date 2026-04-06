@@ -3194,16 +3194,35 @@ button:disabled {
   font-size: 0.86rem;
 }
 
+.search-panel__scope-summary-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.search-panel__scope-summary-text strong {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.search-panel__scope-summary-text span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
 .search-panel__scope-summary-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.search-panel__scope-summary-actions .ghost-button {
-  width: auto;
-  min-width: 0;
-  padding-inline: 10px;
+.search-panel__scope-summary-actions .icon-button-wrap {
+  display: inline-flex;
 }
 
 .search-panel__filter-button {
@@ -3273,6 +3292,17 @@ button:disabled {
   padding-inline: 10px;
 }
 
+.search-panel__scope-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.search-panel__scope-button--active,
+.search-panel__scope-button--active:hover:not(:disabled) {
+  background: var(--control-bg);
+  color: var(--text);
+}
+
 .search-panel__results-section {
   flex: 1;
   min-height: 0;
@@ -3300,7 +3330,7 @@ button:disabled {
   border-radius: 6px;
   overflow: hidden;
   overflow-y: auto;
-  background: var(--inner-stroke);
+  background: var(--panel);
 }
 
 .search-panel__result {
@@ -3372,6 +3402,16 @@ button:disabled {
   align-items: center;
   justify-content: center;
   color: #79c57a;
+  flex-shrink: 0;
+}
+
+.search-panel__result-warning {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #d6b768;
   flex-shrink: 0;
 }
 

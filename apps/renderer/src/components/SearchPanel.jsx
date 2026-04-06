@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { collectDescendantIds, findNode } from '../lib/tree'
 
 import IconButton from './IconButton'
+import { PencilIcon, TrashIcon } from './icons'
 
 const SEARCH_SESSION_KEY_PREFIX = 'nodetrace-search-state'
 
@@ -74,7 +75,13 @@ export default function SearchPanel({
   const [anyTagOnly, setAnyTagOnly] = useState(() => Boolean(initialState?.anyTagOnly))
   const [selectedOwnerUsernames, setSelectedOwnerUsernames] = useState(() => (Array.isArray(initialState?.selectedOwnerUsernames) ? initialState.selectedOwnerUsernames : []))
   const [anyTemplateOnly, setAnyTemplateOnly] = useState(() => Boolean(initialState?.anyTemplateOnly))
-  const [statusFilter, setStatusFilter] = useState(() => (typeof initialState?.statusFilter === 'string' ? initialState.statusFilter : ''))
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState(() =>
+    Array.isArray(initialState?.selectedStatusFilters)
+      ? initialState.selectedStatusFilters
+      : typeof initialState?.statusFilter === 'string' && initialState.statusFilter
+        ? [initialState.statusFilter]
+        : [],
+  )
   const [selectedNoteFilters, setSelectedNoteFilters] = useState(() =>
     Array.isArray(initialState?.selectedNoteFilters) ? initialState.selectedNoteFilters : [],
   )
@@ -89,7 +96,7 @@ export default function SearchPanel({
   const [sortDirection, setSortDirection] = useState(() => (initialState?.sortDirection === 'desc' ? 'desc' : 'asc'))
   const activeFilterCount =
     Number(Boolean(anyTemplateOnly || selectedTemplateIds.length)) +
-    Number(Boolean(statusFilter)) +
+    Number(Boolean(selectedStatusFilters.length)) +
     Number(Boolean(selectedNoteFilters.length)) +
     Number(Boolean(selectedPhotoFilters.length)) +
     Number(Boolean(selectionScopeFilter)) +
@@ -144,7 +151,7 @@ export default function SearchPanel({
         anyTagOnly,
         selectedOwnerUsernames,
         anyTemplateOnly,
-        statusFilter,
+        selectedStatusFilters,
         selectedNoteFilters,
         selectedPhotoFilters,
         selectionScopeFilter,
@@ -166,7 +173,7 @@ export default function SearchPanel({
     selectionScopeSeedIds,
     sortDirection,
     sortField,
-    statusFilter,
+    selectedStatusFilters,
     storageKey,
   ])
 
@@ -218,10 +225,10 @@ export default function SearchPanel({
         return selectedTemplateIds.includes(node.identification?.templateId)
       })
       .filter((node) => {
-        if (!statusFilter) {
+        if (!selectedStatusFilters.length) {
           return true
         }
-        return (node.reviewStatus || 'new') === statusFilter
+        return selectedStatusFilters.includes(node.reviewStatus || 'new')
       })
       .filter((node) => {
         if (!selectedNoteFilters.length) {
@@ -282,7 +289,7 @@ export default function SearchPanel({
     selectionScopeIds,
     sortDirection,
     sortField,
-    statusFilter,
+    selectedStatusFilters,
     tree?.nodes,
   ])
 
@@ -384,7 +391,7 @@ export default function SearchPanel({
                         onClick={() => {
                           setAnyTemplateOnly(false)
                           setSelectedTemplateIds([])
-                          setStatusFilter('')
+                          setSelectedStatusFilters([])
                           setSelectedNoteFilters([])
                           setSelectedPhotoFilters([])
                           setSelectionScopeFilter(false)
@@ -398,14 +405,43 @@ export default function SearchPanel({
                       </button>
                     </div>
                     <div className="search-panel__filter-group">
+                      <span className="search-panel__filter-label">Scope</span>
+                      <button
+                        className={`ghost-button search-panel__scope-button ${selectionScopeFilter ? 'search-panel__scope-button--active' : ''}`}
+                        disabled={!selectionScopeFilter && !selectedNodeIds?.length}
+                        type="button"
+                        onClick={() => {
+                          if (selectionScopeFilter) {
+                            setSelectionScopeFilter(false)
+                            setSelectionScopeSeedIds([])
+                            return
+                          }
+                          const snapshotIds = Array.from(new Set((selectedNodeIds || []).filter(Boolean)))
+                          if (!snapshotIds.length) {
+                            return
+                          }
+                          setSelectionScopeSeedIds(snapshotIds)
+                          setSelectionScopeFilter(true)
+                        }}
+                      >
+                        Scope to Selection
+                      </button>
+                    </div>
+                    <div className="search-panel__filter-group">
                       <span className="search-panel__filter-label">Review Status</span>
                       <div className="search-panel__option-list">
                         {statusOptions.map((option) =>
                           optionRow({
-                            checked: statusFilter === option.value,
+                            checked: selectedStatusFilters.includes(option.value),
                             itemKey: option.value,
                             label: option.label,
-                            onClick: () => setStatusFilter((current) => (current === option.value ? '' : option.value)),
+                            onClick: () =>
+                              setSelectedStatusFilters((current) =>
+                                current.includes(option.value)
+                                  ? current.filter((value) => value !== option.value)
+                                  : [...current, option.value],
+                              ),
+                            type: 'multiple',
                           }),
                         )}
                       </div>
@@ -449,32 +485,6 @@ export default function SearchPanel({
                             type: 'multiple',
                           }),
                         )}
-                      </div>
-                    </div>
-                    <div className="search-panel__filter-group">
-                      <span className="search-panel__filter-label">Scope</span>
-                      <div className="search-panel__option-list">
-                        {optionRow({
-                          checked: selectionScopeFilter,
-                          itemKey: 'selected-subtree',
-                          label:
-                            selectionScopeFilter && pinnedScopeCount
-                              ? `Pinned Selection and Children (${pinnedScopeCount})`
-                              : 'Pin Selection and Children',
-                          onClick: () => {
-                            if (selectionScopeFilter) {
-                              setSelectionScopeFilter(false)
-                              setSelectionScopeSeedIds([])
-                              return
-                            }
-                            const snapshotIds = Array.from(new Set((selectedNodeIds || []).filter(Boolean)))
-                            if (!snapshotIds.length) {
-                              return
-                            }
-                            setSelectionScopeSeedIds(snapshotIds)
-                            setSelectionScopeFilter(true)
-                          },
-                        })}
                       </div>
                     </div>
                     <div className="search-panel__filter-group">
@@ -606,14 +616,17 @@ export default function SearchPanel({
         </label>
         {selectionScopeFilter && pinnedScopeCount ? (
           <div className="search-panel__scope-summary">
-            <span>
-              Scoped to {pinnedScopeCount} pinned node{pinnedScopeCount === 1 ? '' : 's'}
-              {pinnedScopeNames.length ? `: ${pinnedScopeNames.join(', ')}${pinnedScopeCount > pinnedScopeNames.length ? ', ...' : ''}` : ''}
-            </span>
+            <div className="search-panel__scope-summary-text">
+              <strong>Scope</strong>
+              <span>
+                {pinnedScopeNames.length
+                  ? `${pinnedScopeNames.join(', ')}${pinnedScopeCount > pinnedScopeNames.length ? ', ...' : ''}`
+                  : `${pinnedScopeCount} node${pinnedScopeCount === 1 ? '' : 's'}`}
+              </span>
+            </div>
             <div className="search-panel__scope-summary-actions">
-              <button
-                className="ghost-button"
-                type="button"
+              <IconButton
+                aria-label="Recapture search scope"
                 onClick={() => {
                   const snapshotIds = Array.from(new Set((selectedNodeIds || []).filter(Boolean)))
                   if (!snapshotIds.length) {
@@ -622,19 +635,20 @@ export default function SearchPanel({
                   setSelectionScopeSeedIds(snapshotIds)
                   setSelectionScopeFilter(true)
                 }}
+                tooltip="Recapture Scope"
               >
-                Recapture
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
+                <PencilIcon />
+              </IconButton>
+              <IconButton
+                aria-label="Clear search scope"
                 onClick={() => {
                   setSelectionScopeFilter(false)
                   setSelectionScopeSeedIds([])
                 }}
+                tooltip="Clear Scope"
               >
-                Clear Scope
-              </button>
+                <TrashIcon />
+              </IconButton>
             </div>
           </div>
         ) : null}
@@ -695,6 +709,14 @@ export default function SearchPanel({
                     {node.reviewStatus === 'reviewed' ? (
                       <span className="search-panel__result-complete" aria-label="Reviewed" title="Reviewed">
                         <i aria-hidden="true" className="fa-solid fa-check" />
+                      </span>
+                    ) : node.reviewStatus === 'needs_attention' ? (
+                      <span
+                        className="search-panel__result-warning"
+                        aria-label="Needs Attention"
+                        title="Needs Attention"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-triangle-exclamation" />
                       </span>
                     ) : null}
                   </span>
