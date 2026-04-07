@@ -40,6 +40,7 @@ import {
   isDesktopEnvironment,
   minimizeDesktopWindow,
   openDesktopPanelWindow,
+  openDesktopMainWindow,
   selectDesktopServerProfile,
   subscribeDesktopServerState,
   subscribeDesktopWindowState,
@@ -147,6 +148,7 @@ function MainApp() {
   const [projectPickerProjects, setProjectPickerProjects] = useState([])
   const [projectPickerLoading, setProjectPickerLoading] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [pendingProjectTransitionId, setPendingProjectTransitionId] = useState(null)
   const [tree, setTree] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState([])
@@ -270,6 +272,7 @@ function MainApp() {
     selectedProjectId &&
     (!tree?.project || tree.project.id !== selectedProjectId),
   )
+  const projectTransitionVeilActive = Boolean(currentUser && pendingProjectTransitionId)
   const managedDesktopAccountProfile = useMemo(() => {
     if (!desktopEnvironment) {
       return null
@@ -314,6 +317,13 @@ function MainApp() {
   useEffect(() => {
     document.title = activeProjectDisplayName ? `Nodetrace | ${activeProjectDisplayName}` : 'Nodetrace'
   }, [activeProjectDisplayName])
+
+  useEffect(() => {
+    if (!desktopEnvironment) {
+      return
+    }
+    window.nodetraceDesktop?.notifyRendererReady?.()
+  }, [desktopEnvironment])
 
   useEffect(() => {
     treeRef.current = tree
@@ -1157,7 +1167,21 @@ function MainApp() {
   }, [selectedProjectId])
 
   useEffect(() => {
-    if (!selectedProjectId || !tree?.project) {
+    if (!pendingProjectTransitionId) {
+      return
+    }
+
+    if (!selectedProjectId || pendingProjectTransitionId !== selectedProjectId) {
+      return
+    }
+
+    if (tree?.project?.id === pendingProjectTransitionId && projectUiReady) {
+      setPendingProjectTransitionId(null)
+    }
+  }, [pendingProjectTransitionId, projectUiReady, selectedProjectId, tree?.project?.id])
+
+  useEffect(() => {
+    if (!selectedProjectId || !tree?.project || tree.project.id !== selectedProjectId) {
       return
     }
 
@@ -1200,6 +1224,7 @@ function MainApp() {
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
+    setPendingProjectTransitionId(null)
     setCurrentUser(null)
     setAuthReady(true)
     setProjects([])
@@ -1505,6 +1530,11 @@ function MainApp() {
     setProjectPickerProfileId(String(id || '').trim() || null)
   }
 
+  function beginProjectTransition(projectId) {
+    const normalizedProjectId = String(projectId || '').trim()
+    setPendingProjectTransitionId(normalizedProjectId || null)
+  }
+
   async function openDesktopProjectFromPicker(profileId, projectId) {
     const normalizedProfileId = String(profileId || '').trim()
     const normalizedProjectId = String(projectId || '').trim()
@@ -1514,6 +1544,7 @@ function MainApp() {
 
     setBusy(true)
     setError('')
+    beginProjectTransition(normalizedProjectId)
     try {
       updateUrlState(normalizedProjectId, null, getUrlState().transform)
       if (desktopServerState.selectedProfileId !== normalizedProfileId) {
@@ -1527,6 +1558,7 @@ function MainApp() {
       setShowProjectDialog(null)
       setProjectListLoading(false)
     } catch (submitError) {
+      setPendingProjectTransitionId(null)
       setError(submitError.message)
     } finally {
       setBusy(false)
@@ -1535,6 +1567,7 @@ function MainApp() {
 
   function dismissServerDisconnectDialog() {
     setServerDisconnectDialogOpen(false)
+    setPendingProjectTransitionId(null)
     setSelectedProjectId(null)
     setSelectedNodeId(null)
     setTree(null)
@@ -2091,7 +2124,7 @@ function MainApp() {
   }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
 
   useEffect(() => {
-    if (!currentUser || !selectedProjectId || !tree?.project || !projectUiReady) {
+    if (!currentUser || !selectedProjectId || !tree?.project || tree.project.id !== selectedProjectId || !projectUiReady) {
       return undefined
     }
 
@@ -2696,6 +2729,7 @@ function MainApp() {
         }
 
         initializedAuthProfileIdRef.current = targetProfileId
+        beginProjectTransition(created.project.id)
         updateUrlState(created.project.id, created.root?.id || null, getUrlState().transform)
         setProjectName('')
         setShowProjectDialog(null)
@@ -2715,6 +2749,7 @@ function MainApp() {
         body: JSON.stringify({ name: projectName.trim(), description: '' }),
       })
 
+      beginProjectTransition(created.project.id)
       setProjectName('')
       setShowProjectDialog(null)
       setOpenMenu(null)
@@ -3795,6 +3830,7 @@ function MainApp() {
 
       const importedTree = await uploadWithProgress('/api/projects/import', formData, setTransferProgress)
 
+      beginProjectTransition(importedTree.project.id)
       applyTreePayload(importedTree)
       setSelectedProjectId(importedTree.project.id)
       setSelectedNodeId(importedTree.root?.id ?? null)
@@ -4803,7 +4839,10 @@ function MainApp() {
         setProjectName={setProjectName}
         setSessionDialogOpen={setSessionDialogOpen}
         setShowProjectDialog={setShowProjectDialog}
-        setShowProjectId={setSelectedProjectId}
+        setShowProjectId={(projectId) => {
+          beginProjectTransition(projectId)
+          setSelectedProjectId(projectId)
+        }}
         setTemplateDialog={setTemplateDialog}
         setMergePhotoConfirmation={setMergePhotoConfirmation}
         showProjectDialog={showProjectDialog}
@@ -4989,6 +5028,7 @@ function MainApp() {
         triggerAddPhotoNode={triggerAddPhotoNode}
         onCheckForUpdates={checkForUpdates}
         onOpenManageServerProfiles={desktopEnvironment ? () => openAccountManager() : null}
+        onOpenNewWindow={desktopEnvironment ? () => openDesktopMainWindow() : null}
         onApplyTheme={applyThemePreference}
         onResetCache={openCacheResetDialog}
         onGenerateSessionCode={generateNewSessionCode}
@@ -5012,7 +5052,7 @@ function MainApp() {
         }}
       />
       <main
-        className="main-layout"
+        className={`main-layout ${projectTransitionVeilActive ? 'main-layout--transitioning' : ''}`.trim()}
         style={{
           gridColumn: '1 / -1',
           gridRow: '2 / 3',
@@ -5129,6 +5169,16 @@ function MainApp() {
           side="right"
           togglePanel={toggleSidebarPanel}
         />
+        <div
+          aria-hidden={!projectTransitionVeilActive}
+          className={`main-layout__transition-veil ${projectTransitionVeilActive ? 'is-visible' : ''}`.trim()}
+        >
+          <div className="main-layout__transition-card">
+            <div className="main-layout__transition-title">{activeProjectDisplayName || 'Opening Project'}</div>
+            <div className="main-layout__transition-subtitle">Opening project...</div>
+            <div className="main-layout__transition-bar" />
+          </div>
+        </div>
       </main>
 
       {sidebarContextMenu ? (

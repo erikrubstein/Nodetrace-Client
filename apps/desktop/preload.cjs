@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('nodetraceDesktop', {
   isElectron: true,
   platform: process.platform,
   openWindow: (options) => ipcRenderer.invoke('desktop:open-window', options),
+  openMainWindow: () => ipcRenderer.invoke('desktop:open-main-window'),
+  notifyRendererReady: () => ipcRenderer.send('desktop:renderer-ready'),
   closeWindow: () => ipcRenderer.invoke('desktop:close-window'),
   minimizeWindow: () => ipcRenderer.invoke('desktop:minimize-window'),
   toggleMaximizeWindow: () => ipcRenderer.invoke('desktop:toggle-maximize-window'),

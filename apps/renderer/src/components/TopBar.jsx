@@ -66,6 +66,7 @@ export default function TopBar({
   onApplyTheme = null,
   onResetCache = null,
   onGenerateSessionCode = null,
+  onOpenNewWindow = null,
   onDesktopClose,
   onDesktopMinimize,
   onDesktopToggleMaximize,
@@ -107,6 +108,18 @@ export default function TopBar({
               >
                 Open Project
               </button>
+              {onOpenNewWindow ? (
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    void onOpenNewWindow()
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  Open New Window
+                </button>
+              ) : null}
               <div className="menu-submenu-wrap">
                 <button className="menu-item" disabled={busy} type="button">
                   <span>Import</span>

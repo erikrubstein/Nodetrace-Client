@@ -32,6 +32,14 @@ export function openDesktopPanelWindow({ panelId, projectId = null, nodeId = nul
   })
 }
 
+export function openDesktopMainWindow() {
+  if (!isDesktopEnvironment()) {
+    return Promise.resolve({ ok: false })
+  }
+
+  return window.nodetraceDesktop?.openMainWindow?.() || Promise.resolve({ ok: false })
+}
+
 export function closeDesktopWindow() {
   return window.nodetraceDesktop?.closeWindow?.()
 }

@@ -3,6 +3,7 @@ import process from 'node:process'
 import fs from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
@@ -17,7 +18,8 @@ const rendererEntryPath = path.join(repoRootDir, 'dist', 'index.html')
 const appIconPath = path.join(repoRootDir, 'apps', 'renderer', 'public', 'nodetrace.svg')
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
 
-let mainWindow = null
+const mainWindows = new Set()
+const pendingSplashWindows = new Map()
 const panelWindows = new Map()
 let desktopProxyServer = null
 let desktopProxyBaseUrl = ''
@@ -61,6 +63,106 @@ function buildWindowOptions(overrides = {}) {
     },
     ...overrides,
   }
+}
+
+function createSplashWindow() {
+  const splashWindow = new BrowserWindow({
+    show: true,
+    frame: false,
+    width: 420,
+    height: 240,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: '#1a1a1a',
+    icon: appIconPath,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  const inlineLogo = fs.readFileSync(appIconPath, 'utf8')
+  const splashHtml = `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Nodetrace</title>
+      <style>
+        :root { color-scheme: dark; }
+        html, body {
+          margin: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #1a1a1a;
+          color: #efefef;
+          font-family: Consolas, "Courier New", monospace;
+        }
+        body {
+          display: grid;
+          place-items: center;
+        }
+        .splash {
+          display: grid;
+          justify-items: center;
+          gap: 14px;
+        }
+        .splash img {
+          width: 64px;
+          height: 64px;
+          display: block;
+        }
+        .splash__logo {
+          width: 64px;
+          height: 64px;
+          display: block;
+        }
+        .splash__logo svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+        .splash__title {
+          font-size: 1.2rem;
+          letter-spacing: 0.04em;
+        }
+        .splash__bar {
+          width: 128px;
+          height: 4px;
+          overflow: hidden;
+          border-radius: 999px;
+          background: #2e2e2e;
+          position: relative;
+        }
+        .splash__bar::after {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 -36%;
+          width: 36%;
+          border-radius: inherit;
+          background: #efefef;
+          animation: splash-load 1s ease-in-out infinite;
+        }
+        @keyframes splash-load {
+          from { transform: translateX(0); }
+          to { transform: translateX(380%); }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="splash">
+        <div class="splash__logo" aria-hidden="true">${inlineLogo}</div>
+        <div class="splash__title">Nodetrace</div>
+        <div class="splash__bar" aria-hidden="true"></div>
+      </div>
+    </body>
+  </html>`
+
+  splashWindow.loadURL(`data:text/html,${encodeURIComponent(splashHtml)}`).catch(() => {})
+  return splashWindow
 }
 
 function encryptStoredSecret(secret) {
@@ -612,14 +714,18 @@ function buildRendererUrl() {
   return pathToFileURL(rendererEntryPath).toString()
 }
 
-function attachWindowStateListeners(window, label) {
+function attachWindowStateListeners(window, label, options = {}) {
+  const { onReadyToShow = null, autoShow = true } = options
   const emitWindowState = () => {
     window.webContents.send('desktop:window-state', { maximized: window.isMaximized() })
   }
   window.once('ready-to-show', () => {
     logDesktop(`${label} ready-to-show`)
-    window.show()
-    window.focus()
+    onReadyToShow?.()
+    if (autoShow) {
+      window.show()
+      window.focus()
+    }
     emitWindowState()
   })
   window.on('maximize', emitWindowState)
@@ -638,19 +744,53 @@ async function loadWindow(window, url) {
   await window.loadURL(url)
 }
 
-function createMainWindow() {
-  mainWindow = new BrowserWindow(buildWindowOptions({ title: 'Nodetrace' }))
+function createMainWindow(options = {}) {
+  const { showSplash = false } = options
+  const splashWindow = showSplash ? createSplashWindow() : null
+  const mainWindow = new BrowserWindow(buildWindowOptions({ title: 'Nodetrace' }))
+  const mainContentsId = mainWindow.webContents.id
+  mainWindows.add(mainWindow)
+  if (splashWindow) {
+    pendingSplashWindows.set(mainContentsId, splashWindow)
+  }
   logDesktop('Created main BrowserWindow')
-  attachWindowStateListeners(mainWindow, 'Main window')
+  attachWindowStateListeners(mainWindow, 'Main window', {
+    autoShow: !showSplash,
+  })
   mainWindow.on('closed', () => {
     logDesktop('Main window closed')
-    mainWindow = null
+    mainWindows.delete(mainWindow)
+    const pendingSplash = pendingSplashWindows.get(mainContentsId)
+    if (pendingSplash && !pendingSplash.isDestroyed()) {
+      pendingSplash.destroy()
+    }
+    pendingSplashWindows.delete(mainContentsId)
   })
   loadWindow(mainWindow, buildRendererUrl()).catch((error) => {
     logDesktop(`Main window load error: ${error.message}`)
+    const pendingSplash = pendingSplashWindows.get(mainContentsId)
+    if (pendingSplash && !pendingSplash.isDestroyed()) {
+      pendingSplash.destroy()
+    }
+    pendingSplashWindows.delete(mainContentsId)
     mainWindow.loadURL(`data:text/plain,${encodeURIComponent(error.message)}`).catch(() => {})
   })
   return mainWindow
+}
+
+function launchDetachedMainProcess() {
+  const childArgs = [path.join(repoRootDir, 'apps', 'desktop')]
+  if (rendererDevUrl) {
+    childArgs.push(`--dev-url=${rendererDevUrl}`)
+  }
+
+  const child = spawn(process.execPath, childArgs, {
+    cwd: repoRootDir,
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+  return { ok: true }
 }
 
 function openPanelWindow(options = {}) {
@@ -963,6 +1103,20 @@ function getEventWindow(event) {
 }
 
 ipcMain.handle('desktop:open-window', (_event, options) => openPanelWindow(options))
+ipcMain.handle('desktop:open-main-window', () => launchDetachedMainProcess())
+ipcMain.on('desktop:renderer-ready', (event) => {
+  const contentsId = event.sender.id
+  const splashWindow = pendingSplashWindows.get(contentsId)
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (window && !window.isDestroyed() && !window.isVisible()) {
+    window.show()
+    window.focus()
+  }
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.destroy()
+  }
+  pendingSplashWindows.delete(contentsId)
+})
 ipcMain.handle('desktop:close-window', (event) => {
   getEventWindow(event)?.close()
 })
@@ -1024,7 +1178,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (mainWindows.size === 0) {
     createMainWindow()
   }
 })
@@ -1040,4 +1194,4 @@ await startDesktopProxy()
 await refreshAndBroadcastDesktopServerState()
 startProfileStatusPolling()
 logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''}`)
-createMainWindow()
+createMainWindow({ showSplash: true })
