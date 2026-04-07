@@ -28,14 +28,24 @@ export default function PanelShell({
         <span className="sidebar-shell__title">{activePanel.title}</span>
         <div className="sidebar-shell__actions">
           {canDockBack ? (
-            <button className="sidebar-shell__action" onClick={onDockBack} title="Dock in sidebar" type="button">
-              <i aria-hidden="true" className="fa-solid fa-down-left-and-up-right-to-center" />
-            </button>
+            <span className="icon-button-wrap">
+              <button className="sidebar-shell__action" onClick={onDockBack} type="button">
+                <i aria-hidden="true" className="fa-solid fa-down-left-and-up-right-to-center" />
+              </button>
+              <span aria-hidden="true" className="icon-tooltip">
+                Dock In Sidebar
+              </span>
+            </span>
           ) : null}
           {canPopout ? (
-            <button className="sidebar-shell__action" onClick={onPopout} title="Open in window" type="button">
-              <i aria-hidden="true" className="fa-solid fa-up-right-from-square" />
-            </button>
+            <span className="icon-button-wrap">
+              <button className="sidebar-shell__action" onClick={onPopout} type="button">
+                <i aria-hidden="true" className="fa-solid fa-up-right-from-square" />
+              </button>
+              <span aria-hidden="true" className="icon-tooltip">
+                Open In Window
+              </span>
+            </span>
           ) : null}
           {windowMode ? (
             <>
@@ -65,9 +75,14 @@ export default function PanelShell({
               </button>
             </>
           ) : (
-            <button className="sidebar-shell__action" onClick={onClose} title="Collapse sidebar" type="button">
-              <i aria-hidden="true" className="fa-solid fa-xmark" />
-            </button>
+            <span className="icon-button-wrap">
+              <button className="sidebar-shell__action" onClick={onClose} type="button">
+                <i aria-hidden="true" className="fa-solid fa-xmark" />
+              </button>
+              <span aria-hidden="true" className="icon-tooltip">
+                Collapse Sidebar
+              </span>
+            </span>
           )}
         </div>
       </div>

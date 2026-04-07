@@ -241,6 +241,7 @@ function MainApp() {
   const previousDesktopConnectionStatusRef = useRef(null)
   const initializedAuthProfileIdRef = useRef(null)
   const currentUserRef = useRef(null)
+  const selectedProjectIdRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
   const nodeImageEditSequenceRef = useRef(new Map())
   const loadedUiSignatureRef = useRef('')
@@ -438,6 +439,10 @@ function MainApp() {
         }
       })
   }, [desktopEnvironment, desktopServerState.profiles, projectPickerProfileId, showProjectDialog])
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId
+  }, [selectedProjectId])
 
   useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId
@@ -1203,6 +1208,10 @@ function MainApp() {
     }
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = incomingSignature
+    if (isPanelWindow) {
+      setProjectUiReady(true)
+      return
+    }
     setShowGrid(nextUi.showGrid)
     setTransform(nextUi.canvasTransform || { x: 80, y: 80, scale: 1 })
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
@@ -1220,7 +1229,7 @@ function MainApp() {
     setRightActivePanel(nextUi.rightActivePanel)
     setPanelDock(nextUi.panelDock)
     setProjectUiReady(true)
-  }, [projectUi.canvasTransform, projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [isPanelWindow, projectUi.canvasTransform, projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -1662,12 +1671,17 @@ function MainApp() {
         return
       }
 
+      const currentProjectId = selectedProjectIdRef.current
+      const currentNodeId = selectedNodeIdRef.current
       applyingRemoteSelectionRef.current = true
       updateUrlState(nextProjectId, nextNodeId)
-      if (nextProjectId !== selectedProjectId) {
+      if (nextProjectId !== currentProjectId) {
+        selectedProjectIdRef.current = nextProjectId
+        selectedNodeIdRef.current = nextNodeId
         setSelectedProjectId(nextProjectId)
         setSelectedNodeId(nextNodeId)
-      } else if (nextNodeId && nextNodeId !== selectedNodeId) {
+      } else if (nextNodeId !== currentNodeId) {
+        selectedNodeIdRef.current = nextNodeId
         setSelectedNodeId(nextNodeId)
       }
       if (shouldFocus && nextNodeId) {
@@ -1680,10 +1694,10 @@ function MainApp() {
       channel.removeEventListener('message', handleMessage)
       channel.close()
     }
-  }, [selectedNodeId, selectedProjectId])
+  }, [])
 
   useEffect(() => {
-    if (!isDesktopEnvironment() || typeof BroadcastChannel === 'undefined' || !selectedProjectId) {
+    if (!isDesktopEnvironment() || isPanelWindow || typeof BroadcastChannel === 'undefined' || !selectedProjectId) {
       return
     }
     if (applyingRemoteSelectionRef.current) {
@@ -1698,7 +1712,7 @@ function MainApp() {
       nodeId: selectedNodeId || null,
     })
     channel.close()
-  }, [selectedNodeId, selectedProjectId])
+  }, [isPanelWindow, selectedNodeId, selectedProjectId])
 
   useEffect(() => {
     if (!isDesktopEnvironment()) {
@@ -2124,7 +2138,14 @@ function MainApp() {
   }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
 
   useEffect(() => {
-    if (!currentUser || !selectedProjectId || !tree?.project || tree.project.id !== selectedProjectId || !projectUiReady) {
+    if (
+      isPanelWindow ||
+      !currentUser ||
+      !selectedProjectId ||
+      !tree?.project ||
+      tree.project.id !== selectedProjectId ||
+      !projectUiReady
+    ) {
       return undefined
     }
 
@@ -2174,6 +2195,7 @@ function MainApp() {
     transform,
     tree?.project,
     projectUiReady,
+    isPanelWindow,
   ])
 
   async function setProjectCollapsedStateRequest(projectId, collapsed) {
@@ -4714,6 +4736,8 @@ function MainApp() {
   const canPopoutPanels = isDesktopEnvironment() && !isPanelWindow
 
   async function popoutPanel(panelId) {
+    const preservedSelectionIds = effectiveSelectedNodeIds
+    const preservedPrimaryId = selectedNodeId
     const result = await openDesktopPanelWindow({
       panelId,
       projectId: selectedProjectId,
@@ -4725,9 +4749,15 @@ function MainApp() {
     setPoppedOutPanelIds((current) => (current.includes(panelId) ? current : [...current, panelId]))
     if (panelDock[panelId] === 'left') {
       setLeftSidebarOpen(false)
+      if (preservedSelectionIds.length || preservedPrimaryId) {
+        setEffectiveSelection(preservedSelectionIds, preservedPrimaryId || preservedSelectionIds[0] || null)
+      }
       return
     }
     setRightSidebarOpen(false)
+    if (preservedSelectionIds.length || preservedPrimaryId) {
+      setEffectiveSelection(preservedSelectionIds, preservedPrimaryId || preservedSelectionIds[0] || null)
+    }
   }
 
   function renderDesktopServerManager(allowClose = true) {

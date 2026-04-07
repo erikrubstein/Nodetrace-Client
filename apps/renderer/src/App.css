@@ -1136,6 +1136,7 @@ body.capture-route #root {
   display: flex;
   align-items: center;
   gap: 4px;
+  overflow: visible;
 }
 
 .sidebar-shell__action {
@@ -1151,6 +1152,27 @@ body.capture-route #root {
 .sidebar-shell__action:hover:not(:disabled) {
   background: var(--menu-active);
   color: var(--text);
+}
+
+.sidebar-shell__actions .icon-button-wrap {
+  display: inline-flex;
+  overflow: visible;
+}
+
+.sidebar-shell__actions .icon-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.sidebar-shell__actions .icon-button-wrap:hover .icon-tooltip {
+  transform: translateY(0);
+}
+
+.sidebar-shell__actions .icon-button-wrap:nth-last-child(2) .icon-tooltip {
+  right: -28px;
 }
 
 .sidebar-shell__body {
@@ -2046,7 +2068,7 @@ body.capture-route #root {
   min-height: 0;
   flex-direction: column;
   gap: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .preview-panel__actions {
@@ -2055,6 +2077,9 @@ body.capture-route #root {
   align-items: flex-start;
   flex-wrap: nowrap;
   overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 28px;
+  margin-bottom: -28px;
   scrollbar-width: none;
 }
 
@@ -2083,6 +2108,43 @@ body.capture-route #root {
   gap: 6px;
   align-items: center;
   flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.preview-panel__actions .icon-button-wrap {
+  overflow: visible;
+}
+
+.preview-panel__actions .icon-tooltip {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.preview-panel__actions .icon-button-wrap:hover .icon-tooltip {
+  transform: translateX(-50%) translateY(0);
+}
+
+.preview-panel__actions .icon-button-wrap:first-child .icon-tooltip {
+  left: 0;
+  right: auto;
+  transform: translateY(-2px);
+}
+
+.preview-panel__actions .icon-button-wrap:first-child:hover .icon-tooltip {
+  transform: translateY(0);
+}
+
+.preview-panel__actions .icon-button-wrap:last-child .icon-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+.preview-panel__actions .icon-button-wrap:last-child:hover .icon-tooltip {
+  transform: translateY(0);
 }
 
 .preview-panel__media-strip {
@@ -2542,6 +2604,8 @@ button:disabled {
   background: var(--tooltip-bg);
   color: var(--tooltip-text);
   font-size: 0.72rem;
+  letter-spacing: normal;
+  text-transform: none;
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
@@ -2551,20 +2615,6 @@ button:disabled {
     transform var(--transition-fast),
     background-color var(--transition-theme),
     color var(--transition-theme);
-}
-
-.icon-tooltip--floating {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 200;
-  transform: translateX(-50%) translateY(-2px);
-  will-change: opacity, transform;
-}
-
-.icon-tooltip--visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
 .sidebar-rail .icon-tooltip {
