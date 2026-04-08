@@ -245,7 +245,7 @@ export default function CanvasWorkspace({
           {layout.links.map((link) => (
             <line
               key={link.key}
-              className={`${link.dashed ? 'canvas-link--variant ' : ''}${
+              className={`${link.dashed ? 'canvas-link--media ' : ''}${
                 link.sourceId === selectedNodeId ? 'canvas-link--selected' : ''
               }`.trim()}
               strokeDasharray={link.dashed ? '6 5' : undefined}

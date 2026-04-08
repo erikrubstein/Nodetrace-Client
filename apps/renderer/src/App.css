@@ -1397,7 +1397,7 @@ body.capture-route #root {
   shape-rendering: geometricPrecision;
 }
 
-.canvas-links .canvas-link--variant {
+.canvas-links .canvas-link--media {
   stroke-dasharray: 6 5;
 }
 
@@ -1425,22 +1425,11 @@ body.capture-route #root {
   outline: none;
 }
 
-.graph-node.variant-node {
-  width: 112px;
-  align-items: center;
-  background: transparent;
-}
-
 .graph-node:hover {
   background: transparent;
 }
 
 .graph-node:hover:not(:disabled) {
-  background: transparent;
-}
-
-.graph-node.variant-node:hover,
-.graph-node.variant-node:hover:not(:disabled) {
   background: transparent;
 }
 
@@ -1482,11 +1471,6 @@ body.capture-route #root {
   z-index: 3;
 }
 
-.graph-node.variant-node.graph-node--search-muted .graph-node__visual::after {
-  inset: 7px;
-  border-radius: 3px;
-}
-
 .graph-node__presence-ring {
   position: absolute;
   box-shadow: 0 0 0 3px var(--presence-color);
@@ -1510,12 +1494,6 @@ body.capture-route #root {
   font-size: 0.62rem;
   line-height: 1;
   box-shadow: inset 0 0 0 1px var(--inner-stroke);
-}
-
-.graph-node.variant-node .graph-node__visual {
-  width: 78px;
-  border-radius: 5px;
-  margin-top: 17px;
 }
 
 .graph-node.node-without-photo .graph-node__visual {
@@ -1557,12 +1535,6 @@ body.capture-route #root {
   border-radius: 6px;
   background: var(--surface);
   display: block;
-}
-
-.graph-node.variant-node img,
-.graph-node.variant-node .graph-node__placeholder,
-.graph-node.variant-node .graph-node__collapsed-thumb {
-  border-radius: 5px;
 }
 
 .graph-node.image-original img {
@@ -1649,17 +1621,8 @@ body.capture-route #root {
   font-size: 0.7rem;
 }
 
-.graph-node.variant-node .graph-node__collapsed-grid {
-  padding: 6px;
-  gap: 3px;
-}
-
 .graph-node__placeholder i {
   font-size: 2rem;
-}
-
-.graph-node.variant-node .graph-node__placeholder i {
-  font-size: 1.65rem;
 }
 
 .graph-node__meta {
@@ -1670,13 +1633,6 @@ body.capture-route #root {
   padding: 0 2px;
   font-size: 0.76rem;
   align-self: center;
-}
-
-.graph-node.variant-node .graph-node__meta {
-  width: 78px;
-  font-size: 0.66rem;
-  align-items: center;
-  text-align: center;
 }
 
 .graph-node__meta span {

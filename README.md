@@ -227,7 +227,7 @@ Creates a normal folder-based `.zip` that mirrors the project structure for user
 
 ## Transition Note
 
-Nodetrace is currently in the final stages of moving from an older `folder/photo/variant` storage model to a simpler `node + attached media` model. The visible app already behaves primarily through the newer model, but some compatibility logic still exists internally so older projects can be preserved safely during migration.
+Nodetrace now uses a `node + attached media` storage model. Older variant-based compatibility paths have been removed after a destructive migration of the live server data.
 
 ## Tech Stack
 
