@@ -1,0 +1,22 @@
+appId: com.nodetrace.desktop
+productName: Nodetrace
+artifactName: Nodetrace-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+files:
+  - dist/**/*
+  - apps/desktop/**/*
+  - apps/renderer/public/nodetrace.svg
+  - packages/shared/src/**/*
+  - package.json
+extraMetadata:
+  main: apps/desktop/launcher.cjs
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
