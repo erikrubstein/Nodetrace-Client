@@ -512,6 +512,14 @@ function MainApp() {
     return nextState
   }, [desktopEnvironment])
 
+  const getPreferredProjectId = useCallback(
+    () =>
+      desktopEnvironment
+        ? desktopPersistedWorkspaceState?.projectId || null
+        : readStoredLastProjectId(clientProjectUiScopeKey),
+    [clientProjectUiScopeKey, desktopEnvironment, desktopPersistedWorkspaceState?.projectId],
+  )
+
   const clearRememberedProjectSelection = useCallback(() => {
     if (!clientProjectUiScopeKey) {
       return
@@ -2007,10 +2015,7 @@ function MainApp() {
     currentUser,
     desktopEnvironment,
     desktopConnectionStatus: effectiveDesktopServerConnectionStatus,
-    getPreferredProjectId: () =>
-      desktopEnvironment
-        ? desktopPersistedWorkspaceState?.projectId || null
-        : readStoredLastProjectId(clientProjectUiScopeKey),
+    getPreferredProjectId,
     projectBootstrapReady: desktopEnvironment ? desktopPersistedWorkspaceReady : true,
     requireManualProjectSelection: manualProjectSelectionRequired,
     onAuthLost: handleAuthLost,
@@ -2059,6 +2064,7 @@ function MainApp() {
     loadProjects,
     loadTree,
     manualProjectSelectionRequired,
+    getPreferredProjectId,
     effectiveDesktopServerConnectionStatus,
     selectedProjectId,
     showProjectDialog,
