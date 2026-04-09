@@ -16,6 +16,7 @@
     "start:desktop": "electron apps/desktop",
     "build": "npm run build:web",
     "build:web": "npm run build --workspace nodetrace-renderer",
+    "dist:mac": "npm run build:web && electron-builder --config electron-builder.yml --mac dmg --publish never",
     "dist:win": "npm run build:web && electron-builder --config electron-builder.yml --win nsis --publish never",
     "preview:web": "npm run preview --workspace nodetrace-renderer",
     "test:e2e": "playwright test",
