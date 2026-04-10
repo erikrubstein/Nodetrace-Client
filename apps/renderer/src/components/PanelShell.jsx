@@ -11,6 +11,8 @@ export default function PanelShell({
   onPopout,
   onResizeStart,
   side = 'left',
+  showDesktopControls = true,
+  useNativeDesktopChrome = false,
   visible = true,
   windowMode = false,
 }) {
@@ -19,7 +21,7 @@ export default function PanelShell({
   }
 
   const shellClassName = windowMode
-    ? 'sidebar-shell sidebar-shell--window'
+    ? `sidebar-shell sidebar-shell--window ${useNativeDesktopChrome ? 'sidebar-shell--native-chrome' : ''}`.trim()
     : `sidebar-shell sidebar-shell--${side} ${visible ? '' : 'sidebar-shell--hidden'}`
 
   const content = (
@@ -47,7 +49,7 @@ export default function PanelShell({
               </span>
             </span>
           ) : null}
-          {windowMode ? (
+          {windowMode && showDesktopControls ? (
             <>
               <button
                 aria-label="Minimize window"
@@ -74,7 +76,7 @@ export default function PanelShell({
                 <i aria-hidden="true" className="fa-solid fa-xmark" />
               </button>
             </>
-          ) : (
+          ) : !windowMode ? (
             <span className="icon-button-wrap">
               <button className="sidebar-shell__action" onClick={onClose} type="button">
                 <i aria-hidden="true" className="fa-solid fa-xmark" />
@@ -82,8 +84,8 @@ export default function PanelShell({
               <span aria-hidden="true" className="icon-tooltip">
                 Collapse Sidebar
               </span>
-            </span>
-          )}
+              </span>
+          ) : null}
         </div>
       </div>
       <div className="sidebar-shell__body">{activePanel.content}</div>

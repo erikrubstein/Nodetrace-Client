@@ -34,6 +34,7 @@ import {
   createDesktopServerProfile,
   deleteDesktopProfileAccount,
   deleteDesktopServerProfile,
+  getDesktopPlatform,
   getDesktopServerState,
   getPersistedDesktopWorkspaceState,
   listDesktopProjectsForProfile,
@@ -44,6 +45,7 @@ import {
   openDesktopMainWindow,
   selectDesktopServerProfile,
   subscribeDesktopServerState,
+  subscribeDesktopMenuCommand,
   subscribeDesktopWindowState,
   toggleMaximizeDesktopWindow,
   updateDesktopWorkspaceState,
@@ -495,6 +497,9 @@ function MainApp() {
   }, [desktopAccountManagerFocusId, desktopEnvironment, desktopServerState.profiles, selectedDesktopServerProfile])
   const selectedDesktopServerProfileId = selectedDesktopServerProfile?.id || null
   const selectedDesktopServerConnectionStatus = selectedDesktopServerProfile?.connectionStatus || null
+  const desktopPlatform = desktopEnvironment ? getDesktopPlatform() : ''
+  const showCustomDesktopControls = desktopEnvironment && desktopPlatform !== 'darwin'
+  const useNativeDesktopMenu = desktopPlatform === 'darwin'
   const effectiveDesktopServerConnectionStatus =
     desktopEnvironment && desktopConnectionFaulted && selectedDesktopServerConnectionStatus !== 'connected'
       ? selectedDesktopServerConnectionStatus === 'invalid_login'
@@ -4966,6 +4971,158 @@ function MainApp() {
     focusSelectedNode()
   }, [focusSelectedNode, layout.nodes, selectedNodeId])
 
+  useEffect(() => {
+    if (!desktopEnvironment) {
+      return undefined
+    }
+
+    return subscribeDesktopMenuCommand((payload) => {
+      const command = String(payload?.command || '').trim()
+      if (!command) {
+        return
+      }
+
+      switch (command) {
+        case 'file.create-project':
+          setShowProjectDialog('create')
+          break
+        case 'file.open-project':
+          setShowProjectDialog('open')
+          break
+        case 'file.import-project':
+          setImportProjectName('')
+          setImportArchiveFile(null)
+          setShowProjectDialog('import')
+          break
+        case 'file.export-project':
+          if (selectedProjectId) {
+            setExportFileName(tree?.project?.name || 'project')
+            setShowProjectDialog('export')
+          }
+          break
+        case 'file.export-media-tree':
+          if (selectedProjectId) {
+            setExportFileName(`${tree?.project?.name || 'project'}-media`)
+            setShowProjectDialog('export-media')
+          }
+          break
+        case 'edit.add-node':
+          openNewNodeDialog()
+          break
+        case 'edit.add-photo-node':
+          triggerAddPhotoNode()
+          break
+        case 'edit.add-photo':
+          triggerAddPhoto()
+          break
+        case 'edit.delete-node':
+          if (selectedNode?.parent_id != null) {
+            setDeleteNodeOpen(true)
+          }
+          break
+        case 'select.results':
+          selectSearchResults()
+          break
+        case 'select.parents':
+          selectParents()
+          break
+        case 'select.children':
+          selectChildren()
+          break
+        case 'select.append-results':
+          appendSearchResults()
+          break
+        case 'select.append-parents':
+          appendParents()
+          break
+        case 'select.append-children':
+          appendChildren()
+          break
+        case 'select.invert':
+          invertEffectiveSelection()
+          break
+        case 'tree.collapse-all':
+          void setAllNodesCollapsed(true)
+          break
+        case 'tree.collapse-selected':
+          void setSelectedNodesCollapsed(true)
+          break
+        case 'tree.collapse-recursively':
+          void setSelectedNodesCollapsedRecursively(true)
+          break
+        case 'tree.expand-all':
+          void setAllNodesCollapsed(false)
+          break
+        case 'tree.expand-selected':
+          void setSelectedNodesCollapsed(false)
+          break
+        case 'tree.expand-recursively':
+          void setSelectedNodesCollapsedRecursively(false)
+          break
+        case 'settings.manage-server-profiles':
+          openAccountManager()
+          break
+        case 'settings.generate-session-code':
+          void generateNewSessionCode()
+          break
+        case 'view.toggle-results-only':
+          setCanvasIsolationMode((current) => (current === 'search' ? 'none' : 'search'))
+          break
+        case 'view.toggle-ancestors-only':
+          setCanvasIsolationMode((current) => (current === 'path' ? 'none' : 'path'))
+          break
+        case 'view.toggle-focus-path':
+          setFocusPathMode((current) => !current)
+          break
+        case 'settings.reset-cache':
+          openCacheResetDialog()
+          break
+        case 'settings.theme-dark':
+          applyThemePreference('dark')
+          break
+        case 'settings.theme-light':
+          applyThemePreference('light')
+          break
+        case 'view.fit-view':
+          fitCanvasToView()
+          break
+        case 'view.focus-selected':
+          focusSelectedNode()
+          break
+        case 'help.check-for-updates':
+          void checkForUpdates()
+          break
+        default:
+          break
+      }
+    })
+  }, [
+    appendChildren,
+    appendParents,
+    appendSearchResults,
+    applyThemePreference,
+    checkForUpdates,
+    desktopEnvironment,
+    fitCanvasToView,
+    focusSelectedNode,
+    generateNewSessionCode,
+    invertEffectiveSelection,
+    openAccountManager,
+    openNewNodeDialog,
+    openCacheResetDialog,
+    selectChildren,
+    selectParents,
+    selectSearchResults,
+    selectedProjectId,
+    selectedNode?.parent_id,
+    setAllNodesCollapsed,
+    setSelectedNodesCollapsed,
+    setSelectedNodesCollapsedRecursively,
+    triggerAddPhoto,
+    triggerAddPhotoNode,
+    tree?.project?.name,
+  ])
+
   const panelDefinitions = {
       preview: {
         id: 'preview',
@@ -5215,7 +5372,7 @@ function MainApp() {
         onUpdateProfile={updateServerProfile}
         profiles={desktopServerState.profiles}
         selectedProfileId={desktopServerState.selectedProfileId}
-        showDesktopControls={isDesktopEnvironment()}
+        showDesktopControls={showCustomDesktopControls}
       />
     )
   }
@@ -5426,6 +5583,8 @@ function MainApp() {
           onDesktopMinimize={() => void minimizeDesktopWindow()}
           onDesktopToggleMaximize={() => void toggleMaximizeDesktopWindow()}
           onDockBack={dockBackIntoSidebar}
+          showDesktopControls={showCustomDesktopControls}
+          useNativeDesktopChrome={useNativeDesktopMenu}
           visible
           windowMode
         />
@@ -5499,6 +5658,7 @@ function MainApp() {
         onApplyTheme={applyThemePreference}
         onResetCache={openCacheResetDialog}
         onGenerateSessionCode={generateNewSessionCode}
+        useNativeDesktopMenu={useNativeDesktopMenu}
         togglePathIsolation={() =>
           setCanvasIsolationMode((current) => (current === 'path' ? 'none' : 'path'))
         }
@@ -5512,7 +5672,7 @@ function MainApp() {
         onDesktopClose={() => closeDesktopWindow()}
         onDesktopMinimize={() => minimizeDesktopWindow()}
         onDesktopToggleMaximize={() => toggleMaximizeDesktopWindow()}
-        showDesktopControls={isDesktopEnvironment()}
+        showDesktopControls={showCustomDesktopControls}
         style={{
           gridColumn: '1 / -1',
           gridRow: '1 / 2',

@@ -2,6 +2,10 @@ export function isDesktopEnvironment() {
   return Boolean(window.nodetraceDesktop?.isElectron)
 }
 
+export function getDesktopPlatform() {
+  return String(window.nodetraceDesktop?.platform || '')
+}
+
 function normalizeDesktopError(error) {
   const rawMessage = String(error?.message || error || '').trim()
   let message = rawMessage
@@ -179,4 +183,8 @@ export function copyDesktopImageToClipboard(base64) {
 
 export function subscribeDesktopServerState(callback) {
   return window.nodetraceDesktop?.onServerStateChange?.(callback) || (() => {})
+}
+
+export function subscribeDesktopMenuCommand(callback) {
+  return window.nodetraceDesktop?.onMenuCommand?.(callback) || (() => {})
 }

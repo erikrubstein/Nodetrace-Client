@@ -6,7 +6,7 @@ import https from 'node:https'
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { app, BrowserWindow, clipboard, ipcMain, nativeImage, safeStorage, session } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, safeStorage, session } from 'electron'
 import { getPanelInitialWidth, getPanelMinWidth } from '../../packages/shared/src/panelSizing.js'
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url))
@@ -17,6 +17,7 @@ const desktopStatePath = path.join(app.getPath('userData'), 'desktop-state.json'
 const rendererEntryPath = path.join(repoRootDir, 'dist', 'index.html')
 const appIconPath = path.join(repoRootDir, 'apps', 'renderer', 'public', 'nodetrace.svg')
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
+const isMac = process.platform === 'darwin'
 
 const mainWindows = new Set()
 const pendingSplashWindows = new Map()
@@ -51,14 +52,22 @@ function logDesktop(message) {
 function buildWindowOptions(overrides = {}) {
   return {
     show: false,
-    frame: false,
     width: 1600,
     height: 980,
     minWidth: 1080,
     minHeight: 720,
     backgroundColor: '#1f1f1f',
     icon: appIconPath,
-    autoHideMenuBar: true,
+    ...(isMac
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 16, y: 14 },
+          autoHideMenuBar: false,
+        }
+      : {
+          frame: false,
+          autoHideMenuBar: true,
+        }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -66,6 +75,140 @@ function buildWindowOptions(overrides = {}) {
     },
     ...overrides,
   }
+}
+
+function getPreferredMenuWindow() {
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  if (focusedWindow && mainWindows.has(focusedWindow) && !focusedWindow.isDestroyed()) {
+    return focusedWindow
+  }
+  return Array.from(mainWindows).find((window) => !window.isDestroyed()) || null
+}
+
+function sendMenuCommand(command) {
+  const targetWindow = getPreferredMenuWindow()
+  targetWindow?.webContents?.send('desktop:menu-command', { command })
+}
+
+function buildApplicationMenu() {
+  const appSubmenu = isMac
+    ? [
+        { role: 'about', label: 'About Nodetrace' },
+        { type: 'separator' },
+        { role: 'services', submenu: [] },
+        { type: 'separator' },
+        { role: 'hide', label: 'Hide Nodetrace' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit Nodetrace' },
+      ]
+    : []
+
+  return Menu.buildFromTemplate([
+    ...(isMac ? [{ label: 'Nodetrace', submenu: appSubmenu }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Create Project', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('file.create-project') },
+        { label: 'Open Project', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('file.open-project') },
+        { label: 'Open New Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => launchDetachedMainProcess() },
+        {
+          label: 'Import',
+          submenu: [{ label: 'Project', click: () => sendMenuCommand('file.import-project') }],
+        },
+        {
+          label: 'Export',
+          submenu: [
+            { label: 'Project', click: () => sendMenuCommand('file.export-project') },
+            { label: 'Media Tree', click: () => sendMenuCommand('file.export-media-tree') },
+          ],
+        },
+        ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Exit' }]),
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: 'Add Node', click: () => sendMenuCommand('edit.add-node') },
+        { label: 'Add Photo Node', click: () => sendMenuCommand('edit.add-photo-node') },
+        { label: 'Add Photo', click: () => sendMenuCommand('edit.add-photo') },
+        { label: 'Delete Node', click: () => sendMenuCommand('edit.delete-node') },
+      ],
+    },
+    {
+      label: 'Select',
+      submenu: [
+        { label: 'Select Results', click: () => sendMenuCommand('select.results') },
+        { label: 'Select Parents', click: () => sendMenuCommand('select.parents') },
+        { label: 'Select Children', click: () => sendMenuCommand('select.children') },
+        { label: 'Append Select Results', click: () => sendMenuCommand('select.append-results') },
+        { label: 'Append Select Parents', click: () => sendMenuCommand('select.append-parents') },
+        { label: 'Append Select Children', click: () => sendMenuCommand('select.append-children') },
+        { label: 'Invert Selection', click: () => sendMenuCommand('select.invert') },
+      ],
+    },
+    {
+      label: 'Tree',
+      submenu: [
+        { label: 'Collapse All', click: () => sendMenuCommand('tree.collapse-all') },
+        { label: 'Collapse Selected', click: () => sendMenuCommand('tree.collapse-selected') },
+        { label: 'Collapse Recursively', click: () => sendMenuCommand('tree.collapse-recursively') },
+        { label: 'Expand All', click: () => sendMenuCommand('tree.expand-all') },
+        { label: 'Expand Selected', click: () => sendMenuCommand('tree.expand-selected') },
+        { label: 'Expand Recursively', click: () => sendMenuCommand('tree.expand-recursively') },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Toggle Results Only', click: () => sendMenuCommand('view.toggle-results-only') },
+        { label: 'Toggle Ancestors Only', click: () => sendMenuCommand('view.toggle-ancestors-only') },
+        { label: 'Toggle Focus Path', click: () => sendMenuCommand('view.toggle-focus-path') },
+        { label: 'Fit View', click: () => sendMenuCommand('view.fit-view') },
+        { label: 'Focus Selected', click: () => sendMenuCommand('view.focus-selected') },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Settings',
+      submenu: [
+        { label: 'Manage Server Profiles', click: () => sendMenuCommand('settings.manage-server-profiles') },
+        { label: 'Generate Session Code', click: () => sendMenuCommand('settings.generate-session-code') },
+        { label: 'Reset Cache', click: () => sendMenuCommand('settings.reset-cache') },
+        {
+          label: 'Apply Theme',
+          submenu: [
+            { label: 'Dark', click: () => sendMenuCommand('settings.theme-dark') },
+            { label: 'Light', click: () => sendMenuCommand('settings.theme-light') },
+          ],
+        },
+      ],
+    },
+    ...(isMac
+      ? [
+          {
+            label: 'Window',
+            submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }],
+          },
+        ]
+      : []),
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Check For Updates', click: () => sendMenuCommand('help.check-for-updates') },
+        { label: `Version ${app.getVersion()}`, enabled: false },
+      ],
+    },
+  ])
 }
 
 function createSplashWindow() {
@@ -916,13 +1059,13 @@ function createMainWindow(options = {}) {
 }
 
 function launchDetachedMainProcess() {
-  const childArgs = [path.join(repoRootDir, 'apps', 'desktop')]
-  if (rendererDevUrl) {
+  const childArgs = app.isPackaged ? [] : [path.join(repoRootDir, 'apps', 'desktop')]
+  if (!app.isPackaged && rendererDevUrl) {
     childArgs.push(`--dev-url=${rendererDevUrl}`)
   }
 
   const child = spawn(process.execPath, childArgs, {
-    cwd: repoRootDir,
+    cwd: app.isPackaged ? path.dirname(process.execPath) : repoRootDir,
     detached: true,
     stdio: 'ignore',
   })
@@ -1352,6 +1495,14 @@ app.on('before-quit', () => {
 })
 
 await app.whenReady()
+app.setName('Nodetrace')
+if (isMac) {
+  Menu.setApplicationMenu(buildApplicationMenu())
+  const dockIcon = nativeImage.createFromPath(appIconPath)
+  if (!dockIcon.isEmpty()) {
+    app.dock.setIcon(dockIcon)
+  }
+}
 readDesktopState()
 await startDesktopProxy()
 await refreshAndBroadcastDesktopServerState()

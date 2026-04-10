@@ -26,6 +26,13 @@ contextBridge.exposeInMainWorld('nodetraceDesktop', {
   copyImageToClipboard: (payload) => ipcRenderer.invoke('desktop:copy-image-to-clipboard', payload),
   getPersistedWorkspaceState: (scopeKey) => ipcRenderer.invoke('desktop:get-persisted-workspace-state', scopeKey),
   updateWorkspaceState: (payload) => ipcRenderer.invoke('desktop:update-workspace-state', payload),
+  onMenuCommand: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('desktop:menu-command', listener)
+    return () => {
+      ipcRenderer.removeListener('desktop:menu-command', listener)
+    }
+  },
   onWindowStateChange: (callback) => {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('desktop:window-state', listener)

@@ -72,10 +72,11 @@ export default function TopBar({
   onDesktopToggleMaximize,
   showDesktopControls = false,
   style,
+  useNativeDesktopMenu = false,
 }) {
   const projectLoadPercent = Math.max(0, Math.min(100, Math.round(projectLoadProgress * 100)))
   return (
-    <header className={`topbar ${showDesktopControls ? 'topbar--desktop' : ''}`} style={style}>
+    <header className={`topbar ${showDesktopControls ? 'topbar--desktop' : ''} ${useNativeDesktopMenu ? 'topbar--native-menu' : ''}`.trim()} style={style}>
       <div className="topbar__left topbar__no-drag">
         <img alt="Nodetrace" className="topbar__logo" src={brandLogoUrl} />
         <div className="menu-wrap">
@@ -597,7 +598,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <span className="topbar__separator">|</span>
+        {!useNativeDesktopMenu ? <span className="topbar__separator">|</span> : null}
         <div className={`project-chip ${projectLoading ? 'project-chip--loading' : ''}`.trim()}>
           <span className="project-chip__label">{projectName || 'No project'}</span>
           {projectLoading ? (
