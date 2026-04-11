@@ -647,11 +647,21 @@ function updateStoredProfile(profileId, updates = {}) {
 function requestJson(url, options = {}) {
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http
+    const body =
+      typeof options.body === 'string' || Buffer.isBuffer(options.body)
+        ? options.body
+        : options.body == null
+          ? null
+          : String(options.body)
+    const headers = { ...(options.headers || {}) }
+    if (body != null && !Object.keys(headers).some((key) => key.toLowerCase() === 'content-length')) {
+      headers['Content-Length'] = Buffer.byteLength(body)
+    }
     const request = transport.request(
       url,
       {
         method: options.method || 'GET',
-        headers: options.headers || {},
+        headers,
       },
       (response) => {
         const chunks = []
@@ -675,7 +685,7 @@ function requestJson(url, options = {}) {
     )
 
     request.on('error', reject)
-    request.end(options.body || null)
+    request.end(body)
   })
 }
 
@@ -1345,11 +1355,13 @@ async function patchProfileAccountPassword(profileId, currentPassword, newPasswo
   }
 }
 
-async function deleteProfileAccount(profileId, username) {
+async function deleteProfileAccount(profileId, username, activeProfileId = '') {
   const profile = desktopState.profiles.find((entry) => entry.id === profileId)
   if (!profile) {
     throw new Error('Server profile not found')
   }
+
+  const savedPassword = getStoredPassword(profile)
 
   const response = await requestJson(new URL('/api/account', `${profile.baseUrl}/`), {
     method: 'DELETE',
@@ -1368,9 +1380,38 @@ async function deleteProfileAccount(profileId, username) {
     throw new Error(String(response.payload.error || 'Unable to delete account'))
   }
 
+  if (savedPassword) {
+    const verificationResponse = await requestJson(new URL('/api/auth/login', `${profile.baseUrl}/`), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: profile.username,
+        password: savedPassword,
+      }),
+    })
+
+    if (verificationResponse.ok && verificationResponse.payload?.ok !== false) {
+      throw new Error('The account still exists on the server.')
+    }
+  }
+
   delete desktopState.sessionCookiesByProfileId[profile.id]
+  delete desktopProfileAuthStateById[profile.id]
+  desktopState.profiles = desktopState.profiles.filter((entry) => entry.id !== profile.id)
+  if (desktopState.selectedProfileId === profile.id) {
+    const preferredSelectedProfileId =
+      activeProfileId && desktopState.profiles.some((entry) => entry.id === activeProfileId)
+        ? activeProfileId
+        : desktopState.profiles[0]?.id || null
+    desktopState.selectedProfileId = preferredSelectedProfileId
+  }
   writeDesktopState()
-  await refreshProfileAuthState(profile.id)
+  if (desktopState.selectedProfileId) {
+    await refreshProfileAuthState(desktopState.selectedProfileId)
+  }
   broadcastDesktopServerState()
   return {
     ok: true,
@@ -1456,7 +1497,11 @@ ipcMain.handle('desktop:change-profile-account-password', (_event, payload) =>
   ),
 )
 ipcMain.handle('desktop:delete-profile-account', (_event, payload) =>
-  deleteProfileAccount(String(payload?.id || '').trim(), String(payload?.username || '').trim()),
+  deleteProfileAccount(
+    String(payload?.id || '').trim(),
+    String(payload?.username || '').trim(),
+    String(payload?.activeProfileId || '').trim(),
+  ),
 )
 ipcMain.handle('desktop:clear-cache', async () => {
   await session.defaultSession.clearCache()

@@ -157,9 +157,9 @@ export function changeDesktopProfileAccountPassword(id, currentPassword, newPass
   )
 }
 
-export function deleteDesktopProfileAccount(id, username) {
+export function deleteDesktopProfileAccount(id, username, activeProfileId = null) {
   return (
-    window.nodetraceDesktop?.deleteProfileAccount?.(id, username).catch((error) => {
+    window.nodetraceDesktop?.deleteProfileAccount?.(id, username, activeProfileId).catch((error) => {
       throw normalizeDesktopError(error)
     }) || Promise.resolve(null)
   )

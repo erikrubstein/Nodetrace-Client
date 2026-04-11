@@ -430,6 +430,7 @@ function MainApp() {
   const treeRef = useRef(null)
   const previousDesktopConnectionStatusRef = useRef(null)
   const desktopReconnectStatusRef = useRef(null)
+  const suppressDesktopDisconnectUiRef = useRef(false)
   const initializedAuthProfileIdRef = useRef(null)
   const currentUserRef = useRef(null)
   const selectedProjectIdRef = useRef(null)
@@ -635,6 +636,10 @@ function MainApp() {
       previousDesktopConnectionStatusRef.current = null
       return
     }
+    if (suppressDesktopDisconnectUiRef.current) {
+      previousDesktopConnectionStatusRef.current = effectiveDesktopServerConnectionStatus
+      return
+    }
     const currentStatus = effectiveDesktopServerConnectionStatus
     const previousStatus = previousDesktopConnectionStatusRef.current
     const hasOpenProject = Boolean(selectedProjectId && tree?.project)
@@ -666,6 +671,9 @@ function MainApp() {
     }
 
     const handleDesktopConnectionError = () => {
+      if (suppressDesktopDisconnectUiRef.current) {
+        return
+      }
       setDesktopConnectionFaulted(true)
       setError('')
       if (desktopServerDialogOpen || showProjectDialog === 'open') {
@@ -1785,6 +1793,15 @@ function MainApp() {
     }
 
     if (desktopEnvironment && effectiveDesktopServerConnectionStatus !== 'connected') {
+      if (suppressDesktopDisconnectUiRef.current) {
+        initializedAuthProfileIdRef.current = null
+        setCurrentUser(null)
+        setAuthReady(true)
+        setProjectListLoading(false)
+        setProjects([])
+        closeDisconnectedProject()
+        return
+      }
       if (showProjectDialog === 'open') {
         if (hasOpenProject) {
           closeDisconnectedProject()
@@ -4233,13 +4250,27 @@ function MainApp() {
     setAccountStatus('')
     try {
       if (desktopEnvironment && managedDesktopAccountProfile?.id) {
-        const response = await deleteDesktopProfileAccount(managedDesktopAccountProfile.id, accountForm.deleteConfirmation)
+        const deletedProfileId = managedDesktopAccountProfile.id
+        const deletedActiveProfile = deletedProfileId === selectedDesktopServerProfileId
+        suppressDesktopDisconnectUiRef.current = deletedActiveProfile
+        const response = await deleteDesktopProfileAccount(
+          managedDesktopAccountProfile.id,
+          accountForm.deleteConfirmation,
+          initializedAuthProfileIdRef.current || '',
+        )
         if (response?.desktopState) {
           setDesktopServerState(response.desktopState)
           configureApiBaseUrl(response.desktopState.proxyBaseUrl || '')
         }
-        if (managedDesktopAccountProfile.id === desktopServerState.selectedProfileId) {
-          handleAuthLost()
+        if (deletedActiveProfile) {
+          initializedAuthProfileIdRef.current = null
+          setCurrentUser(null)
+          setAuthReady(true)
+          setProjects([])
+          closeDisconnectedProject()
+          setServerDisconnectDialogOpen(false)
+          setShowProjectDialog('open')
+          setStatus('The active account was deleted.')
         }
         setAccountDialog(null)
         setAccountForm({
@@ -4249,6 +4280,9 @@ function MainApp() {
           confirmPassword: '',
           deleteConfirmation: '',
         })
+        window.setTimeout(() => {
+          suppressDesktopDisconnectUiRef.current = false
+        }, 0)
         return
       }
 
@@ -4274,6 +4308,7 @@ function MainApp() {
         await refreshDesktopServerState()
       }
     } catch (submitError) {
+      suppressDesktopDisconnectUiRef.current = false
       setError(submitError.message)
     } finally {
       setBusy(false)
