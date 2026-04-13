@@ -2714,19 +2714,60 @@ function MainApp() {
     })
   }, [])
 
+  const preserveNodeCanvasPositionForNextNodes = useCallback((nextNodes, anchorNodeId) => {
+    if (!anchorNodeId || !tree?.project) {
+      return
+    }
+
+    const previousAnchorNode = layout.nodes.find((item) => item.id === anchorNodeId) || null
+    if (!previousAnchorNode) {
+      return
+    }
+
+    const nextTree = buildClientTree(tree.project, nextNodes)
+    const nextFocusPathContext = focusPathMode
+      ? buildFocusPathContext(nextTree.nodes, anchorNodeId)
+      : { pathIds: null, nextById: null }
+    const nextVisibleRoot = buildVisibleTree(nextTree.root, {
+      focusPathIds: nextFocusPathContext.pathIds,
+      focusNextById: nextFocusPathContext.nextById,
+      selectedNodeId: anchorNodeId,
+    })
+    const nextLayout = buildLayout(nextVisibleRoot, projectSettings)
+    const nextAnchorNode = nextLayout.nodes.find((item) => item.id === anchorNodeId) || null
+
+    if (!nextAnchorNode) {
+      selectedLayoutAnchorRef.current = { nodeId: anchorNodeId, x: null, y: null }
+      return
+    }
+
+    setCanvasTransform((current) => ({
+      ...current,
+      x: current.x + (previousAnchorNode.x - nextAnchorNode.x) * current.scale,
+      y: current.y + (previousAnchorNode.y - nextAnchorNode.y) * current.scale,
+    }))
+    selectedLayoutAnchorRef.current = {
+      nodeId: anchorNodeId,
+      x: nextAnchorNode.x,
+      y: nextAnchorNode.y,
+    }
+  }, [focusPathMode, layout.nodes, projectSettings, setCanvasTransform, tree?.project])
+
   const applyCollapsedState = useCallback((updatedNode, updatedIds, collapsed, options = {}) => {
     const nextNodes = buildCollapsedNodes(tree?.nodes, updatedNode, updatedIds, collapsed)
-    if (!options.skipSelectionPreparation) {
-      prepareCollapsedSelection(nextNodes)
-    }
+    const nextSelection = options.skipSelectionPreparation
+      ? options.preparedSelection || null
+      : prepareCollapsedSelection(nextNodes)
+    const anchorNodeId = options.anchorNodeId || nextSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId
+    preserveNodeCanvasPositionForNextNodes(nextNodes, anchorNodeId)
     setTree((current) => {
       if (!current) {
         return current
       }
 
-      return buildClientTree(current.project, buildCollapsedNodes(current.nodes, updatedNode, updatedIds, collapsed))
+      return buildClientTree(current.project, nextNodes)
     })
-  }, [buildCollapsedNodes, prepareCollapsedSelection, tree?.nodes])
+  }, [buildCollapsedNodes, prepareCollapsedSelection, preserveNodeCanvasPositionForNextNodes, selectedNodeId, tree?.nodes])
 
   async function deleteNodeRequest(nodeId) {
     return api(`/api/nodes/${nodeId}`, { method: 'DELETE' })
@@ -2898,7 +2939,11 @@ function MainApp() {
       const nextNodes = tree.nodes.map((node) =>
         collapsibleIds.includes(node.id) ? { ...node, collapsed } : node,
       )
-      prepareCollapsedSelection(nextNodes)
+      const nextSelection = prepareCollapsedSelection(nextNodes)
+      preserveNodeCanvasPositionForNextNodes(
+        nextNodes,
+        nextSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId,
+      )
       setTree((current) =>
         current
           ? buildClientTree(current.project, nextNodes)
@@ -4537,8 +4582,12 @@ function MainApp() {
         throw error
       }
       const nextNodes = buildCollapsedNodes(tree?.nodes, payload.node, payload.updatedIds, collapsed)
-      prepareCollapsedSelection(nextNodes)
-      applyCollapsedState(payload.node, payload.updatedIds, collapsed, { skipSelectionPreparation: true })
+      const nextSelection = prepareCollapsedSelection(nextNodes)
+      applyCollapsedState(payload.node, payload.updatedIds, collapsed, {
+        skipSelectionPreparation: true,
+        preparedSelection: nextSelection,
+        anchorNodeId: nextSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId,
+      })
       pushHistory({
         undo: async () => {
           const rollbackUndoEvent = beginLocalEventExpectation()
@@ -4550,8 +4599,12 @@ function MainApp() {
             throw error
           }
           const revertedNodes = buildCollapsedNodes(tree?.nodes, revertedPayload.node, revertedPayload.updatedIds, previousValue)
-          prepareCollapsedSelection(revertedNodes)
-          applyCollapsedState(revertedPayload.node, revertedPayload.updatedIds, previousValue, { skipSelectionPreparation: true })
+          const revertedSelection = prepareCollapsedSelection(revertedNodes)
+          applyCollapsedState(revertedPayload.node, revertedPayload.updatedIds, previousValue, {
+            skipSelectionPreparation: true,
+            preparedSelection: revertedSelection,
+            anchorNodeId: revertedSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId,
+          })
         },
         redo: async () => {
           const rollbackRedoEvent = beginLocalEventExpectation()
@@ -4563,8 +4616,12 @@ function MainApp() {
             throw error
           }
           const redoneNodes = buildCollapsedNodes(tree?.nodes, redonePayload.node, redonePayload.updatedIds, collapsed)
-          prepareCollapsedSelection(redoneNodes)
-          applyCollapsedState(redonePayload.node, redonePayload.updatedIds, collapsed, { skipSelectionPreparation: true })
+          const redoneSelection = prepareCollapsedSelection(redoneNodes)
+          applyCollapsedState(redonePayload.node, redonePayload.updatedIds, collapsed, {
+            skipSelectionPreparation: true,
+            preparedSelection: redoneSelection,
+            anchorNodeId: redoneSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId,
+          })
         },
       })
     } catch (submitError) {
@@ -4572,7 +4629,7 @@ function MainApp() {
     } finally {
       setBusy(false)
     }
-  }, [applyCollapsedState, beginLocalEventExpectation, buildCollapsedNodes, prepareCollapsedSelection, pushHistory, setCollapsedRequest, tree?.nodes])
+  }, [applyCollapsedState, beginLocalEventExpectation, buildCollapsedNodes, prepareCollapsedSelection, pushHistory, selectedNodeId, setCollapsedRequest, tree?.nodes])
 
   const setSelectedNodesCollapsed = useCallback(async (collapsed) => {
     if (!effectiveSelectedNodeIds.length || !tree?.nodes?.length) {
