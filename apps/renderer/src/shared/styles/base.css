@@ -1,0 +1,108 @@
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover-stroke) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--hover-stroke);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+.app-shell,
+.topbar,
+.main-layout,
+.canvas-status,
+.inspector,
+.inspector__section,
+.graph-node,
+.menu-panel,
+.dialog,
+button,
+input,
+textarea,
+select {
+  transition:
+    background-color var(--transition-theme),
+    color var(--transition-theme),
+    border-color var(--transition-theme),
+    box-shadow var(--transition-theme);
+}
+
+.app-shell {
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.app-shell--panel-window {
+  display: block;
+}
+
+.sidebar-shell--window {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--panel);
+}
+
+.sidebar-shell--window .sidebar-shell__titlebar {
+  min-height: 40px;
+  padding: 10px 10px 0 10px;
+  border-bottom: 1px solid var(--border);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.sidebar-shell--window.sidebar-shell--native-chrome .sidebar-shell__titlebar {
+  min-height: 48px;
+  padding-left: 84px;
+}
+
+.sidebar-shell--window .sidebar-shell__actions,
+.sidebar-shell--window .sidebar-shell__actions * {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-shell--window .sidebar-shell__body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sidebar-shell--window.sidebar-shell--empty {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.app-shell--auth {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell--loading {
+  display: grid;
+  place-items: center;
+}

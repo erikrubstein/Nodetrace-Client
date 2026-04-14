@@ -1,0 +1,86 @@
+:root {
+  --topbar-height: 42px;
+  --tone-bg: #1a1a1a;
+  --tone-canvas: #1d1d1d;
+  --tone-panel: #232323;
+  --tone-surface: #262626;
+  --tone-raised: #303030;
+  --tone-border: #303030;
+  --tone-border-strong: #5c5c5c;
+  --tone-text: #efefef;
+  --tone-muted: #9a9a9a;
+  --tone-danger: #cf6c6c;
+  --tone-selected: #f2f2ee;
+
+  --bg: var(--tone-bg);
+  --panel: var(--tone-panel);
+  --panel-2: var(--tone-panel);
+  --border: var(--tone-border);
+  --text: var(--tone-text);
+  --muted: var(--tone-muted);
+  --accent: var(--tone-text);
+  --canvas: var(--tone-canvas);
+  --line: var(--tone-muted);
+  --selected: var(--tone-selected);
+  --danger: var(--tone-danger);
+  --drop: var(--tone-surface);
+  --surface: var(--tone-surface);
+  --folder-surface: var(--tone-raised);
+  --grid-dot: var(--tone-raised);
+  --inner-stroke: var(--tone-border);
+  --hover-stroke: var(--tone-border-strong);
+  --overlay: var(--tone-surface);
+  --menu-active: var(--tone-raised);
+  --elevation: var(--tone-bg);
+  --control-bg: var(--tone-raised);
+  --control-hover: color-mix(in srgb, var(--tone-raised) 84%, white);
+  --control-text: var(--tone-text);
+  --tooltip-bg: var(--tone-raised);
+  --tooltip-text: var(--tone-text);
+  --transition-veil: var(--bg);
+  --transition-card-bg: var(--panel);
+  --transition-fast: 160ms ease;
+  --transition-theme: 220ms ease;
+}
+
+:root[data-theme='light'] {
+  --tone-bg: #ecece7;
+  --tone-canvas: #e6e6e1;
+  --tone-panel: #f7f7f3;
+  --tone-surface: #edede7;
+  --tone-raised: #d9d9d2;
+  --tone-border: #cdcdc6;
+  --tone-border-strong: #62625d;
+  --tone-text: #171717;
+  --tone-muted: #666660;
+  --tone-danger: #b25555;
+  --tone-selected: #050505;
+
+  --bg: var(--tone-bg);
+  --panel: var(--tone-panel);
+  --panel-2: var(--tone-panel);
+  --border: var(--tone-border);
+  --text: var(--tone-text);
+  --muted: var(--tone-muted);
+  --accent: var(--tone-text);
+  --canvas: var(--tone-canvas);
+  --line: color-mix(in srgb, var(--tone-muted) 55%, white);
+  --selected: var(--tone-selected);
+  --danger: var(--tone-danger);
+  --drop: var(--tone-surface);
+  --surface: var(--tone-surface);
+  --folder-surface: var(--tone-raised);
+  --grid-dot: var(--tone-raised);
+  --inner-stroke: var(--tone-border);
+  --hover-stroke: var(--tone-border-strong);
+  --overlay: color-mix(in srgb, var(--tone-surface) 92%, black);
+  --menu-active: color-mix(in srgb, var(--tone-raised) 86%, white);
+  --elevation: color-mix(in srgb, var(--tone-raised) 90%, black);
+  --control-bg: #ffffff;
+  --control-hover: #f0f0eb;
+  --control-text: #111111;
+  --tooltip-bg: #ffffff;
+  --tooltip-text: #111111;
+  --transition-veil: var(--bg);
+  --transition-card-bg: var(--panel);
+}

@@ -8,6 +8,17 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, safeStorage, session } from 'electron'
 import { getPanelInitialWidth, getPanelMinWidth } from '../../packages/shared/src/panelSizing.js'
+import { resolveDesktopIconPaths } from './main/icons.js'
+import { buildApplicationMenu } from './main/menu.js'
+import { createSplashWindow } from './main/splash.js'
+import { registerIpcHandlers } from './main/ipcHandlers.js'
+import {
+  clearPersistedWorkspaceState,
+  getPersistedWorkspaceState,
+  normalizeWorkspaceSnapshot,
+  persistLastClosedWorkspaceState,
+} from './main/workspacePersistence.js'
+import { attachWindowStateListeners, buildWindowOptions } from './main/windowing.js'
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRootDir = path.resolve(desktopDir, '../..')
@@ -15,18 +26,9 @@ const preloadPath = path.join(desktopDir, 'preload.cjs')
 const desktopLogPath = path.join(repoRootDir, 'logs', 'desktop.log')
 const desktopStatePath = path.join(app.getPath('userData'), 'desktop-state.json')
 const rendererEntryPath = path.join(repoRootDir, 'dist', 'index.html')
-const buildAssetsDir = path.join(repoRootDir, 'build')
-const svgLogoPath = path.join(repoRootDir, 'apps', 'renderer', 'public', 'nodetrace.svg')
-const pngIconPath = path.join(buildAssetsDir, 'icon-1024.png')
-const icoIconPath = path.join(buildAssetsDir, 'icon.ico')
-const icnsIconPath = path.join(buildAssetsDir, 'icon.icns')
-const appIconPath =
-  process.platform === 'win32'
-    ? (fs.existsSync(icoIconPath) ? icoIconPath : svgLogoPath)
-    : (fs.existsSync(pngIconPath) ? pngIconPath : svgLogoPath)
-const dockIconPath = fs.existsSync(pngIconPath) ? pngIconPath : (fs.existsSync(icnsIconPath) ? icnsIconPath : svgLogoPath)
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
 const isMac = process.platform === 'darwin'
+const { appIconPath, dockIconPath, svgLogoPath } = resolveDesktopIconPaths(repoRootDir, process.platform)
 
 const mainWindows = new Set()
 const pendingSplashWindows = new Map()
@@ -58,34 +60,6 @@ function logDesktop(message) {
   console.log(message)
 }
 
-function buildWindowOptions(overrides = {}) {
-  return {
-    show: false,
-    width: 1600,
-    height: 980,
-    minWidth: 1080,
-    minHeight: 720,
-    backgroundColor: '#1f1f1f',
-    icon: appIconPath,
-    ...(isMac
-      ? {
-          titleBarStyle: 'hiddenInset',
-          trafficLightPosition: { x: 16, y: 14 },
-          autoHideMenuBar: false,
-        }
-      : {
-          frame: false,
-          autoHideMenuBar: true,
-        }),
-    webPreferences: {
-      preload: preloadPath,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    ...overrides,
-  }
-}
-
 function getPreferredMenuWindow() {
   const focusedWindow = BrowserWindow.getFocusedWindow()
   if (focusedWindow && mainWindows.has(focusedWindow) && !focusedWindow.isDestroyed()) {
@@ -99,233 +73,12 @@ function sendMenuCommand(command) {
   targetWindow?.webContents?.send('desktop:menu-command', { command })
 }
 
-function buildApplicationMenu() {
-  const appSubmenu = isMac
-    ? [
-        { role: 'about', label: 'About Nodetrace' },
-        { type: 'separator' },
-        { role: 'services', submenu: [] },
-        { type: 'separator' },
-        { role: 'hide', label: 'Hide Nodetrace' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit', label: 'Quit Nodetrace' },
-      ]
-    : []
-
-  return Menu.buildFromTemplate([
-    ...(isMac ? [{ label: 'Nodetrace', submenu: appSubmenu }] : []),
-    {
-      label: 'File',
-      submenu: [
-        { label: 'Create Project', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('file.create-project') },
-        { label: 'Open Project', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('file.open-project') },
-        { label: 'Open New Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => launchDetachedMainProcess() },
-        {
-          label: 'Import',
-          submenu: [{ label: 'Project', click: () => sendMenuCommand('file.import-project') }],
-        },
-        {
-          label: 'Export',
-          submenu: [
-            { label: 'Project', click: () => sendMenuCommand('file.export-project') },
-            { label: 'Media Tree', click: () => sendMenuCommand('file.export-media-tree') },
-          ],
-        },
-        ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Exit' }]),
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Add Node', click: () => sendMenuCommand('edit.add-node') },
-        { label: 'Add Photo Node', click: () => sendMenuCommand('edit.add-photo-node') },
-        { label: 'Add Photo', click: () => sendMenuCommand('edit.add-photo') },
-        { label: 'Delete Node', click: () => sendMenuCommand('edit.delete-node') },
-      ],
-    },
-    {
-      label: 'Select',
-      submenu: [
-        { label: 'Select Results', click: () => sendMenuCommand('select.results') },
-        { label: 'Select Parents', click: () => sendMenuCommand('select.parents') },
-        { label: 'Select Children', click: () => sendMenuCommand('select.children') },
-        { label: 'Append Select Results', click: () => sendMenuCommand('select.append-results') },
-        { label: 'Append Select Parents', click: () => sendMenuCommand('select.append-parents') },
-        { label: 'Append Select Children', click: () => sendMenuCommand('select.append-children') },
-        { label: 'Invert Selection', click: () => sendMenuCommand('select.invert') },
-      ],
-    },
-    {
-      label: 'Tree',
-      submenu: [
-        { label: 'Collapse All', click: () => sendMenuCommand('tree.collapse-all') },
-        { label: 'Collapse Selected', click: () => sendMenuCommand('tree.collapse-selected') },
-        { label: 'Collapse Recursively', click: () => sendMenuCommand('tree.collapse-recursively') },
-        { label: 'Expand All', click: () => sendMenuCommand('tree.expand-all') },
-        { label: 'Expand Selected', click: () => sendMenuCommand('tree.expand-selected') },
-        { label: 'Expand Recursively', click: () => sendMenuCommand('tree.expand-recursively') },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Toggle Results Only', click: () => sendMenuCommand('view.toggle-results-only') },
-        { label: 'Toggle Ancestors Only', click: () => sendMenuCommand('view.toggle-ancestors-only') },
-        { label: 'Toggle Focus Path', click: () => sendMenuCommand('view.toggle-focus-path') },
-        { label: 'Fit View', click: () => sendMenuCommand('view.fit-view') },
-        { label: 'Focus Selected', click: () => sendMenuCommand('view.focus-selected') },
-        { role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Settings',
-      submenu: [
-        { label: 'Manage Server Profiles', click: () => sendMenuCommand('settings.manage-server-profiles') },
-        { label: 'Generate Session Code', click: () => sendMenuCommand('settings.generate-session-code') },
-        { label: 'Reset Cache', click: () => sendMenuCommand('settings.reset-cache') },
-        {
-          label: 'Apply Theme',
-          submenu: [
-            { label: 'Dark', click: () => sendMenuCommand('settings.theme-dark') },
-            { label: 'Light', click: () => sendMenuCommand('settings.theme-light') },
-          ],
-        },
-      ],
-    },
-    ...(isMac
-      ? [
-          {
-            label: 'Window',
-            submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }],
-          },
-        ]
-      : []),
-    {
-      label: 'Help',
-      submenu: [
-        { label: 'Check For Updates', click: () => sendMenuCommand('help.check-for-updates') },
-        { label: `Version ${app.getVersion()}`, enabled: false },
-      ],
-    },
-  ])
-}
-
 function broadcastPanelWindowState(payload) {
   for (const window of mainWindows) {
     if (!window.isDestroyed()) {
       window.webContents.send('desktop:panel-window-state', payload)
     }
   }
-}
-
-function createSplashWindow() {
-  const splashWindow = new BrowserWindow({
-    show: true,
-    frame: false,
-    width: 420,
-    height: 240,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    backgroundColor: '#1a1a1a',
-    icon: appIconPath,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  })
-
-  const inlineLogo = fs.readFileSync(svgLogoPath, 'utf8')
-  const splashHtml = `<!doctype html>
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>Nodetrace</title>
-      <style>
-        :root { color-scheme: dark; }
-        html, body {
-          margin: 0;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          background: #1a1a1a;
-          color: #efefef;
-          font-family: Consolas, "Courier New", monospace;
-        }
-        body {
-          display: grid;
-          place-items: center;
-        }
-        .splash {
-          display: grid;
-          justify-items: center;
-          gap: 14px;
-        }
-        .splash img {
-          width: 64px;
-          height: 64px;
-          display: block;
-        }
-        .splash__logo {
-          width: 64px;
-          height: 64px;
-          display: block;
-        }
-        .splash__logo svg {
-          width: 100%;
-          height: 100%;
-          display: block;
-        }
-        .splash__title {
-          font-size: 1.2rem;
-          letter-spacing: 0.04em;
-        }
-        .splash__bar {
-          width: 128px;
-          height: 4px;
-          overflow: hidden;
-          border-radius: 999px;
-          background: #2e2e2e;
-          position: relative;
-        }
-        .splash__bar::after {
-          content: "";
-          position: absolute;
-          inset: 0 auto 0 -36%;
-          width: 36%;
-          border-radius: inherit;
-          background: #efefef;
-          animation: splash-load 1s ease-in-out infinite;
-        }
-        @keyframes splash-load {
-          from { transform: translateX(0); }
-          to { transform: translateX(380%); }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="splash">
-        <div class="splash__logo" aria-hidden="true">${inlineLogo}</div>
-        <div class="splash__title">Nodetrace</div>
-        <div class="splash__bar" aria-hidden="true"></div>
-      </div>
-    </body>
-  </html>`
-
-  splashWindow.loadURL(`data:text/html,${encodeURIComponent(splashHtml)}`).catch(() => {})
-  return splashWindow
 }
 
 function encryptStoredSecret(secret) {
@@ -438,110 +191,6 @@ function writeDesktopState() {
   } catch (error) {
     logDesktop(`Failed to write desktop state: ${error.message}`)
   }
-}
-
-function readLastClosedWorkspaceMapFromDisk() {
-  try {
-    if (!fs.existsSync(desktopStatePath)) {
-      return {}
-    }
-    const parsed = JSON.parse(fs.readFileSync(desktopStatePath, 'utf8'))
-    return parsed?.lastClosedWorkspaceByScopeKey && typeof parsed.lastClosedWorkspaceByScopeKey === 'object'
-      ? { ...parsed.lastClosedWorkspaceByScopeKey }
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-function normalizeWorkspaceSnapshot(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return null
-  }
-  return {
-    showGrid: snapshot.showGrid == null ? undefined : Boolean(snapshot.showGrid),
-    canvasTransform:
-      snapshot.canvasTransform &&
-      typeof snapshot.canvasTransform === 'object' &&
-      Number.isFinite(Number(snapshot.canvasTransform.x)) &&
-      Number.isFinite(Number(snapshot.canvasTransform.y)) &&
-      Number.isFinite(Number(snapshot.canvasTransform.scale))
-        ? {
-            x: Number(snapshot.canvasTransform.x),
-            y: Number(snapshot.canvasTransform.y),
-            scale: Number(snapshot.canvasTransform.scale),
-          }
-        : null,
-    selectedNodeIds: Array.isArray(snapshot.selectedNodeIds) ? snapshot.selectedNodeIds.filter(Boolean) : [],
-    leftSidebarOpen: snapshot.leftSidebarOpen == null ? undefined : Boolean(snapshot.leftSidebarOpen),
-    rightSidebarOpen: snapshot.rightSidebarOpen == null ? undefined : Boolean(snapshot.rightSidebarOpen),
-    leftSidebarWidth: Number.isFinite(Number(snapshot.leftSidebarWidth)) ? Number(snapshot.leftSidebarWidth) : undefined,
-    rightSidebarWidth: Number.isFinite(Number(snapshot.rightSidebarWidth)) ? Number(snapshot.rightSidebarWidth) : undefined,
-    leftActivePanel: typeof snapshot.leftActivePanel === 'string' ? snapshot.leftActivePanel : undefined,
-    rightActivePanel: typeof snapshot.rightActivePanel === 'string' ? snapshot.rightActivePanel : undefined,
-    panelDock: snapshot.panelDock && typeof snapshot.panelDock === 'object' ? { ...snapshot.panelDock } : undefined,
-  }
-}
-
-function getPersistedWorkspaceState(scopeKey) {
-  const normalizedScopeKey = String(scopeKey || '').trim()
-  if (!normalizedScopeKey) {
-    return null
-  }
-  const diskMap = readLastClosedWorkspaceMapFromDisk()
-  const entry = diskMap[normalizedScopeKey]
-  if (!entry || typeof entry !== 'object') {
-    return null
-  }
-  const projectId = String(entry.projectId || '').trim()
-  if (!projectId) {
-    return null
-  }
-  return {
-    projectId,
-    closedAt: Number(entry.closedAt || 0) || 0,
-    snapshot: normalizeWorkspaceSnapshot(entry.snapshot),
-  }
-}
-
-function clearPersistedWorkspaceState(scopeKey) {
-  const normalizedScopeKey = String(scopeKey || '').trim()
-  if (!normalizedScopeKey) {
-    return
-  }
-
-  const diskMap = readLastClosedWorkspaceMapFromDisk()
-  if (!Object.prototype.hasOwnProperty.call(diskMap, normalizedScopeKey)) {
-    return
-  }
-
-  delete diskMap[normalizedScopeKey]
-  desktopState.lastClosedWorkspaceByScopeKey = diskMap
-  writeDesktopState()
-}
-
-function persistLastClosedWorkspaceState(scopeKey, payload) {
-  const normalizedScopeKey = String(scopeKey || '').trim()
-  const projectId = String(payload?.projectId || '').trim()
-  if (!normalizedScopeKey || !projectId) {
-    return
-  }
-
-  const closedAt = Number.isFinite(Number(payload?.closedAt)) ? Number(payload.closedAt) : Date.now()
-  const snapshot = normalizeWorkspaceSnapshot(payload?.snapshot)
-  const diskMap = readLastClosedWorkspaceMapFromDisk()
-  const currentEntry = diskMap[normalizedScopeKey]
-  if (currentEntry && Number(currentEntry.closedAt || 0) > closedAt) {
-    return
-  }
-
-  diskMap[normalizedScopeKey] = {
-    projectId,
-    closedAt,
-    snapshot,
-  }
-  desktopState.lastClosedWorkspaceByScopeKey = diskMap
-  writeDesktopState()
 }
 
 function getSelectedServerProfile() {
@@ -996,31 +645,6 @@ function buildRendererUrl() {
   return pathToFileURL(rendererEntryPath).toString()
 }
 
-function attachWindowStateListeners(window, label, options = {}) {
-  const { onReadyToShow = null, autoShow = true } = options
-  const emitWindowState = () => {
-    window.webContents.send('desktop:window-state', { maximized: window.isMaximized() })
-  }
-  window.once('ready-to-show', () => {
-    logDesktop(`${label} ready-to-show`)
-    onReadyToShow?.()
-    if (autoShow) {
-      window.show()
-      window.focus()
-    }
-    emitWindowState()
-  })
-  window.on('maximize', emitWindowState)
-  window.on('unmaximize', emitWindowState)
-  window.webContents.on('did-finish-load', () => {
-    logDesktop(`${label} finished load`)
-    emitWindowState()
-  })
-  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-    logDesktop(`${label} failed load: ${errorCode} ${errorDescription}`)
-  })
-}
-
 function resolvePendingSplash(window, contentsId, { showWindow = true } = {}) {
   const fallbackTimer = pendingSplashFallbackTimers.get(contentsId)
   if (fallbackTimer) {
@@ -1056,8 +680,8 @@ function closeAllPanelWindows() {
 
 function createMainWindow(options = {}) {
   const { showSplash = false } = options
-  const splashWindow = showSplash ? createSplashWindow() : null
-  const mainWindow = new BrowserWindow(buildWindowOptions({ title: 'Nodetrace' }))
+  const splashWindow = showSplash ? createSplashWindow({ BrowserWindow, appIconPath, fs, svgLogoPath }) : null
+  const mainWindow = new BrowserWindow(buildWindowOptions({ appIconPath, isMac, preloadPath, overrides: { title: 'Nodetrace' } }))
   const mainContentsId = mainWindow.webContents.id
   mainWindows.add(mainWindow)
   if (splashWindow) {
@@ -1069,7 +693,7 @@ function createMainWindow(options = {}) {
     pendingSplashFallbackTimers.set(mainContentsId, fallbackTimer)
   }
   logDesktop('Created main BrowserWindow')
-  attachWindowStateListeners(mainWindow, 'Main window', {
+  attachWindowStateListeners(mainWindow, 'Main window', logDesktop, {
     autoShow: !showSplash,
   })
   mainWindow.on('close', () => {
@@ -1079,7 +703,7 @@ function createMainWindow(options = {}) {
     logDesktop('Main window closed')
     const latestWorkspaceState = latestWorkspaceStateByWindowId.get(mainContentsId)
     if (latestWorkspaceState?.scopeKey && latestWorkspaceState?.projectId) {
-      persistLastClosedWorkspaceState(latestWorkspaceState.scopeKey, {
+      persistLastClosedWorkspaceState(desktopStatePath, desktopState, writeDesktopState, latestWorkspaceState.scopeKey, {
         projectId: latestWorkspaceState.projectId,
         closedAt: Date.now(),
         snapshot: latestWorkspaceState.snapshot,
@@ -1127,15 +751,20 @@ function openPanelWindow(options = {}) {
 
   const panelWindow = new BrowserWindow(
     buildWindowOptions({
-      title: `Nodetrace - ${panelId}`,
-      width: getPanelInitialWidth(panelId),
-      height: 760,
-      minWidth: getPanelMinWidth(panelId),
-      minHeight: 360,
+      appIconPath,
+      isMac,
+      preloadPath,
+      overrides: {
+        title: `Nodetrace - ${panelId}`,
+        width: getPanelInitialWidth(panelId),
+        height: 760,
+        minWidth: getPanelMinWidth(panelId),
+        minHeight: 360,
+      },
     }),
   )
   panelWindows.set(panelId, panelWindow)
-  attachWindowStateListeners(panelWindow, `Panel window ${panelId}`)
+  attachWindowStateListeners(panelWindow, `Panel window ${panelId}`, logDesktop)
   panelWindow.on('closed', () => {
     panelWindows.delete(panelId)
     broadcastPanelWindowState({ panelId, open: false })
@@ -1456,103 +1085,31 @@ function getEventWindow(event) {
   return BrowserWindow.fromWebContents(event.sender)
 }
 
-ipcMain.handle('desktop:open-window', (_event, options) => openPanelWindow(options))
-ipcMain.handle('desktop:open-main-window', () => launchDetachedMainProcess())
-ipcMain.on('desktop:renderer-ready', (event) => {
-  const contentsId = event.sender.id
-  const window = BrowserWindow.fromWebContents(event.sender)
-  resolvePendingSplash(window, contentsId, { showWindow: true })
-})
-ipcMain.handle('desktop:close-window', (event) => {
-  getEventWindow(event)?.close()
-})
-ipcMain.handle('desktop:minimize-window', (event) => {
-  getEventWindow(event)?.minimize()
-})
-ipcMain.handle('desktop:toggle-maximize-window', (event) => {
-  const window = getEventWindow(event)
-  if (!window) {
-    return { maximized: false }
-  }
-  if (window.isMaximized()) {
-    window.unmaximize()
-  } else {
-    window.maximize()
-  }
-  return { maximized: window.isMaximized() }
-})
-ipcMain.handle('desktop:get-window-state', (event) => {
-  const window = getEventWindow(event)
-  return { maximized: Boolean(window?.isMaximized()) }
-})
-ipcMain.handle('desktop:get-persisted-workspace-state', (_event, scopeKey) => getPersistedWorkspaceState(scopeKey))
-ipcMain.handle('desktop:update-workspace-state', (event, payload) => {
-  const scopeKey = String(payload?.scopeKey || '').trim()
-  const projectId = String(payload?.projectId || '').trim()
-  if (!scopeKey) {
-    latestWorkspaceStateByWindowId.delete(event.sender.id)
-    return { ok: false }
-  }
-  if (!projectId) {
-    latestWorkspaceStateByWindowId.delete(event.sender.id)
-    clearPersistedWorkspaceState(scopeKey)
-    return { ok: true }
-  }
-  latestWorkspaceStateByWindowId.set(event.sender.id, {
-    scopeKey,
-    projectId,
-    snapshot: normalizeWorkspaceSnapshot(payload?.snapshot),
-  })
-  return { ok: true }
-})
-ipcMain.handle('desktop:get-server-state', async () => {
-  await refreshAndBroadcastDesktopServerState()
-  return getDesktopServerState()
-})
-ipcMain.handle('desktop:create-server-profile', (_event, profile) => upsertServerProfile(null, profile))
-ipcMain.handle('desktop:update-server-profile', (_event, payload) =>
-  upsertServerProfile(String(payload?.id || '').trim(), payload?.profile || {}),
-)
-ipcMain.handle('desktop:delete-server-profile', (_event, id) => deleteServerProfile(String(id || '').trim()))
-ipcMain.handle('desktop:select-server-profile', (_event, id) => selectServerProfile(String(id || '').trim()))
-ipcMain.handle('desktop:create-project-for-profile', (_event, payload) =>
-  createProjectForProfile(String(payload?.id || '').trim(), String(payload?.name || '')),
-)
-ipcMain.handle('desktop:list-projects-for-profile', (_event, id) => listProjectsForProfile(String(id || '').trim()))
-ipcMain.handle('desktop:change-profile-account-username', (_event, payload) =>
-  patchProfileAccountUsername(String(payload?.id || '').trim(), String(payload?.username || '').trim()),
-)
-ipcMain.handle('desktop:change-profile-account-password', (_event, payload) =>
-  patchProfileAccountPassword(
-    String(payload?.id || '').trim(),
-    String(payload?.currentPassword || ''),
-    String(payload?.newPassword || ''),
-  ),
-)
-ipcMain.handle('desktop:delete-profile-account', (_event, payload) =>
-  deleteProfileAccount(
-    String(payload?.id || '').trim(),
-    String(payload?.username || '').trim(),
-    String(payload?.activeProfileId || '').trim(),
-  ),
-)
-ipcMain.handle('desktop:clear-cache', async () => {
-  await session.defaultSession.clearCache()
-  return { ok: true }
-})
-ipcMain.handle('desktop:copy-image-to-clipboard', (_event, payload) => {
-  const base64 = String(payload?.base64 || '').trim()
-  if (!base64) {
-    throw new Error('No image data was provided for clipboard copy')
-  }
-
-  const image = nativeImage.createFromBuffer(Buffer.from(base64, 'base64'))
-  if (image.isEmpty()) {
-    throw new Error('Unable to convert image for clipboard copy')
-  }
-
-  clipboard.writeImage(image)
-  return { ok: true }
+registerIpcHandlers({
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  nativeImage,
+  clearPersistedWorkspaceState: (scopeKey) =>
+    clearPersistedWorkspaceState(desktopStatePath, desktopState, writeDesktopState, scopeKey),
+  getDesktopServerState,
+  getEventWindow,
+  getPersistedWorkspaceState: (scopeKey) => getPersistedWorkspaceState(desktopStatePath, scopeKey),
+  latestWorkspaceStateByWindowId,
+  launchDetachedMainProcess,
+  normalizeWorkspaceSnapshot,
+  openPanelWindow,
+  refreshAndBroadcastDesktopServerState,
+  selectServerProfile,
+  upsertServerProfile,
+  deleteServerProfile,
+  createProjectForProfile,
+  listProjectsForProfile,
+  patchProfileAccountUsername,
+  patchProfileAccountPassword,
+  deleteProfileAccount,
+  resolvePendingSplash,
+  session,
 })
 
 app.on('window-all-closed', () => {
@@ -1575,7 +1132,15 @@ app.on('before-quit', () => {
 await app.whenReady()
 app.setName('Nodetrace')
 if (isMac) {
-  Menu.setApplicationMenu(buildApplicationMenu())
+  Menu.setApplicationMenu(
+    buildApplicationMenu({
+      Menu,
+      isMac,
+      appVersion: app.getVersion(),
+      sendMenuCommand,
+      launchDetachedMainProcess,
+    }),
+  )
   const dockIcon = nativeImage.createFromPath(dockIconPath)
   if (!dockIcon.isEmpty()) {
     app.dock.setIcon(dockIcon)

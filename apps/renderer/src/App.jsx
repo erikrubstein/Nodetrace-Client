@@ -23,7 +23,7 @@ import useProjectSync from './hooks/useProjectSync'
 import useUndoRedo from './hooks/useUndoRedo'
 import useWorkspaceInteractions from './hooks/useWorkspaceInteractions'
 import { ApiError, api, configureApiBaseUrl, uploadWithProgress } from './lib/api'
-import { APP_UPDATE_REPO, APP_VERSION, compareSemanticVersions } from './lib/appInfo'
+import { APP_VERSION } from './lib/appInfo'
 import { defaultProjectSettings, defaultUserProjectUi, getPanelMinWidth, panelIds, SIDEBAR_RAIL_WIDTH } from './lib/constants'
 import {
   closeDesktopWindow,
@@ -31,9 +31,7 @@ import {
   changeDesktopProfileAccountUsername,
   clearDesktopCache,
   createDesktopProjectForProfile,
-  createDesktopServerProfile,
   deleteDesktopProfileAccount,
-  deleteDesktopServerProfile,
   getDesktopPlatform,
   getDesktopServerState,
   getPersistedDesktopWorkspaceState,
@@ -52,7 +50,6 @@ import {
   updateDesktopWorkspaceState,
   updateDesktopServerProfile,
 } from './lib/desktop'
-import { blobFromUrl, createPreviewFile } from './lib/image'
 import {
   buildClientTree,
   buildNodePathEntries,
@@ -69,6 +66,21 @@ import { getUrlState, updateUrlState } from './lib/urlState'
 import { debugEnabled, debugLog } from './lib/debug'
 import { isCaptureRoute, navigateToCapture } from './lib/runtimePaths'
 import {
+  buildClientProjectUiScopeKey,
+  getStoredClientTheme,
+  normalizeClientProjectUi,
+  readStoredClientProjectUi,
+  readStoredLastProjectId,
+  writeStoredClientProjectUi,
+  writeStoredClientTheme,
+  writeStoredLastProjectId,
+} from './app/state/clientProjectUi'
+import { shouldShowMobileEntryPrompt } from './app/runtime/mobileEntry'
+import { useAppShellCommands } from './app/commands/appShellCommands'
+import { useTreeMutationCommands } from './app/commands/treeMutationCommands'
+import { getPresenceColor, getPresenceInitials } from './features/collaboration/presence'
+import { buildTemplateFormState } from './features/node-editing/templateFormState'
+import {
   CameraIcon,
   GearIcon,
   IdentificationIcon,
@@ -80,237 +92,9 @@ import {
   WrenchIcon,
 } from './components/icons'
 
-const PRESENCE_COLORS = ['#6f9cff', '#5fc9a8', '#d48cff', '#f0a35b', '#58c5d8', '#d86f9f', '#a6c95b', '#c27cff']
 const DESKTOP_SELECTION_SYNC_CHANNEL = 'nodetrace-desktop-selection'
 const DESKTOP_PANEL_SYNC_CHANNEL = 'nodetrace-desktop-panels'
-const CLIENT_THEME_STORAGE_KEY = 'nodetrace-client-theme'
-const CLIENT_PROJECT_UI_STORAGE_KEY = 'nodetrace-client-project-ui'
-const CLIENT_LAST_PROJECT_STORAGE_KEY = 'nodetrace-client-last-project'
 const DESKTOP_CONNECTION_ERROR_MESSAGE = 'Unable to reach the selected server profile.'
-
-function getStoredClientTheme() {
-  if (typeof window === 'undefined') {
-    return defaultUserProjectUi.theme
-  }
-
-  const storedTheme = window.localStorage.getItem(CLIENT_THEME_STORAGE_KEY)
-  return storedTheme === 'light' ? 'light' : storedTheme === 'dark' ? 'dark' : defaultUserProjectUi.theme
-}
-
-function normalizeClientProjectUi(value) {
-  const source = value && typeof value === 'object' ? value : {}
-  const panelDock = { ...defaultUserProjectUi.panelDock }
-  for (const panelId of panelIds) {
-    const requestedSide = source.panelDock?.[panelId]
-    if (requestedSide === 'left' || requestedSide === 'right') {
-      panelDock[panelId] = requestedSide
-    }
-  }
-
-  const canvasTransform =
-    source.canvasTransform &&
-    typeof source.canvasTransform === 'object' &&
-    Number.isFinite(Number(source.canvasTransform.x)) &&
-    Number.isFinite(Number(source.canvasTransform.y)) &&
-    Number.isFinite(Number(source.canvasTransform.scale))
-      ? {
-          x: Number(source.canvasTransform.x),
-          y: Number(source.canvasTransform.y),
-          scale: Number(source.canvasTransform.scale),
-        }
-      : null
-
-  return {
-    showGrid: source.showGrid == null ? defaultUserProjectUi.showGrid : Boolean(source.showGrid),
-    canvasTransform,
-    selectedNodeIds: Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : [],
-    leftSidebarOpen: source.leftSidebarOpen == null ? defaultUserProjectUi.leftSidebarOpen : Boolean(source.leftSidebarOpen),
-    rightSidebarOpen:
-      source.rightSidebarOpen == null ? defaultUserProjectUi.rightSidebarOpen : Boolean(source.rightSidebarOpen),
-    leftSidebarWidth: Math.max(
-      220,
-      Math.min(720, Number(source.leftSidebarWidth) || defaultUserProjectUi.leftSidebarWidth),
-    ),
-    rightSidebarWidth: Math.max(
-      220,
-      Math.min(720, Number(source.rightSidebarWidth) || defaultUserProjectUi.rightSidebarWidth),
-    ),
-    leftActivePanel: panelIds.includes(source.leftActivePanel) ? source.leftActivePanel : defaultUserProjectUi.leftActivePanel,
-    rightActivePanel: panelIds.includes(source.rightActivePanel)
-      ? source.rightActivePanel
-      : defaultUserProjectUi.rightActivePanel,
-    panelDock,
-  }
-}
-
-function buildClientProjectUiScopeKey({ desktopEnvironment = false, currentUserId = '', currentUsername = '', serverBaseUrl = '' }) {
-  const userPart = String(currentUserId || currentUsername || 'anonymous').trim().toLowerCase()
-  const scopeTarget =
-    desktopEnvironment
-      ? String(serverBaseUrl || 'desktop').trim().toLowerCase()
-      : String(window.location.origin || 'web').trim().toLowerCase()
-  return `${desktopEnvironment ? 'desktop' : 'web'}::${scopeTarget}::${userPart}`
-}
-
-function getClientProjectUiStorageKey(scopeKey, projectId) {
-  return `${CLIENT_PROJECT_UI_STORAGE_KEY}::${scopeKey}::${String(projectId || '').trim()}`
-}
-
-function getClientLastProjectStorageKey(scopeKey) {
-  return `${CLIENT_LAST_PROJECT_STORAGE_KEY}::${scopeKey}`
-}
-
-function readStoredLastProjectEntry(scopeKey) {
-  if (typeof window === 'undefined' || !scopeKey) {
-    return null
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(getClientLastProjectStorageKey(scopeKey))
-    if (!rawValue) {
-      return null
-    }
-
-    const parsedValue = JSON.parse(rawValue)
-    if (parsedValue && typeof parsedValue === 'object') {
-      const projectId = String(parsedValue.projectId || '').trim()
-      const closedAt = Number(parsedValue.closedAt || 0)
-      if (!projectId) {
-        return null
-      }
-      return {
-        projectId,
-        closedAt: Number.isFinite(closedAt) ? closedAt : 0,
-      }
-    }
-  } catch {
-    const legacyValue = String(window.localStorage.getItem(getClientLastProjectStorageKey(scopeKey)) || '').trim()
-    if (legacyValue) {
-      return { projectId: legacyValue, closedAt: 0 }
-    }
-  }
-
-  return null
-}
-
-function readStoredClientProjectUi(scopeKey, projectId) {
-  if (typeof window === 'undefined' || !scopeKey || !projectId) {
-    return null
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(getClientProjectUiStorageKey(scopeKey, projectId))
-    if (!rawValue) {
-      return null
-    }
-    return normalizeClientProjectUi(JSON.parse(rawValue))
-  } catch {
-    return null
-  }
-}
-
-function writeStoredClientProjectUi(scopeKey, projectId, snapshot) {
-  if (typeof window === 'undefined' || !scopeKey || !projectId) {
-    return
-  }
-  window.localStorage.setItem(
-    getClientProjectUiStorageKey(scopeKey, projectId),
-    JSON.stringify(normalizeClientProjectUi(snapshot)),
-  )
-}
-
-function readStoredLastProjectId(scopeKey) {
-  return readStoredLastProjectEntry(scopeKey)?.projectId || null
-}
-
-function writeStoredLastProjectId(scopeKey, projectId, closedAt = Date.now()) {
-  if (typeof window === 'undefined' || !scopeKey) {
-    return
-  }
-  const normalizedProjectId = String(projectId || '').trim()
-  if (!normalizedProjectId) {
-    window.localStorage.removeItem(getClientLastProjectStorageKey(scopeKey))
-    return
-  }
-
-  const nextClosedAt = Number.isFinite(Number(closedAt)) ? Number(closedAt) : Date.now()
-  const currentEntry = readStoredLastProjectEntry(scopeKey)
-  if (currentEntry && Number(currentEntry.closedAt || 0) > nextClosedAt) {
-    return
-  }
-
-  window.localStorage.setItem(
-    getClientLastProjectStorageKey(scopeKey),
-    JSON.stringify({
-      projectId: normalizedProjectId,
-      closedAt: nextClosedAt,
-    }),
-  )
-}
-
-function shouldShowMobileEntryPrompt() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches ?? false
-  const narrowViewport = window.matchMedia?.('(max-width: 920px)')?.matches ?? false
-  const mobileUserAgent = /android|iphone|ipad|ipod|mobile/i.test(window.navigator.userAgent || '')
-
-  return window.location.pathname === '/' && (mobileUserAgent || (coarsePointer && narrowViewport))
-}
-
-function getPresenceColor(id) {
-  const value = String(id || '')
-  let hash = 0
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
-  }
-  return PRESENCE_COLORS[hash % PRESENCE_COLORS.length]
-}
-
-function getPresenceInitials(username) {
-  const parts = String(username || '')
-    .trim()
-    .split(/[\s._-]+/)
-    .filter(Boolean)
-  if (!parts.length) {
-    return '?'
-  }
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase()
-  }
-  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
-}
-
-function buildTemplateFormState(template) {
-  if (!template) {
-    return {
-      name: '',
-      aiInstructions: '',
-      parentDepth: 0,
-      childDepth: 0,
-      fields: [],
-    }
-  }
-
-  return {
-    name: template.name || '',
-    aiInstructions: template.aiInstructions || '',
-    parentDepth: Number(template.parentDepth || 0),
-    childDepth: Number(template.childDepth || 0),
-    fields:
-      template.fields?.map((field) => ({
-        id: `${template.id}-${field.key}`,
-        key: field.key,
-        label: field.label,
-        type: field.type,
-        mode: field.mode || 'manual',
-        parentDepth: Number(field.parentDepth || 0),
-        childDepth: Number(field.childDepth || 0),
-      })) || [],
-  }
-}
 
 function MainApp() {
   const { panelWindowId } = getUrlState()
@@ -564,7 +348,7 @@ function MainApp() {
     if (typeof window === 'undefined') {
       return
     }
-    window.localStorage.setItem(CLIENT_THEME_STORAGE_KEY, theme)
+    writeStoredClientTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -1663,110 +1447,6 @@ function MainApp() {
     setStatus(desktopEnvironment ? 'Select or repair a desktop server profile to continue.' : 'Sign in to access your projects.')
   }, [desktopEnvironment])
 
-  const openAccountManager = useCallback((focusProfileId = null) => {
-    setError('')
-    setAccountStatus('')
-    if (desktopEnvironment) {
-      if (showProjectDialog === 'open') {
-        setDesktopServerDialogReturnTarget('open')
-      } else {
-        setDesktopServerDialogReturnTarget(null)
-      }
-      setDesktopAccountManagerFocusId(String(focusProfileId || '').trim() || null)
-      void refreshDesktopServerState().catch((loadError) => {
-        setError(loadError.message)
-      })
-      setDesktopServerDialogOpen(true)
-      return
-    }
-    setAccountDialog('overview')
-  }, [desktopEnvironment, refreshDesktopServerState, showProjectDialog])
-
-  const checkForUpdates = useCallback(async () => {
-    setError('')
-    setUpdateStatus('Checking for updates...')
-    setAppDialog('updates')
-    try {
-      const response = await fetch(`https://api.github.com/repos/${APP_UPDATE_REPO}/releases/latest`, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-        },
-      })
-      if (!response.ok) {
-        throw new Error(response.status === 404 ? 'No published releases found.' : 'Unable to check for updates.')
-      }
-      const release = await response.json()
-      const latestVersion = String(release?.tag_name || release?.name || '').trim().replace(/^v/i, '')
-      if (!latestVersion) {
-        throw new Error('Latest release version is unavailable.')
-      }
-      const comparison = compareSemanticVersions(latestVersion, APP_VERSION)
-      if (comparison > 0) {
-        setUpdateStatus(`Version ${latestVersion} is available.`)
-      } else {
-        setUpdateStatus(`You are up to date on version ${APP_VERSION}.`)
-      }
-    } catch (loadError) {
-      setUpdateStatus(loadError.message || 'Unable to check for updates.')
-    }
-  }, [])
-
-  const closeDesktopServerManager = useCallback(() => {
-    const returnTarget = desktopServerDialogReturnTarget
-    setDesktopAccountManagerFocusId(null)
-    setDesktopServerDialogOpen(false)
-    setDesktopServerDialogReturnTarget(null)
-    if (returnTarget === 'open') {
-      setShowProjectDialog('open')
-    }
-  }, [desktopServerDialogReturnTarget])
-
-  const openAccountDialog = useCallback((dialog, profileId = null) => {
-    setError('')
-    setAccountStatus('')
-    if (desktopEnvironment) {
-      setDesktopAccountManagerFocusId(String(profileId || '').trim() || desktopAccountManagerFocusId || null)
-    }
-    setAccountDialog(dialog)
-  }, [desktopAccountManagerFocusId, desktopEnvironment])
-
-  const openCacheResetDialog = useCallback(() => {
-    setError('')
-    setAppDialog('clear-cache')
-  }, [])
-
-  const generateNewSessionCode = useCallback(async () => {
-    setBusy(true)
-    setError('')
-    try {
-      const payload = await api('/api/account/capture-session', {
-        method: 'POST',
-      })
-      if (payload?.ok === false) {
-        throw new Error(payload.error || 'Unable to generate a new session code.')
-      }
-      if (payload?.captureSessionId) {
-        setCurrentUser((current) =>
-          current
-            ? {
-                ...current,
-                captureSessionId: payload.captureSessionId,
-              }
-            : current,
-        )
-      }
-      if (desktopEnvironment) {
-        await refreshDesktopServerState()
-      }
-      setSessionDialogOpen(true)
-      setStatus('New session code generated.')
-    } catch (sessionError) {
-      setError(sessionError.message || 'Unable to generate a new session code.')
-    } finally {
-      setBusy(false)
-    }
-  }, [desktopEnvironment, refreshDesktopServerState])
-
   async function syncSelectedDesktopAccount(updates) {
     if (!desktopEnvironment || !selectedDesktopServerProfile?.id) {
       return null
@@ -1914,73 +1594,51 @@ function MainApp() {
     })
   }, [desktopEnvironment, desktopServerReady, handleAuthLost, loadCurrentUser])
 
-  async function createServerProfile(payload) {
-    setBusy(true)
-    setError('')
-    try {
-      const nextState = await createDesktopServerProfile(payload)
-      if (nextState) {
-        setDesktopServerState(nextState)
-        configureApiBaseUrl(nextState.proxyBaseUrl || '')
-      }
-      return true
-    } catch (submitError) {
-      setError(submitError.message)
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function updateServerProfile(id, payload) {
-    setBusy(true)
-    setError('')
-    try {
-      const nextState = await updateDesktopServerProfile(id, payload)
-      if (nextState) {
-        setDesktopServerState(nextState)
-        configureApiBaseUrl(nextState.proxyBaseUrl || '')
-      }
-      return true
-    } catch (submitError) {
-      setError(submitError.message)
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function deleteServerProfile(id) {
-    setBusy(true)
-    setError('')
-    try {
-      const nextState = await deleteDesktopServerProfile(id)
-      if (nextState) {
-        setDesktopServerState(nextState)
-        configureApiBaseUrl(nextState.proxyBaseUrl || '')
-      }
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function browseProjectPickerProfile(id) {
-    const normalizedId = String(id || '').trim() || null
-    if (normalizedId === projectPickerProfileId) {
-      return
-    }
-    setError('')
-    setProjectPickerProjects([])
-    setProjectPickerLoading(Boolean(normalizedId))
-    setProjectPickerProfileId(normalizedId)
-  }
-
-  function beginProjectTransition(projectId) {
-    const normalizedProjectId = String(projectId || '').trim()
-    setPendingProjectTransitionId(normalizedProjectId || null)
-  }
+  const {
+    beginProjectTransition,
+    browseProjectPickerProfile,
+    checkForUpdates,
+    closeDesktopServerManager,
+    createServerProfile,
+    deleteServerProfile,
+    dismissServerDisconnectDialog,
+    generateNewSessionCode,
+    openAccountDialog,
+    openAccountManager,
+    openCacheResetDialog,
+    openDesktopProjectFromPicker,
+    updateServerProfile,
+  } = useAppShellCommands({
+    desktopAccountManagerFocusId,
+    desktopEnvironment,
+    desktopServerDialogReturnTarget,
+    desktopServerState,
+    refreshDesktopServerState,
+    setAccountDialog,
+    setAccountStatus,
+    setAppDialog,
+    setBusy,
+    setCurrentUser,
+    setDesktopAccountManagerFocusId,
+    setDesktopServerDialogOpen,
+    setDesktopServerDialogReturnTarget,
+    setDesktopServerState,
+    setError,
+    setManualProjectSelectionRequired,
+    setPendingProjectTransitionId,
+    setProjectListLoading,
+    setProjectPickerLoading,
+    setProjectPickerProfileId,
+    setProjectPickerProjects,
+    setProjects,
+    setSelectedProjectId,
+    setSessionDialogOpen,
+    setServerDisconnectDialogOpen,
+    setShowProjectDialog,
+    setStatus,
+    setUpdateStatus,
+    closeDisconnectedProject,
+  })
 
   const handleSearchResultsChange = useCallback((nodeIds) => {
     const nextNodeIds = Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : []
@@ -1992,45 +1650,6 @@ function MainApp() {
       return nextNodeIds
     })
   }, [])
-
-  async function openDesktopProjectFromPicker(profileId, projectId) {
-    const normalizedProfileId = String(profileId || '').trim()
-    const normalizedProjectId = String(projectId || '').trim()
-    if (!normalizedProfileId || !normalizedProjectId) {
-      return
-    }
-
-    setBusy(true)
-    setError('')
-    beginProjectTransition(normalizedProjectId)
-    try {
-      setManualProjectSelectionRequired(false)
-      updateUrlState(normalizedProjectId, null, getUrlState().transform)
-      if (desktopServerState.selectedProfileId !== normalizedProfileId) {
-        const nextState = await selectDesktopServerProfile(normalizedProfileId)
-        if (nextState) {
-          setDesktopServerState(nextState)
-          configureApiBaseUrl(nextState.proxyBaseUrl || '')
-        }
-      }
-      setSelectedProjectId(normalizedProjectId)
-      setShowProjectDialog(null)
-      setProjectListLoading(false)
-    } catch (submitError) {
-      setPendingProjectTransitionId(null)
-      setError(submitError.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function dismissServerDisconnectDialog() {
-    setServerDisconnectDialogOpen(false)
-    closeDisconnectedProject()
-    setProjects([])
-    setStatus('Select a project from another server profile.')
-    setShowProjectDialog('open')
-  }
 
   const { loadProjects, loadTree } = useProjectSync({
     clearHistory,
@@ -2416,59 +2035,6 @@ function MainApp() {
     }
   }, [resolvedRightActivePanel, rightSidebarOpen])
 
-  const applyNodeUpdate = useCallback((updatedNode) => {
-    setTree((current) => {
-      if (!current) {
-        return current
-      }
-
-      const nextNodes = current.nodes.map((node) => (node.id === updatedNode.id ? { ...node, ...updatedNode } : node))
-      return buildClientTree(current.project, nextNodes)
-    })
-  }, [])
-
-  function appendNodesToTree(newNodes) {
-    setTree((current) => {
-      if (!current) {
-        return current
-      }
-      return buildClientTree(current.project, [...current.nodes, ...newNodes])
-    })
-  }
-
-  function removeNodesFromTree(nodeIds) {
-    const removeSet = new Set(nodeIds)
-    setTree((current) => {
-      if (!current) {
-        return current
-      }
-      return buildClientTree(
-        current.project,
-        current.nodes.filter((node) => !removeSet.has(node.id)),
-      )
-    })
-  }
-
-  function updateProjectListNodeCount(delta) {
-    if (!selectedProjectId || delta === 0) {
-      return
-    }
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === selectedProjectId
-          ? { ...project, node_count: Math.max(0, Number(project.node_count || 0) + delta) }
-          : project,
-        ),
-    )
-  }
-
-  const applyProjectUpdate = useCallback((updatedProject) => {
-    setTree((current) => (current ? { ...current, project: updatedProject } : current))
-    setProjects((current) =>
-      current.map((project) => (project.id === updatedProject.id ? { ...project, ...updatedProject } : project)),
-    )
-  }, [])
-
   const beginLocalEventExpectation = useCallback(() => {
     pendingLocalEventsRef.current += 1
     return () => {
@@ -2476,158 +2042,49 @@ function MainApp() {
     }
   }, [])
 
-  const patchNodeRequest = useCallback(async (nodeId, payload, options = {}) => {
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      const updatedNode = await api(`/api/nodes/${nodeId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!options.skipApply) {
-        applyNodeUpdate(updatedNode)
-      }
-      return updatedNode
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }, [applyNodeUpdate, beginLocalEventExpectation])
-
-  async function patchProjectSettingsRequest(projectId, nextSettings) {
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      const updatedProject = await api(`/api/projects/${projectId}/settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nextSettings),
-      })
-
-      applyProjectUpdate(updatedProject)
-      return updatedProject
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }
-
-  const saveNodeMediaEdits = useCallback(async (nodeId, mediaId, imageEdits) => {
-    if (!nodeId || !mediaId) {
-      return null
-    }
-    const sequenceKey = `${nodeId}:${mediaId}`
-    const saveSequence = (nodeImageEditSequenceRef.current.get(sequenceKey) || 0) + 1
-    nodeImageEditSequenceRef.current.set(sequenceKey, saveSequence)
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    let updatedNode = null
-    try {
-      updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageEdits }),
-      })
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-    if (nodeImageEditSequenceRef.current.get(sequenceKey) === saveSequence) {
-      applyNodeUpdate(updatedNode)
-    }
-    return updatedNode
-  }, [applyNodeUpdate, beginLocalEventExpectation])
-
-  const setPrimaryMediaRequest = useCallback(async (nodeId, mediaId) => {
-    if (!nodeId || !mediaId) {
-      return null
-    }
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      const updatedNode = await api(`/api/nodes/${nodeId}/media/${mediaId}/primary`, {
-        method: 'POST',
-      })
-      applyNodeUpdate(updatedNode)
-      return updatedNode
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }, [applyNodeUpdate, beginLocalEventExpectation])
-
-  const removeNodeMediaRequest = useCallback(async (nodeId, mediaId) => {
-    if (!nodeId || !mediaId) {
-      return null
-    }
-    const performDelete = async () => {
-      const rollbackLocalEvent = beginLocalEventExpectation()
-      try {
-        return await api(`/api/nodes/${nodeId}/media/${mediaId}`, {
-          method: 'DELETE',
-        })
-      } catch (error) {
-        rollbackLocalEvent()
-        throw error
-      }
-    }
-
-    try {
-      const updatedNode = await performDelete()
-      applyNodeUpdate(updatedNode)
-      return updatedNode
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404 && selectedProjectId) {
-        const refreshedTree = await loadTree(selectedProjectId, selectedNodeIdRef.current)
-        const refreshedNode = refreshedTree?.nodes?.find((item) => item.id === nodeId) || null
-        const mediaStillExists = refreshedNode?.media?.some((item) => item.id === mediaId)
-        if (!mediaStillExists) {
-          return refreshedNode
-        }
-        const updatedNode = await performDelete()
-        applyNodeUpdate(updatedNode)
-        return updatedNode
-      }
-      throw error
-    }
-  }, [applyNodeUpdate, beginLocalEventExpectation, loadTree, selectedProjectId])
-
-  const mergeNodeIntoPhotoRequest = useCallback(async (sourceNodeId, targetNodeId) => {
-    if (!sourceNodeId || !targetNodeId || !selectedProjectId) {
-      return null
-    }
-
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      const payload = await api(`/api/nodes/${sourceNodeId}/merge-into-photo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetNodeId }),
-      })
-      applyTreePayload(payload.tree)
-      setSelectedNodeId(payload.targetNodeId || targetNodeId)
-      return payload
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
-
-  const extractNodeMediaToChildRequest = useCallback(async (nodeId, mediaId) => {
-    if (!nodeId || !mediaId || !selectedProjectId) {
-      return null
-    }
-
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      const payload = await api(`/api/nodes/${nodeId}/media/${mediaId}/extract`, {
-        method: 'POST',
-      })
-      applyTreePayload(payload.tree)
-      setSelectedNodeId(payload.newNodeId || null)
-      return payload
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }, [applyTreePayload, beginLocalEventExpectation, selectedProjectId])
+  const {
+    appendNodesToTree,
+    applyCollapsedState,
+    applyNodeUpdate,
+    applyProjectUpdate,
+    buildCollapsedNodes,
+    createDeleteSnapshot,
+    createNodeRequest,
+    deleteNodeRequest,
+    extractNodeMediaToChildRequest,
+    mergeNodeIntoPhotoRequest,
+    moveNodeRequest,
+    patchNodeRequest,
+    patchProjectSettingsRequest,
+    preserveNodeCanvasPositionForNextNodes,
+    removeNodeMediaRequest,
+    removeNodesFromTree,
+    restoreDeletedSubtree,
+    saveNodeMediaEdits,
+    setCollapsedRequest,
+    setPrimaryMediaRequest,
+    setProjectCollapsedStateRequest,
+    updateProjectListNodeCount,
+    uploadPhotoFilesRequest,
+  } = useTreeMutationCommands({
+    applyTreePayload,
+    beginLocalEventExpectation,
+    focusPathMode,
+    layoutNodes: layout.nodes,
+    loadTree,
+    prepareCollapsedSelection,
+    projectSettings,
+    selectedNodeId,
+    selectedNodeIdRef,
+    selectedProjectId,
+    setCanvasTransform,
+    setProjects,
+    setSelectedNodeId,
+    setTree,
+    tree,
+    nodeImageEditSequenceRef,
+    selectedLayoutAnchorRef,
+  })
 
   useEffect(() => {
     if (
@@ -2657,263 +2114,6 @@ function MainApp() {
     tree?.project,
     projectUiReady,
   ])
-
-  async function setProjectCollapsedStateRequest(projectId, collapsed) {
-    const rollbackLocalEvent = beginLocalEventExpectation()
-    try {
-      return await api(`/api/projects/${projectId}/collapse-all`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collapsed }),
-      })
-    } catch (error) {
-      rollbackLocalEvent()
-      throw error
-    }
-  }
-
-  async function createNodeRequest(projectId, parentId, payload = {}) {
-    return api(`/api/projects/${projectId}/nodes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        parentId,
-        name: payload.name ?? 'New Node',
-        notes: payload.notes ?? '',
-        tags: payload.tags ?? '',
-      }),
-    })
-  }
-
-  const moveNodeRequest = useCallback(async (nodeId, payload) => {
-    return api(`/api/nodes/${nodeId}/move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  }, [])
-
-  const setCollapsedRequest = useCallback(async (nodeId, collapsed) => {
-    return api(`/api/nodes/${nodeId}/collapse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collapsed }),
-    })
-  }, [])
-
-  const buildCollapsedNodes = useCallback((sourceNodes, updatedNode, updatedIds, collapsed) => {
-    const updatedIdSet = new Set(updatedIds || [updatedNode.id])
-    return (sourceNodes || []).map((node) => {
-      if (node.id === updatedNode.id) {
-        return { ...node, ...updatedNode }
-      }
-      if (updatedIdSet.has(node.id)) {
-        return { ...node, collapsed }
-      }
-      return node
-    })
-  }, [])
-
-  const preserveNodeCanvasPositionForNextNodes = useCallback((nextNodes, anchorNodeId) => {
-    if (!anchorNodeId || !tree?.project) {
-      return
-    }
-
-    const previousAnchorNode = layout.nodes.find((item) => item.id === anchorNodeId) || null
-    if (!previousAnchorNode) {
-      return
-    }
-
-    const nextTree = buildClientTree(tree.project, nextNodes)
-    const nextFocusPathContext = focusPathMode
-      ? buildFocusPathContext(nextTree.nodes, anchorNodeId)
-      : { pathIds: null, nextById: null }
-    const nextVisibleRoot = buildVisibleTree(nextTree.root, {
-      focusPathIds: nextFocusPathContext.pathIds,
-      focusNextById: nextFocusPathContext.nextById,
-      selectedNodeId: anchorNodeId,
-    })
-    const nextLayout = buildLayout(nextVisibleRoot, projectSettings)
-    const nextAnchorNode = nextLayout.nodes.find((item) => item.id === anchorNodeId) || null
-
-    if (!nextAnchorNode) {
-      selectedLayoutAnchorRef.current = { nodeId: anchorNodeId, x: null, y: null }
-      return
-    }
-
-    setCanvasTransform((current) => ({
-      ...current,
-      x: current.x + (previousAnchorNode.x - nextAnchorNode.x) * current.scale,
-      y: current.y + (previousAnchorNode.y - nextAnchorNode.y) * current.scale,
-    }))
-    selectedLayoutAnchorRef.current = {
-      nodeId: anchorNodeId,
-      x: nextAnchorNode.x,
-      y: nextAnchorNode.y,
-    }
-  }, [focusPathMode, layout.nodes, projectSettings, setCanvasTransform, tree?.project])
-
-  const applyCollapsedState = useCallback((updatedNode, updatedIds, collapsed, options = {}) => {
-    const nextNodes = buildCollapsedNodes(tree?.nodes, updatedNode, updatedIds, collapsed)
-    const nextSelection = options.skipSelectionPreparation
-      ? options.preparedSelection || null
-      : prepareCollapsedSelection(nextNodes)
-    const anchorNodeId = options.anchorNodeId || nextSelection?.nextPrimaryId || selectedNodeIdRef.current || selectedNodeId
-    preserveNodeCanvasPositionForNextNodes(nextNodes, anchorNodeId)
-    setTree((current) => {
-      if (!current) {
-        return current
-      }
-
-      return buildClientTree(current.project, nextNodes)
-    })
-  }, [buildCollapsedNodes, prepareCollapsedSelection, preserveNodeCanvasPositionForNextNodes, selectedNodeId, tree?.nodes])
-
-  async function deleteNodeRequest(nodeId) {
-    return api(`/api/nodes/${nodeId}`, { method: 'DELETE' })
-  }
-
-  async function uploadPhotoFilesRequest(projectId, files, targetNodeId, mode = 'photo_node', options = {}) {
-    const createdEntries = []
-
-    for (const file of files) {
-      const previewFile = await createPreviewFile(file)
-      const formData = new FormData()
-      if (mode === 'additional_photo') {
-        formData.append('additionalPhotoOfId', targetNodeId)
-        formData.append('additionalPhoto', 'true')
-        formData.append('uploadMode', 'additional_photo')
-      } else {
-        formData.append('parentId', targetNodeId)
-        formData.append('uploadMode', 'photo_node')
-      }
-      formData.append('name', '<untitled>')
-      formData.append('notes', '')
-      formData.append('tags', '')
-      if (options.imageEdits) {
-        formData.append('imageEdits', JSON.stringify(options.imageEdits))
-      }
-      if (options.templateId) {
-        formData.append('templateId', options.templateId)
-      }
-      formData.append('file', file)
-      if (previewFile) {
-        formData.append('preview', previewFile)
-      }
-
-      const payload = await api(`/api/projects/${projectId}/photos`, {
-        method: 'POST',
-        body: formData,
-      })
-      const node = payload?.node || payload
-      createdEntries.push({
-        mode: payload?.mode || mode,
-        node,
-        createdNodeId: payload?.createdNodeId || (payload?.node ? null : node?.id) || null,
-        mediaId: payload?.mediaId || null,
-      })
-    }
-
-    return createdEntries
-  }
-
-  async function createDeleteSnapshot(node) {
-    const nodes = []
-    const files = []
-    let fileIndex = 0
-
-    async function walk(current) {
-      const mediaEntries = []
-      for (const mediaItem of current.media || []) {
-        const imageFileKey = mediaItem.imageUrl ? `image-${fileIndex++}` : null
-        const previewFileKey = mediaItem.previewUrl ? `preview-${fileIndex++}` : null
-
-        if (imageFileKey) {
-          const imageBlob = await blobFromUrl(mediaItem.imageUrl)
-          files.push({
-            key: imageFileKey,
-            file: new File([imageBlob], mediaItem.originalFilename || `${current.name}.jpg`, {
-              type: imageBlob.type || 'image/jpeg',
-            }),
-          })
-        }
-
-        if (previewFileKey) {
-          const previewBlob = await blobFromUrl(mediaItem.previewUrl)
-          files.push({
-            key: previewFileKey,
-            file: new File([previewBlob], `${current.name}-preview.jpg`, {
-              type: previewBlob.type || 'image/jpeg',
-            }),
-          })
-        }
-
-        mediaEntries.push({
-          id: mediaItem.id,
-          is_primary: Boolean(mediaItem.isPrimary),
-          sort_order: Number(mediaItem.sortOrder || 0),
-          original_filename: mediaItem.originalFilename || null,
-          image_edits: mediaItem.imageEdits || null,
-          image_file_key: imageFileKey,
-          preview_file_key: previewFileKey,
-        })
-      }
-
-      nodes.push({
-        id: current.id,
-        owner_user_id: current.ownerUserId || null,
-        parent_id: current.childrenParentOverride ?? current.parent_id,
-        name: current.name,
-        notes: current.notes || '',
-        tags: current.tags || [],
-        review_status: current.reviewStatus || 'new',
-        added_at: current.added_at || current.created_at || null,
-        media: mediaEntries,
-        identification: current.identification
-          ? {
-              template_id: current.identification.templateId,
-              fields: (current.identification.fields || []).map((field) => ({
-                key: field.key,
-                value: field.value,
-                reviewed: Boolean(field.reviewed),
-                reviewed_by_user_id: field.reviewedByUserId || null,
-                reviewed_at: field.reviewedAt || null,
-                source: field.source || 'manual',
-                ai_suggestion: field.aiSuggestion || null,
-              })),
-            }
-          : null,
-      })
-
-      for (const child of current.children || []) {
-        await walk(child)
-      }
-    }
-
-    await walk(node)
-    return {
-      manifest: {
-        version: 2,
-        root_id: node.id,
-        root_parent_id: node.parent_id,
-        nodes,
-      },
-      files,
-    }
-  }
-
-  async function restoreDeletedSubtree(projectId, snapshot) {
-    const formData = new FormData()
-    formData.append('manifest', JSON.stringify(snapshot.manifest))
-    for (const item of snapshot.files) {
-      formData.append(item.key, item.file)
-    }
-
-    return api(`/api/projects/${projectId}/subtree-restore`, {
-      method: 'POST',
-      body: formData,
-    })
-  }
 
   async function setAllNodesCollapsed(collapsed) {
     if (!selectedProjectId || !tree?.nodes?.length) {

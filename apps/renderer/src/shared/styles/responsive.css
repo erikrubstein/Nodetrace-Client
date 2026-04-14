@@ -1,0 +1,44 @@
+@media (max-width: 920px) {
+  .desktop-account-manager-screen {
+    padding: 12px;
+  }
+
+  .desktop-account-manager {
+    width: min(100vw - 24px, 760px);
+  }
+
+  .project-picker--desktop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-account-manager__header,
+  .desktop-account-manager__detail-head {
+    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+  }
+
+  .desktop-account-manager__detail-actions,
+  .desktop-account-manager__account-actions {
+    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+  }
+
+  .main-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .inspector-resize-handle {
+    display: none;
+  }
+
+  .inspector {
+    position: absolute;
+    right: 0;
+    top: 42px;
+    bottom: 0;
+    width: min(340px, 88vw);
+    z-index: 10;
+    box-shadow: -12px 0 28px var(--elevation);
+  }
+}
