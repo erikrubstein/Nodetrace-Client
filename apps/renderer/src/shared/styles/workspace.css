@@ -399,7 +399,7 @@
   right: 12px;
   text-align: right;
   justify-content: flex-end;
-  max-width: 168px;
+  max-width: 360px;
 }
 
 .canvas-caption__path {

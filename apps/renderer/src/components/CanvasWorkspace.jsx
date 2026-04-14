@@ -548,7 +548,8 @@ export default function CanvasWorkspace({
         )}
       </div>
       <div className="canvas-caption canvas-caption--right">
-        {Math.round(transform.scale * 100)}% | {tree?.nodes?.length ?? 0} nodes
+        {Math.round(transform.scale * 100)}% | X {Math.round(transform.x)} | Y {Math.round(transform.y)} |{' '}
+        {tree?.nodes?.length ?? 0} nodes
       </div>
       {contextMenu ? (
         <div

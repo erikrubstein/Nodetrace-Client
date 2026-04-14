@@ -46,6 +46,42 @@ export default function useWorkspaceInteractions({
   const suppressCanvasContextMenuRef = useRef(false)
   const [canvasMarqueeRect, setCanvasMarqueeRect] = useState(null)
 
+  const clampCanvasTransform = useCallback(
+    (nextTransform) => {
+      const viewport = viewportRef.current
+      if (!viewport) {
+        return nextTransform
+      }
+
+      const rect = viewport.getBoundingClientRect()
+      const viewportWidth = rect.width
+      const viewportHeight = rect.height
+      const scale = Math.max(0.1, Math.min(10, Number(nextTransform.scale) || 1))
+      const visibleNodes = Array.isArray(layout.nodes) && layout.nodes.length ? layout.nodes : null
+      const extentLeft = visibleNodes ? Math.min(...visibleNodes.map((item) => item.x)) : 0
+      const extentTop = visibleNodes ? Math.min(...visibleNodes.map((item) => item.y)) : 0
+      const extentRight = visibleNodes
+        ? Math.max(...visibleNodes.map((item) => item.x + NODE_WIDTH))
+        : Math.max(layout.width || NODE_WIDTH, NODE_WIDTH)
+      const extentBottom = visibleNodes
+        ? Math.max(...visibleNodes.map((item) => item.y + NODE_HEIGHT))
+        : Math.max(layout.height || NODE_HEIGHT, NODE_HEIGHT)
+      const minVisibleX = Math.min((extentRight - extentLeft) * scale, Math.max(36, viewportWidth * 0.08))
+      const minVisibleY = Math.min((extentBottom - extentTop) * scale, Math.max(36, viewportHeight * 0.08))
+      const minX = minVisibleX - extentRight * scale
+      const maxX = viewportWidth - minVisibleX - extentLeft * scale
+      const minY = minVisibleY - extentBottom * scale
+      const maxY = viewportHeight - minVisibleY - extentTop * scale
+
+      return {
+        scale,
+        x: Math.min(maxX, Math.max(minX, nextTransform.x)),
+        y: Math.min(maxY, Math.max(minY, nextTransform.y)),
+      }
+    },
+    [layout.height, layout.nodes, layout.width],
+  )
+
   function beginCanvasPointerDown(event) {
     if (
       event.button === 2 &&
@@ -131,11 +167,13 @@ export default function useWorkspaceInteractions({
 
     const dx = event.clientX - panState.startX
     const dy = event.clientY - panState.startY
-    setTransform((current) => ({
-      ...current,
-      x: panState.originX + dx,
-      y: panState.originY + dy,
-    }))
+    setTransform((current) =>
+      clampCanvasTransform({
+        ...current,
+        x: panState.originX + dx,
+        y: panState.originY + dy,
+      }),
+    )
   }
 
   function stopPanning(event) {
@@ -199,11 +237,13 @@ export default function useWorkspaceInteractions({
     const scaledWidth = layout.width * scale
     const scaledHeight = layout.height * scale
 
-    setTransform({
+    setTransform(
+      clampCanvasTransform({
       scale,
       x: (rect.width - scaledWidth) / 2,
       y: (rect.height - scaledHeight) / 2,
-    })
+      }),
+    )
   }
 
   function focusSelectedNode() {
@@ -251,7 +291,7 @@ export default function useWorkspaceInteractions({
         height: nodeRect.height,
       },
     })
-    setTransform(nextTransform)
+    setTransform(clampCanvasTransform(nextTransform))
   }
 
   function beginCameraSelection(event) {
@@ -548,11 +588,11 @@ export default function useWorkspaceInteractions({
         const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))
         const ratio = nextScale / current.scale
 
-        return {
+        return clampCanvasTransform({
           scale: nextScale,
           x: cursorX - (cursorX - current.x) * ratio,
           y: cursorY - (cursorY - current.y) * ratio,
-        }
+        })
       })
     }
 
@@ -560,7 +600,19 @@ export default function useWorkspaceInteractions({
     return () => {
       element.removeEventListener('wheel', wheelListener)
     }
-  }, [layout.height, layout.width, setTransform])
+  }, [clampCanvasTransform, setTransform])
+
+  useEffect(() => {
+    const clampedTransform = clampCanvasTransform(transform)
+    if (
+      clampedTransform.scale === transform.scale &&
+      clampedTransform.x === transform.x &&
+      clampedTransform.y === transform.y
+    ) {
+      return
+    }
+    setTransform(clampedTransform)
+  }, [clampCanvasTransform, setTransform, transform])
 
   useEffect(() => {
     const element = previewViewportRef.current
