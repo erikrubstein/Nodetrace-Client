@@ -98,6 +98,16 @@ import {
 const DESKTOP_SELECTION_SYNC_CHANNEL = 'nodetrace-desktop-selection'
 const DESKTOP_PANEL_SYNC_CHANNEL = 'nodetrace-desktop-panels'
 const DESKTOP_CONNECTION_ERROR_MESSAGE = 'Unable to reach the selected server profile.'
+const PANEL_WINDOW_TITLES = {
+  preview: 'Preview',
+  camera: 'Camera',
+  search: 'Search',
+  inspector: 'Inspector',
+  fields: 'Data',
+  templates: 'Templates',
+  settings: 'Project Settings',
+  collaborators: 'Project Access',
+}
 
 function MainApp() {
   const { panelWindowId } = getUrlState()
@@ -356,8 +366,16 @@ function MainApp() {
   }, [theme])
 
   useEffect(() => {
+    if (isPanelWindow && panelWindowId) {
+      const panelTitle = PANEL_WINDOW_TITLES[panelWindowId] || panelWindowId
+      document.title = activeProjectDisplayName
+        ? `Nodetrace | ${panelTitle} | ${activeProjectDisplayName}`
+        : `Nodetrace | ${panelTitle}`
+      return
+    }
+
     document.title = activeProjectDisplayName ? `Nodetrace | ${activeProjectDisplayName}` : 'Nodetrace'
-  }, [activeProjectDisplayName])
+  }, [activeProjectDisplayName, isPanelWindow, panelWindowId])
 
   useEffect(() => {
     if (!desktopEnvironment) {
