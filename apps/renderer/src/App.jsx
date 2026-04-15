@@ -68,9 +68,12 @@ import { isCaptureRoute, navigateToCapture } from './lib/runtimePaths'
 import {
   buildClientProjectUiScopeKey,
   getStoredClientTheme,
+  normalizeClientPanelLayout,
   normalizeClientProjectUi,
+  readStoredClientPanelLayout,
   readStoredClientProjectUi,
   readStoredLastProjectId,
+  writeStoredClientPanelLayout,
   writeStoredClientProjectUi,
   writeStoredClientTheme,
   writeStoredLastProjectId,
@@ -100,6 +103,7 @@ function MainApp() {
   const { panelWindowId } = getUrlState()
   const desktopEnvironment = isDesktopEnvironment()
   const isPanelWindow = Boolean(panelWindowId)
+  const initialPanelLayoutRef = useRef(readStoredClientPanelLayout())
   const windowInstanceIdRef = useRef(`window-${Math.random().toString(36).slice(2, 10)}`)
   const applyingRemoteSelectionRef = useRef(false)
   const [currentUser, setCurrentUser] = useState(null)
@@ -160,15 +164,15 @@ function MainApp() {
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState({ x: 80, y: 80, scale: 1 })
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(defaultUserProjectUi.leftSidebarOpen)
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(defaultUserProjectUi.rightSidebarOpen)
-  const [leftActivePanel, setLeftActivePanel] = useState(defaultUserProjectUi.leftActivePanel)
-  const [rightActivePanel, setRightActivePanel] = useState(defaultUserProjectUi.rightActivePanel)
-  const [panelDock, setPanelDock] = useState(defaultUserProjectUi.panelDock)
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(initialPanelLayoutRef.current.leftSidebarOpen)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(initialPanelLayoutRef.current.rightSidebarOpen)
+  const [leftActivePanel, setLeftActivePanel] = useState(initialPanelLayoutRef.current.leftActivePanel)
+  const [rightActivePanel, setRightActivePanel] = useState(initialPanelLayoutRef.current.rightActivePanel)
+  const [panelDock, setPanelDock] = useState(initialPanelLayoutRef.current.panelDock)
   const [projectUiReady, setProjectUiReady] = useState(false)
   const [focusPathMode, setFocusPathMode] = useState(false)
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(defaultUserProjectUi.leftSidebarWidth)
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(defaultUserProjectUi.rightSidebarWidth)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(initialPanelLayoutRef.current.leftSidebarWidth)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(initialPanelLayoutRef.current.rightSidebarWidth)
   const [pendingUploadParentId, setPendingUploadParentId] = useState(null)
   const [pendingUploadMode, setPendingUploadMode] = useState('photo_node')
   const [cameraDevices, setCameraDevices] = useState([])
@@ -715,21 +719,6 @@ function MainApp() {
     })
   }
 
-  function markPendingUiSignature(overrides = {}) {
-    const nextUi = {
-      showGrid: overrides.showGrid ?? showGrid,
-      canvasTransform: overrides.canvasTransform ?? transform,
-      leftSidebarOpen: overrides.leftSidebarOpen ?? leftSidebarOpen,
-      rightSidebarOpen: overrides.rightSidebarOpen ?? rightSidebarOpen,
-      leftSidebarWidth: overrides.leftSidebarWidth ?? leftSidebarWidth,
-      rightSidebarWidth: overrides.rightSidebarWidth ?? rightSidebarWidth,
-      leftActivePanel: overrides.leftActivePanel ?? resolvedLeftActivePanel,
-      rightActivePanel: overrides.rightActivePanel ?? resolvedRightActivePanel,
-      panelDock: overrides.panelDock ?? panelDock,
-    }
-    pendingUiSignatureRef.current = JSON.stringify(nextUi)
-  }
-
   function applyThemePreference(nextTheme) {
     setTheme(nextTheme === 'light' ? 'light' : 'dark')
   }
@@ -744,15 +733,6 @@ function MainApp() {
 
   function resetPanelLayout() {
     const nextPanelDock = { ...defaultUserProjectUi.panelDock }
-    markPendingUiSignature({
-      leftSidebarOpen: defaultUserProjectUi.leftSidebarOpen,
-      rightSidebarOpen: defaultUserProjectUi.rightSidebarOpen,
-      leftSidebarWidth: defaultUserProjectUi.leftSidebarWidth,
-      rightSidebarWidth: defaultUserProjectUi.rightSidebarWidth,
-      leftActivePanel: defaultUserProjectUi.leftActivePanel,
-      rightActivePanel: defaultUserProjectUi.rightActivePanel,
-      panelDock: nextPanelDock,
-    })
     setLeftSidebarOpen(defaultUserProjectUi.leftSidebarOpen)
     setRightSidebarOpen(defaultUserProjectUi.rightSidebarOpen)
     setLeftSidebarWidth(defaultUserProjectUi.leftSidebarWidth)
@@ -844,34 +824,6 @@ function MainApp() {
   const effectiveLeftSidebarWidth = Math.max(leftSidebarWidth, leftSidebarMinWidth)
   const effectiveRightSidebarWidth = Math.max(rightSidebarWidth, rightSidebarMinWidth)
 
-  const setCanvasTransform = useCallback((nextTransformOrUpdater) => {
-    setTransform((current) => {
-      const nextTransform =
-        typeof nextTransformOrUpdater === 'function' ? nextTransformOrUpdater(current) : nextTransformOrUpdater
-      pendingUiSignatureRef.current = JSON.stringify({
-        showGrid,
-        canvasTransform: nextTransform,
-        leftSidebarOpen,
-        rightSidebarOpen,
-        leftSidebarWidth,
-        rightSidebarWidth,
-        leftActivePanel: resolvedLeftActivePanel,
-        rightActivePanel: resolvedRightActivePanel,
-        panelDock,
-      })
-      return nextTransform
-    })
-  }, [
-    leftSidebarOpen,
-    leftSidebarWidth,
-    panelDock,
-    resolvedLeftActivePanel,
-    resolvedRightActivePanel,
-    rightSidebarOpen,
-    rightSidebarWidth,
-    showGrid,
-  ])
-
   const previewVisible =
     (panelDock.preview === 'left' && leftSidebarOpen && resolvedLeftActivePanel === 'preview') ||
     (panelDock.preview === 'right' && rightSidebarOpen && resolvedRightActivePanel === 'preview')
@@ -923,6 +875,16 @@ function MainApp() {
         showGrid,
         canvasTransform: transform,
         selectedNodeIds: effectiveSelectedNodeIds,
+      }),
+    [
+      effectiveSelectedNodeIds,
+      showGrid,
+      transform,
+    ],
+  )
+  const buildCurrentPanelLayoutSnapshot = useCallback(
+    () =>
+      normalizeClientPanelLayout({
         leftSidebarOpen,
         rightSidebarOpen,
         leftSidebarWidth,
@@ -932,7 +894,6 @@ function MainApp() {
         panelDock,
       }),
     [
-      effectiveSelectedNodeIds,
       leftSidebarOpen,
       leftSidebarWidth,
       panelDock,
@@ -940,10 +901,31 @@ function MainApp() {
       resolvedRightActivePanel,
       rightSidebarOpen,
       rightSidebarWidth,
-      showGrid,
-      transform,
     ],
   )
+  function markPendingUiSignature(overrides = {}) {
+    const nextUi = {
+      showGrid: overrides.showGrid ?? showGrid,
+      canvasTransform: overrides.canvasTransform ?? transform,
+      selectedNodeIds: overrides.selectedNodeIds ?? effectiveSelectedNodeIds,
+    }
+    pendingUiSignatureRef.current = JSON.stringify(nextUi)
+  }
+  const setCanvasTransform = useCallback((nextTransformOrUpdater) => {
+    setTransform((current) => {
+      const nextTransform =
+        typeof nextTransformOrUpdater === 'function' ? nextTransformOrUpdater(current) : nextTransformOrUpdater
+      pendingUiSignatureRef.current = JSON.stringify({
+        showGrid,
+        canvasTransform: nextTransform,
+        selectedNodeIds: effectiveSelectedNodeIds,
+      })
+      return nextTransform
+    })
+  }, [
+    effectiveSelectedNodeIds,
+    showGrid,
+  ])
   const setEffectiveSelection = useCallback((nodeIds, preferredPrimaryId = null) => {
     const validIds = Array.from(new Set((nodeIds || []).filter(Boolean))).filter(
       (nodeId) => !tree?.nodes || tree.nodes.some((node) => node.id === nodeId),
@@ -1412,15 +1394,8 @@ function MainApp() {
     if (nextSelectionIds.length) {
       setEffectiveSelection(nextSelectionIds, nextSelectionIds[0])
     }
-    setLeftSidebarOpen(nextUi.leftSidebarOpen)
-    setRightSidebarOpen(nextUi.rightSidebarOpen)
-    setLeftSidebarWidth(nextUi.leftSidebarWidth)
-    setRightSidebarWidth(nextUi.rightSidebarWidth)
-    setLeftActivePanel(nextUi.leftActivePanel)
-    setRightActivePanel(nextUi.rightActivePanel)
-    setPanelDock(nextUi.panelDock)
     setProjectUiReady(true)
-  }, [clientProjectUiScopeKey, desktopEnvironment, desktopPersistedWorkspaceState, isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.leftActivePanel, projectUi.leftSidebarOpen, projectUi.leftSidebarWidth, projectUi.panelDock, projectUi.rightActivePanel, projectUi.rightSidebarOpen, projectUi.rightSidebarWidth, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [clientProjectUiScopeKey, desktopEnvironment, desktopPersistedWorkspaceState, isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -1757,6 +1732,13 @@ function MainApp() {
       window.removeEventListener('pagehide', handleBeforeUnload)
     }
   }, [buildCurrentProjectUiSnapshot, clientProjectUiScopeKey, currentUser, desktopEnvironment, isPanelWindow, projectUiReady, selectedProjectId])
+
+  useEffect(() => {
+    if (isPanelWindow) {
+      return
+    }
+    writeStoredClientPanelLayout(buildCurrentPanelLayoutSnapshot())
+  }, [buildCurrentPanelLayoutSnapshot, isPanelWindow])
 
   const resetClientCache = useCallback(async () => {
     setBusy(true)

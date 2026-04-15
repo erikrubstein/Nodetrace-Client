@@ -3,6 +3,7 @@ import { defaultUserProjectUi, panelIds } from '../../lib/constants'
 const CLIENT_THEME_STORAGE_KEY = 'nodetrace-client-theme'
 const CLIENT_PROJECT_UI_STORAGE_KEY = 'nodetrace-client-project-ui'
 const CLIENT_LAST_PROJECT_STORAGE_KEY = 'nodetrace-client-last-project'
+const CLIENT_PANEL_LAYOUT_STORAGE_KEY = 'nodetrace-client-panel-layout'
 
 export function getStoredClientTheme() {
   if (typeof window === 'undefined') {
@@ -22,13 +23,6 @@ export function writeStoredClientTheme(theme) {
 
 export function normalizeClientProjectUi(value) {
   const source = value && typeof value === 'object' ? value : {}
-  const panelDock = { ...defaultUserProjectUi.panelDock }
-  for (const panelId of panelIds) {
-    const requestedSide = source.panelDock?.[panelId]
-    if (requestedSide === 'left' || requestedSide === 'right') {
-      panelDock[panelId] = requestedSide
-    }
-  }
 
   const canvasTransform =
     source.canvasTransform &&
@@ -47,6 +41,20 @@ export function normalizeClientProjectUi(value) {
     showGrid: source.showGrid == null ? defaultUserProjectUi.showGrid : Boolean(source.showGrid),
     canvasTransform,
     selectedNodeIds: Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : [],
+  }
+}
+
+export function normalizeClientPanelLayout(value) {
+  const source = value && typeof value === 'object' ? value : {}
+  const panelDock = { ...defaultUserProjectUi.panelDock }
+  for (const panelId of panelIds) {
+    const requestedSide = source.panelDock?.[panelId]
+    if (requestedSide === 'left' || requestedSide === 'right') {
+      panelDock[panelId] = requestedSide
+    }
+  }
+
+  return {
     leftSidebarOpen: source.leftSidebarOpen == null ? defaultUserProjectUi.leftSidebarOpen : Boolean(source.leftSidebarOpen),
     rightSidebarOpen:
       source.rightSidebarOpen == null ? defaultUserProjectUi.rightSidebarOpen : Boolean(source.rightSidebarOpen),
@@ -64,6 +72,32 @@ export function normalizeClientProjectUi(value) {
       : defaultUserProjectUi.rightActivePanel,
     panelDock,
   }
+}
+
+export function readStoredClientPanelLayout() {
+  if (typeof window === 'undefined') {
+    return normalizeClientPanelLayout(defaultUserProjectUi)
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(CLIENT_PANEL_LAYOUT_STORAGE_KEY)
+    if (!rawValue) {
+      return normalizeClientPanelLayout(defaultUserProjectUi)
+    }
+    return normalizeClientPanelLayout(JSON.parse(rawValue))
+  } catch {
+    return normalizeClientPanelLayout(defaultUserProjectUi)
+  }
+}
+
+export function writeStoredClientPanelLayout(snapshot) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.localStorage.setItem(
+    CLIENT_PANEL_LAYOUT_STORAGE_KEY,
+    JSON.stringify(normalizeClientPanelLayout(snapshot)),
+  )
 }
 
 export function buildClientProjectUiScopeKey({

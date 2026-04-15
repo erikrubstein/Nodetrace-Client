@@ -33,13 +33,6 @@ export function normalizeWorkspaceSnapshot(snapshot) {
           }
         : null,
     selectedNodeIds: Array.isArray(snapshot.selectedNodeIds) ? snapshot.selectedNodeIds.filter(Boolean) : [],
-    leftSidebarOpen: snapshot.leftSidebarOpen == null ? undefined : Boolean(snapshot.leftSidebarOpen),
-    rightSidebarOpen: snapshot.rightSidebarOpen == null ? undefined : Boolean(snapshot.rightSidebarOpen),
-    leftSidebarWidth: Number.isFinite(Number(snapshot.leftSidebarWidth)) ? Number(snapshot.leftSidebarWidth) : undefined,
-    rightSidebarWidth: Number.isFinite(Number(snapshot.rightSidebarWidth)) ? Number(snapshot.rightSidebarWidth) : undefined,
-    leftActivePanel: typeof snapshot.leftActivePanel === 'string' ? snapshot.leftActivePanel : undefined,
-    rightActivePanel: typeof snapshot.rightActivePanel === 'string' ? snapshot.rightActivePanel : undefined,
-    panelDock: snapshot.panelDock && typeof snapshot.panelDock === 'object' ? { ...snapshot.panelDock } : undefined,
   }
 }
 
