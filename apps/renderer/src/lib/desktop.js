@@ -3,6 +3,16 @@ export function isDesktopEnvironment() {
 }
 
 export function getDesktopPlatform() {
+  try {
+    const requested = new URLSearchParams(window.location.search).get('devPlatform') || ''
+    const normalizedRequested = String(requested).trim().toLowerCase()
+    if (normalizedRequested === 'darwin' || normalizedRequested === 'win32') {
+      return normalizedRequested
+    }
+  } catch {
+    // Ignore malformed URL state and fall back to the real desktop platform.
+  }
+
   return String(window.nodetraceDesktop?.platform || '')
 }
 

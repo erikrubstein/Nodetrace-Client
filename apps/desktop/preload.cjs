@@ -1,8 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+function resolveDevPlatformOverride() {
+  const requestedArg = process.argv.find((entry) => String(entry || '').startsWith('--nodetrace-dev-platform=')) || ''
+  const requestedFromArg = requestedArg.slice('--nodetrace-dev-platform='.length).trim().toLowerCase()
+  const requestedFromEnv = String(process.env.NODETRACE_DESKTOP_PLATFORM_OVERRIDE || '').trim().toLowerCase()
+  const requested = requestedFromArg || requestedFromEnv
+  const isDevDesktop = process.argv.some((entry) => String(entry || '').includes('--dev-url='))
+  if (!isDevDesktop) {
+    return ''
+  }
+  return requested === 'darwin' || requested === 'win32' ? requested : ''
+}
+
+const effectivePlatform = resolveDevPlatformOverride() || process.platform
+
 contextBridge.exposeInMainWorld('nodetraceDesktop', {
   isElectron: true,
-  platform: process.platform,
+  platform: effectivePlatform,
   openWindow: (options) => ipcRenderer.invoke('desktop:open-window', options),
   openMainWindow: () => ipcRenderer.invoke('desktop:open-main-window'),
   notifyRendererReady: () => ipcRenderer.send('desktop:renderer-ready'),

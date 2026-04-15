@@ -27,8 +27,14 @@ const desktopLogPath = path.join(repoRootDir, 'logs', 'desktop.log')
 const desktopStatePath = path.join(app.getPath('userData'), 'desktop-state.json')
 const rendererEntryPath = path.join(repoRootDir, 'dist', 'index.html')
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
+const devDesktopPlatformOverride =
+  process.argv.find((arg) => arg.startsWith('--dev-platform='))?.slice('--dev-platform='.length).trim().toLowerCase() || ''
 const isMac = process.platform === 'darwin'
 const { appIconPath, dockIconPath, svgLogoPath } = resolveDesktopIconPaths(repoRootDir, process.platform)
+const rendererAdditionalArguments =
+  devDesktopPlatformOverride === 'darwin' || devDesktopPlatformOverride === 'win32'
+    ? [`--nodetrace-dev-platform=${devDesktopPlatformOverride}`]
+    : []
 
 const mainWindows = new Set()
 const pendingSplashWindows = new Map()
@@ -637,12 +643,25 @@ async function startDesktopProxy() {
 
 function buildRendererUrl() {
   if (rendererDevUrl) {
-    return rendererDevUrl
+    if (!rendererAdditionalArguments.length) {
+      return rendererDevUrl
+    }
+    const url = new URL(rendererDevUrl)
+    const requestedPlatform = rendererAdditionalArguments[0]?.split('=').slice(1).join('=').trim()
+    if (requestedPlatform) {
+      url.searchParams.set('devPlatform', requestedPlatform)
+    }
+    return url.toString()
   }
   if (!fs.existsSync(rendererEntryPath)) {
     throw new Error(`Desktop renderer build not found at ${rendererEntryPath}. Run "npm run build".`)
   }
-  return pathToFileURL(rendererEntryPath).toString()
+  const fileUrl = pathToFileURL(rendererEntryPath)
+  const requestedPlatform = rendererAdditionalArguments[0]?.split('=').slice(1).join('=').trim()
+  if (requestedPlatform) {
+    fileUrl.searchParams.set('devPlatform', requestedPlatform)
+  }
+  return fileUrl.toString()
 }
 
 function resolvePendingSplash(window, contentsId, { showWindow = true } = {}) {
@@ -681,7 +700,15 @@ function closeAllPanelWindows() {
 function createMainWindow(options = {}) {
   const { showSplash = false } = options
   const splashWindow = showSplash ? createSplashWindow({ BrowserWindow, appIconPath, fs, svgLogoPath }) : null
-  const mainWindow = new BrowserWindow(buildWindowOptions({ appIconPath, isMac, preloadPath, overrides: { title: 'Nodetrace' } }))
+  const mainWindow = new BrowserWindow(
+    buildWindowOptions({
+      appIconPath,
+      isMac,
+      preloadPath,
+      additionalArguments: rendererAdditionalArguments,
+      overrides: { title: 'Nodetrace' },
+    }),
+  )
   const mainContentsId = mainWindow.webContents.id
   mainWindows.add(mainWindow)
   if (splashWindow) {
@@ -754,6 +781,7 @@ function openPanelWindow(options = {}) {
       appIconPath,
       isMac,
       preloadPath,
+      additionalArguments: rendererAdditionalArguments,
       overrides: {
         title: `Nodetrace - ${panelId}`,
         width: getPanelInitialWidth(panelId),

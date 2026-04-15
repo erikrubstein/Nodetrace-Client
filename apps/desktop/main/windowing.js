@@ -1,4 +1,4 @@
-export function buildWindowOptions({ appIconPath, isMac, preloadPath, overrides = {} }) {
+export function buildWindowOptions({ appIconPath, isMac, preloadPath, additionalArguments = [], overrides = {} }) {
   return {
     show: false,
     width: 1600,
@@ -21,6 +21,7 @@ export function buildWindowOptions({ appIconPath, isMac, preloadPath, overrides 
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      additionalArguments,
     },
     ...overrides,
   }

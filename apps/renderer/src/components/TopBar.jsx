@@ -598,7 +598,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        {!useNativeDesktopMenu ? <span className="topbar__separator">|</span> : null}
+        <span className="topbar__separator">|</span>
         <div className={`project-chip ${projectLoading ? 'project-chip--loading' : ''}`.trim()}>
           <span className="project-chip__label">{projectName || 'No project'}</span>
           {projectLoading ? (
