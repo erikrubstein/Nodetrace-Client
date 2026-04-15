@@ -4,6 +4,7 @@ export default function IconButton({ children, tooltip, ...props }) {
     onClick,
     onPointerDown,
     onMouseDown,
+    wrapperClassName,
     ...restProps
   } = props
   const buttonClassName = className ? `icon-button ${className}` : 'icon-button'
@@ -36,7 +37,7 @@ export default function IconButton({ children, tooltip, ...props }) {
   }
 
   return (
-    <span className="icon-button-wrap">
+    <span className={wrapperClassName ? `icon-button-wrap ${wrapperClassName}` : 'icon-button-wrap'}>
       {button}
       <span aria-hidden="true" className="icon-tooltip">
         {tooltip}

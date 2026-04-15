@@ -165,6 +165,16 @@
   right: 0;
 }
 
+.topbar__right .topbar__mobile-capture-tooltip .icon-tooltip {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) translateY(-2px) !important;
+}
+
+.topbar__right .topbar__mobile-capture-tooltip:hover .icon-tooltip {
+  transform: translateX(-50%) translateY(0) !important;
+}
+
 .main-layout {
   min-height: 0;
   height: 100%;

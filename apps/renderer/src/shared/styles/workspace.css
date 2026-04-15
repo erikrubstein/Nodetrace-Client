@@ -57,6 +57,16 @@
   transform: translateY(0);
 }
 
+.canvas-tool__results-tooltip .icon-tooltip {
+  left: auto !important;
+  right: 0 !important;
+  transform: translateY(-2px) !important;
+}
+
+.canvas-tool__results-tooltip:hover .icon-tooltip {
+  transform: translateY(0) !important;
+}
+
 .canvas-tool-button {
   background: transparent;
   color: var(--muted);

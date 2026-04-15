@@ -336,6 +336,7 @@ export default function CanvasWorkspace({
           disabled={busy}
           onClick={toggleSearchIsolation}
           tooltip={canvasIsolationMode === 'search' ? 'Show All Nodes' : 'Show Results Only'}
+          wrapperClassName="canvas-tool__results-tooltip"
         >
           <EyeLowVisionIcon />
         </IconButton>

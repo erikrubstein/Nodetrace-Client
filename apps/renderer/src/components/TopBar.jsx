@@ -675,6 +675,7 @@ export default function TopBar({
           className={mobileConnectionCount > 0 ? 'icon-button--connected' : ''}
           onClick={() => setSessionDialogOpen(true)}
           tooltip="Mobile Capture"
+          wrapperClassName="topbar__mobile-capture-tooltip"
         >
           {mobileConnectionCount > 0 ? (
             <span className="icon-count-wrap">
