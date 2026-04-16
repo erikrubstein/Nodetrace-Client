@@ -22,20 +22,25 @@ select {
   border: none;
   background: var(--control-bg);
   color: var(--control-text);
+  transition:
+    background-color var(--transition-theme),
+    color var(--transition-theme);
+}
+
+input:not([type='range']):hover,
+textarea:hover,
+select:hover {
+  background: color-mix(in srgb, var(--control-bg) 96%, var(--text) 4%);
 }
 
 select:focus,
-select:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
+select:focus-visible,
 input:not([type='range']):focus,
 input:not([type='range']):focus-visible,
 textarea:focus,
 textarea:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px var(--selected);
+  background: color-mix(in srgb, var(--control-bg) 92%, var(--text) 8%);
 }
 
 input[type='range'] {
