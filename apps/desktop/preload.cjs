@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('nodetraceDesktop', {
   deleteServerProfile: (id) => ipcRenderer.invoke('desktop:delete-server-profile', id),
   selectServerProfile: (id) => ipcRenderer.invoke('desktop:select-server-profile', id),
   createProjectForProfile: (id, name) => ipcRenderer.invoke('desktop:create-project-for-profile', { id, name }),
+  patchProjectPreferencesForProfile: (id, projectId, projectUi) =>
+    ipcRenderer.invoke('desktop:patch-project-preferences-for-profile', { id, projectId, projectUi }),
   listProjectsForProfile: (id) => ipcRenderer.invoke('desktop:list-projects-for-profile', id),
   changeProfileAccountUsername: (id, username) =>
     ipcRenderer.invoke('desktop:change-profile-account-username', { id, username }),

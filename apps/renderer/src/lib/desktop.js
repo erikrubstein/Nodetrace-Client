@@ -143,6 +143,14 @@ export function createDesktopProjectForProfile(id, name) {
   )
 }
 
+export function patchDesktopProjectPreferencesForProfile(id, projectId, projectUi) {
+  return (
+    window.nodetraceDesktop?.patchProjectPreferencesForProfile?.(id, projectId, projectUi).catch((error) => {
+      throw normalizeDesktopError(error)
+    }) || Promise.resolve(null)
+  )
+}
+
 export function listDesktopProjectsForProfile(id) {
   return (
     window.nodetraceDesktop?.listProjectsForProfile?.(id).catch((error) => {

@@ -15,6 +15,7 @@ export default function useProjectSync({
   currentUser,
   desktopEnvironment = false,
   desktopConnectionStatus = null,
+  pendingProjectTransitionId = null,
   projectBootstrapReady = true,
   requireManualProjectSelection = false,
   onAuthLost,
@@ -149,6 +150,9 @@ export default function useProjectSync({
       if (!projectBootstrapReady) {
         return
       }
+      if (pendingProjectTransitionId) {
+        return
+      }
       if (!desktopProfileConnected) {
         setProjectListLoading?.(false)
         return
@@ -178,10 +182,13 @@ export default function useProjectSync({
     }
 
     void initialize()
-  }, [currentUserId, desktopProfileConnected, loadProjects, onAuthLost, projectBootstrapReady, requireManualProjectSelection, selectedProjectId, setError, setProjectListLoading, setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree])
+  }, [currentUserId, desktopProfileConnected, loadProjects, onAuthLost, pendingProjectTransitionId, projectBootstrapReady, requireManualProjectSelection, selectedProjectId, setError, setProjectListLoading, setProjects, setSelectedNodeId, setSelectedProjectId, setStatus, setTree])
 
   useEffect(() => {
     if (!currentUserId || !desktopProfileConnected) {
+      return undefined
+    }
+    if (pendingProjectTransitionId) {
       return undefined
     }
 
@@ -222,7 +229,7 @@ export default function useProjectSync({
       window.removeEventListener('focus', refreshProjects)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [currentUserId, desktopEnvironment, desktopProfileConnected, loadProjects, onAuthLost, requireManualProjectSelection, selectedProjectId, setError])
+  }, [currentUserId, desktopEnvironment, desktopProfileConnected, loadProjects, onAuthLost, pendingProjectTransitionId, requireManualProjectSelection, selectedProjectId, setError])
 
   useEffect(() => {
     clearHistory()

@@ -16,6 +16,7 @@ export function registerIpcHandlers({
   upsertServerProfile,
   deleteServerProfile,
   createProjectForProfile,
+  patchProjectPreferencesForProfile,
   listProjectsForProfile,
   patchProfileAccountUsername,
   patchProfileAccountPassword,
@@ -84,6 +85,13 @@ export function registerIpcHandlers({
   ipcMain.handle('desktop:select-server-profile', (_event, id) => selectServerProfile(String(id || '').trim()))
   ipcMain.handle('desktop:create-project-for-profile', (_event, payload) =>
     createProjectForProfile(String(payload?.id || '').trim(), String(payload?.name || '')),
+  )
+  ipcMain.handle('desktop:patch-project-preferences-for-profile', (_event, payload) =>
+    patchProjectPreferencesForProfile(
+      String(payload?.id || '').trim(),
+      String(payload?.projectId || '').trim(),
+      payload?.projectUi || {},
+    ),
   )
   ipcMain.handle('desktop:list-projects-for-profile', (_event, id) => listProjectsForProfile(String(id || '').trim()))
   ipcMain.handle('desktop:change-profile-account-username', (_event, payload) =>

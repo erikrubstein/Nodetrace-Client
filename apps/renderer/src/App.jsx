@@ -34,20 +34,19 @@ import {
   deleteDesktopProfileAccount,
   getDesktopPlatform,
   getDesktopServerState,
-  getPersistedDesktopWorkspaceState,
   listDesktopProjectsForProfile,
   getDesktopWindowState,
   isDesktopEnvironment,
   minimizeDesktopWindow,
   openDesktopPanelWindow,
   openDesktopMainWindow,
+  patchDesktopProjectPreferencesForProfile,
   selectDesktopServerProfile,
   subscribeDesktopServerState,
   subscribeDesktopMenuCommand,
   subscribeDesktopPanelWindowState,
   subscribeDesktopWindowState,
   toggleMaximizeDesktopWindow,
-  updateDesktopWorkspaceState,
   updateDesktopServerProfile,
 } from './lib/desktop'
 import {
@@ -66,16 +65,12 @@ import { getUrlState, updateUrlState } from './lib/urlState'
 import { debugEnabled, debugLog } from './lib/debug'
 import { isCaptureRoute, navigateToCapture } from './lib/runtimePaths'
 import {
-  buildClientProjectUiScopeKey,
   getStoredClientTheme,
   normalizeClientPanelLayout,
   normalizeClientProjectUi,
   readStoredClientPanelLayout,
-  readStoredClientProjectUi,
   writeStoredClientPanelLayout,
-  writeStoredClientProjectUi,
   writeStoredClientTheme,
-  writeStoredLastProjectId,
 } from './app/state/clientProjectUi'
 import { shouldShowMobileEntryPrompt } from './app/runtime/mobileEntry'
 import { useAppShellCommands } from './app/commands/appShellCommands'
@@ -144,8 +139,6 @@ function MainApp() {
   const [status, setStatus] = useState('Loading projects...')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [desktopPersistedWorkspaceState, setDesktopPersistedWorkspaceState] = useState(null)
-  const [desktopPersistedWorkspaceReady, setDesktopPersistedWorkspaceReady] = useState(false)
   const [desktopConnectionFaulted, setDesktopConnectionFaulted] = useState(false)
   const [desktopWindowMaximized, setDesktopWindowMaximized] = useState(false)
   const [poppedOutPanelIds, setPoppedOutPanelIds] = useState([])
@@ -235,11 +228,19 @@ function MainApp() {
   const currentUserRef = useRef(null)
   const selectedProjectIdRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
-  const sessionProjectUiByProjectIdRef = useRef(new Map())
   const loadedImagesRef = useRef({})
   const nodeImageEditSequenceRef = useRef(new Map())
   const loadedUiSignatureRef = useRef('')
   const pendingUiSignatureRef = useRef(null)
+  const activeProjectUiSyncRef = useRef({
+    projectId: null,
+    snapshot: null,
+    profileId: null,
+    userId: null,
+    serverSignature: '',
+    dirty: false,
+  })
+  const activeProjectUiSaveSequenceRef = useRef(0)
   const selectedLayoutAnchorRef = useRef({ nodeId: null, x: null, y: null })
   const pendingFocusNodeIdRef = useRef(null)
   const presenceRequestSequenceRef = useRef(0)
@@ -259,18 +260,6 @@ function MainApp() {
   const selectedDesktopServerProfile = useMemo(
     () => desktopServerState.profiles.find((profile) => profile.id === desktopServerState.selectedProfileId) || null,
     [desktopServerState.profiles, desktopServerState.selectedProfileId],
-  )
-  const clientProjectUiScopeKey = useMemo(
-    () =>
-      currentUser
-        ? buildClientProjectUiScopeKey({
-            desktopEnvironment,
-            currentUserId: currentUser.id || '',
-            currentUsername: currentUser.username || '',
-            serverBaseUrl: selectedDesktopServerProfile?.baseUrl || '',
-          })
-        : '',
-    [currentUser, desktopEnvironment, selectedDesktopServerProfile?.baseUrl],
   )
   const selectedProjectSummary = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) || null,
@@ -319,20 +308,23 @@ function MainApp() {
   }, [desktopEnvironment])
 
   const clearRememberedProjectSelection = useCallback(() => {
-    if (!clientProjectUiScopeKey) {
-      return
-    }
-    if (desktopEnvironment) {
-      setDesktopPersistedWorkspaceState(null)
-      void updateDesktopWorkspaceState({
-        scopeKey: clientProjectUiScopeKey,
-        projectId: null,
-        snapshot: null,
-      }).catch(() => {})
-      return
-    }
-    writeStoredLastProjectId(clientProjectUiScopeKey, null)
-  }, [clientProjectUiScopeKey, desktopEnvironment])
+  }, [])
+
+  const handleBeginProjectTransition = useCallback((projectId) => {
+    const normalizedProjectId = String(projectId || '').trim() || null
+    setPendingProjectTransitionId(normalizedProjectId)
+    setSelectedProjectId(null)
+    setTree(null)
+    setSelectedNodeId(null)
+    setMultiSelectedNodeIds([])
+    setShowGrid(defaultUserProjectUi.showGrid)
+    setTransform(defaultUserProjectUi.canvasTransform || { x: 80, y: 80, scale: 1 })
+    setProjectUiReady(false)
+    setMobileConnectionCount(0)
+    pendingInitialCanvasFitRef.current = false
+    loadedUiSignatureRef.current = ''
+    pendingUiSignatureRef.current = null
+  }, [])
 
   const closeProjectToPicker = useCallback(() => {
     setPendingProjectTransitionId(null)
@@ -404,46 +396,17 @@ function MainApp() {
   }, [loadedImages])
 
   useEffect(() => {
-    sessionProjectUiByProjectIdRef.current = new Map()
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = ''
-  }, [clientProjectUiScopeKey])
-
-  useEffect(() => {
-    if (!desktopEnvironment) {
-      setDesktopPersistedWorkspaceState(null)
-      setDesktopPersistedWorkspaceReady(true)
-      return
+    activeProjectUiSyncRef.current = {
+      projectId: null,
+      snapshot: null,
+      profileId: null,
+      userId: null,
+      serverSignature: '',
+      dirty: false,
     }
-    if (!currentUser || !clientProjectUiScopeKey) {
-      setDesktopPersistedWorkspaceState(null)
-      setDesktopPersistedWorkspaceReady(false)
-      return
-    }
-
-    let cancelled = false
-    setDesktopPersistedWorkspaceReady(false)
-
-    getPersistedDesktopWorkspaceState(clientProjectUiScopeKey)
-      .then((value) => {
-        if (cancelled) {
-          return
-        }
-        setDesktopPersistedWorkspaceState(value || null)
-        setDesktopPersistedWorkspaceReady(true)
-      })
-      .catch(() => {
-        if (cancelled) {
-          return
-        }
-        setDesktopPersistedWorkspaceState(null)
-        setDesktopPersistedWorkspaceReady(true)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [clientProjectUiScopeKey, currentUser, desktopEnvironment])
+  }, [currentUser?.id, selectedDesktopServerProfile?.id])
 
   useEffect(() => {
     if (!desktopEnvironment) {
@@ -914,6 +877,84 @@ function MainApp() {
       transform,
     ],
   )
+  const persistServerProjectUi = useCallback(
+    async (projectId, projectUiSnapshot, options = {}) => {
+      const normalizedProjectId = String(projectId || '').trim()
+      if (!normalizedProjectId || !currentUserRef.current) {
+        return false
+      }
+
+      const normalizedSnapshot = normalizeClientProjectUi(projectUiSnapshot)
+      const nextSignature = JSON.stringify(normalizedSnapshot)
+      const activeContext = activeProjectUiSyncRef.current
+      if (!options.force && activeContext.projectId === normalizedProjectId && activeContext.serverSignature === nextSignature) {
+        return false
+      }
+
+      const requestSequence = activeProjectUiSaveSequenceRef.current + 1
+      activeProjectUiSaveSequenceRef.current = requestSequence
+      try {
+        const targetProfileId = String(options.profileId || selectedDesktopServerProfile?.id || '').trim() || null
+        if (desktopEnvironment && targetProfileId) {
+          await patchDesktopProjectPreferencesForProfile(targetProfileId, normalizedProjectId, normalizedSnapshot)
+        } else {
+          await api(`/api/projects/${normalizedProjectId}/preferences`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(normalizedSnapshot),
+            keepalive: Boolean(options.keepalive),
+          })
+        }
+
+        if (activeProjectUiSaveSequenceRef.current !== requestSequence) {
+          return false
+        }
+
+        if (activeProjectUiSyncRef.current.projectId === normalizedProjectId) {
+          activeProjectUiSyncRef.current = {
+            ...activeProjectUiSyncRef.current,
+            snapshot: normalizedSnapshot,
+            serverSignature: nextSignature,
+            dirty: false,
+          }
+        }
+        return true
+      } catch {
+        return false
+      }
+    },
+    [currentUser?.id, desktopEnvironment, selectedDesktopServerProfile?.id],
+  )
+  const flushActiveProjectUi = useCallback(async () => {
+    const currentContext = activeProjectUiSyncRef.current
+    if (!currentContext.projectId || !currentContext.snapshot || !currentContext.dirty) {
+      activeProjectUiSyncRef.current = {
+        projectId: null,
+        snapshot: null,
+        profileId: null,
+        userId: null,
+        serverSignature: '',
+        dirty: false,
+      }
+      return false
+    }
+    const saved = await persistServerProjectUi(currentContext.projectId, currentContext.snapshot, {
+      force: true,
+      profileId: currentContext.profileId,
+      userId: currentContext.userId,
+    })
+    activeProjectUiSyncRef.current = {
+      projectId: null,
+      snapshot: null,
+      profileId: null,
+      userId: null,
+      serverSignature: '',
+      dirty: false,
+    }
+    return saved
+  }, [persistServerProjectUi])
   const buildCurrentPanelLayoutSnapshot = useCallback(
     () =>
       normalizeClientPanelLayout({
@@ -1370,11 +1411,12 @@ function MainApp() {
     }
   }, [layout.nodes, selectedNodeId, setCanvasTransform])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setProjectUiReady(false)
     pendingInitialCanvasFitRef.current = false
     loadedUiSignatureRef.current = ''
     pendingUiSignatureRef.current = null
+    selectedLayoutAnchorRef.current = { nodeId: null, x: null, y: null }
   }, [selectedProjectId])
 
   useEffect(() => {
@@ -1391,28 +1433,26 @@ function MainApp() {
     }
   }, [pendingProjectTransitionId, selectedProjectId, tree?.project?.id])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedProjectId || !tree?.project || tree.project.id !== selectedProjectId) {
       return
     }
 
-    const nextUi = normalizeClientProjectUi(
-      sessionProjectUiByProjectIdRef.current.get(selectedProjectId) ||
-        (desktopEnvironment &&
-        desktopPersistedWorkspaceState?.projectId === selectedProjectId &&
-        desktopPersistedWorkspaceState?.snapshot
-          ? desktopPersistedWorkspaceState.snapshot
-          : null) ||
-        readStoredClientProjectUi(clientProjectUiScopeKey, selectedProjectId) ||
-        projectUi,
-    )
+    const nextUi = normalizeClientProjectUi(projectUi)
     const incomingSignature = JSON.stringify(nextUi)
-    if (pendingUiSignatureRef.current && incomingSignature !== pendingUiSignatureRef.current) {
+    if (loadedUiSignatureRef.current && pendingUiSignatureRef.current && incomingSignature !== pendingUiSignatureRef.current) {
       return
     }
     pendingUiSignatureRef.current = null
     loadedUiSignatureRef.current = incomingSignature
-    sessionProjectUiByProjectIdRef.current.set(selectedProjectId, nextUi)
+    activeProjectUiSyncRef.current = {
+      projectId: selectedProjectId,
+      snapshot: nextUi,
+      profileId: selectedDesktopServerProfile?.id || null,
+      userId: currentUser?.id || null,
+      serverSignature: incomingSignature,
+      dirty: false,
+    }
     if (isPanelWindow) {
       setProjectUiReady(true)
       return
@@ -1427,7 +1467,7 @@ function MainApp() {
       setEffectiveSelection(nextSelectionIds, nextSelectionIds[0])
     }
     setProjectUiReady(true)
-  }, [clientProjectUiScopeKey, desktopEnvironment, desktopPersistedWorkspaceState, isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -1465,6 +1505,38 @@ function MainApp() {
     }
     return nextState
   }
+
+  const applyDesktopProfileAuthState = useCallback((nextState, targetProfileId) => {
+    const normalizedProfileId = String(targetProfileId || '').trim()
+    const activeProfile =
+      nextState?.profiles?.find((profile) => profile.id === normalizedProfileId) || null
+
+    if (activeProfile?.authenticated && activeProfile.userId) {
+      initializedAuthProfileIdRef.current = normalizedProfileId
+      setCurrentUser({
+        id: activeProfile.userId,
+        username: activeProfile.username,
+        captureSessionId: activeProfile.captureSessionId,
+      })
+      setAuthReady(true)
+      return true
+    }
+
+    initializedAuthProfileIdRef.current = null
+    setCurrentUser(null)
+    return false
+  }, [])
+  const resolveDesktopProfileUser = useCallback(async (targetProfileId) => {
+    const normalizedProfileId = String(targetProfileId || '').trim()
+    const payload = await api('/api/auth/me')
+    if (!payload?.authenticated || !payload.user) {
+      throw new Error('Unable to resolve authenticated user for the selected server profile.')
+    }
+    initializedAuthProfileIdRef.current = normalizedProfileId || null
+    setCurrentUser(payload.user)
+    setAuthReady(true)
+    return payload.user
+  }, [])
 
   const loadCurrentUser = useCallback(async () => {
     const hasOpenProject = Boolean(selectedProjectId && tree?.project)
@@ -1637,7 +1709,6 @@ function MainApp() {
     setPendingProjectTransitionId,
     setProjectListLoading,
     setProjectPickerLoading,
-    selectedProjectId,
     projectPickerProfileId,
     setProjectPickerProfileId,
     setProjects,
@@ -1649,6 +1720,10 @@ function MainApp() {
     setUpdateStatus,
     showProjectDialog,
     closeDisconnectedProject,
+    beginProjectTransition: handleBeginProjectTransition,
+    flushActiveProjectUi,
+    applyDesktopProfileAuthState,
+    resolveDesktopProfileUser,
   })
 
   const handleSearchResultsChange = useCallback((nodeIds) => {
@@ -1668,7 +1743,8 @@ function MainApp() {
     currentUser,
     desktopEnvironment,
     desktopConnectionStatus: effectiveDesktopServerConnectionStatus,
-    projectBootstrapReady: desktopEnvironment ? desktopPersistedWorkspaceReady : true,
+    pendingProjectTransitionId,
+    projectBootstrapReady: true,
     requireManualProjectSelection: manualProjectSelectionRequired,
     onAuthLost: handleAuthLost,
     pendingLocalEventsRef,
@@ -1696,7 +1772,7 @@ function MainApp() {
     const previousStatus = desktopReconnectStatusRef.current
     desktopReconnectStatusRef.current = currentStatus
 
-    if (currentStatus !== 'connected' || !previousStatus || previousStatus === 'connected' || !currentUser) {
+    if (currentStatus !== 'connected' || !previousStatus || previousStatus === 'connected' || !currentUser || pendingProjectTransitionId) {
       return
     }
 
@@ -1716,47 +1792,79 @@ function MainApp() {
     loadProjects,
     loadTree,
     manualProjectSelectionRequired,
+    pendingProjectTransitionId,
     effectiveDesktopServerConnectionStatus,
     selectedProjectId,
     showProjectDialog,
   ])
 
   useEffect(() => {
-    if (!desktopEnvironment || isPanelWindow || !currentUser || !clientProjectUiScopeKey || !selectedProjectId || !projectUiReady) {
+    if (isPanelWindow) {
+      return
+    }
+    if (pendingProjectTransitionId) {
+      return
+    }
+    const previousContext = activeProjectUiSyncRef.current
+    if (previousContext.projectId && previousContext.projectId !== selectedProjectId && previousContext.snapshot) {
+      void persistServerProjectUi(previousContext.projectId, previousContext.snapshot, { force: true })
+      activeProjectUiSyncRef.current = {
+        projectId: null,
+        snapshot: null,
+        profileId: null,
+        userId: null,
+        serverSignature: '',
+        dirty: false,
+      }
+    }
+  }, [isPanelWindow, pendingProjectTransitionId, persistServerProjectUi, selectedProjectId])
+
+  useEffect(() => {
+    if (isPanelWindow || !projectUiReady || !selectedProjectId || !tree?.project || tree.project.id !== selectedProjectId) {
       return
     }
 
     const snapshot = buildCurrentProjectUiSnapshot()
-    sessionProjectUiByProjectIdRef.current.set(selectedProjectId, snapshot)
-    void updateDesktopWorkspaceState({
-      scopeKey: clientProjectUiScopeKey,
+    const nextSignature = JSON.stringify(snapshot)
+    const previousContext = activeProjectUiSyncRef.current
+    activeProjectUiSyncRef.current = {
       projectId: selectedProjectId,
       snapshot,
-    }).catch(() => {})
-  }, [
-    buildCurrentProjectUiSnapshot,
-    clientProjectUiScopeKey,
-    currentUser,
-    desktopEnvironment,
-    isPanelWindow,
-    projectUiReady,
-    selectedProjectId,
-  ])
+      profileId:
+        previousContext.projectId === selectedProjectId
+          ? previousContext.profileId
+          : selectedDesktopServerProfile?.id || null,
+      userId:
+        previousContext.projectId === selectedProjectId
+          ? previousContext.userId
+          : currentUser?.id || null,
+      serverSignature:
+        previousContext.projectId === selectedProjectId ? previousContext.serverSignature : '',
+      dirty:
+        previousContext.projectId === selectedProjectId
+          ? previousContext.serverSignature !== nextSignature
+          : nextSignature !== JSON.stringify(normalizeClientProjectUi(projectUi)),
+    }
+  }, [buildCurrentProjectUiSnapshot, isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.selectedNodeIds, projectUi.showGrid, projectUiReady, selectedProjectId, tree?.project])
 
   useEffect(() => {
-    if (desktopEnvironment || isPanelWindow || !currentUser || !clientProjectUiScopeKey || !selectedProjectId || !projectUiReady) {
+    if (isPanelWindow || !projectUiReady || !selectedProjectId) {
       return undefined
     }
 
-    const persistCurrentProjectUi = () => {
-      const closedAt = Date.now()
-      const snapshot = buildCurrentProjectUiSnapshot()
-      writeStoredClientProjectUi(clientProjectUiScopeKey, selectedProjectId, snapshot)
-      writeStoredLastProjectId(clientProjectUiScopeKey, selectedProjectId, closedAt)
+    const flushProjectUi = (keepalive = false) => {
+      const currentContext = activeProjectUiSyncRef.current
+      if (!currentContext.projectId || currentContext.projectId !== selectedProjectId || !currentContext.snapshot) {
+        return
+      }
+      if (!currentContext.dirty) {
+        return
+      }
+      void persistServerProjectUi(currentContext.projectId, currentContext.snapshot, { keepalive, force: true })
     }
 
     const handleBeforeUnload = () => {
-      persistCurrentProjectUi()
+      flushProjectUi(true)
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -1765,7 +1873,7 @@ function MainApp() {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('pagehide', handleBeforeUnload)
     }
-  }, [buildCurrentProjectUiSnapshot, clientProjectUiScopeKey, currentUser, desktopEnvironment, isPanelWindow, projectUiReady, selectedProjectId])
+  }, [isPanelWindow, persistServerProjectUi, projectUiReady, selectedProjectId])
 
   useEffect(() => {
     if (isPanelWindow) {
@@ -1811,6 +1919,9 @@ function MainApp() {
     if (!authReady) {
       return
     }
+    if (pendingProjectTransitionId) {
+      return
+    }
     if (currentUser && !selectedProjectId && !tree && showProjectDialog == null) {
       setShowProjectDialog('open')
     }
@@ -1821,7 +1932,7 @@ function MainApp() {
       return
     }
     updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId)
-  }, [authReady, currentUser, manualProjectSelectionRequired, selectedNodeId, selectedProjectId, showProjectDialog, tree])
+  }, [authReady, currentUser, manualProjectSelectionRequired, pendingProjectTransitionId, selectedNodeId, selectedProjectId, showProjectDialog, tree])
 
   useEffect(() => {
     if (!isDesktopEnvironment() || typeof BroadcastChannel === 'undefined') {
@@ -2122,7 +2233,6 @@ function MainApp() {
     if (signature === loadedUiSignatureRef.current) {
       return undefined
     }
-    sessionProjectUiByProjectIdRef.current.set(selectedProjectId, nextUi)
     pendingUiSignatureRef.current = signature
     return undefined
   }, [

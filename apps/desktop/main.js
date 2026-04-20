@@ -977,6 +977,40 @@ async function createProjectForProfile(profileId, name) {
   return response.payload
 }
 
+async function patchProjectPreferencesForProfile(profileId, projectId, projectUi) {
+  const profile = desktopState.profiles.find((entry) => entry.id === profileId)
+  if (!profile) {
+    throw new Error('Server profile not found')
+  }
+
+  const normalizedProjectId = String(projectId || '').trim()
+  if (!normalizedProjectId) {
+    throw new Error('Project id is required')
+  }
+
+  const targetUrl = new URL(`/api/projects/${normalizedProjectId}/preferences`, `${profile.baseUrl}/`)
+  const headers = {
+    accept: 'application/json',
+    'content-type': 'application/json',
+  }
+  const cookieHeader = getStoredCookieHeader(profile.id)
+  if (cookieHeader) {
+    headers.cookie = cookieHeader
+  }
+
+  const response = await requestJson(targetUrl, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(projectUi || {}),
+  })
+
+  if (!response.ok) {
+    throw new Error(String(response.payload?.error || `Unable to save project preferences (HTTP ${response.statusCode})`))
+  }
+
+  return response.payload
+}
+
 async function patchProfileAccountUsername(profileId, username) {
   const profile = desktopState.profiles.find((entry) => entry.id === profileId)
   if (!profile) {
@@ -1132,6 +1166,7 @@ registerIpcHandlers({
   upsertServerProfile,
   deleteServerProfile,
   createProjectForProfile,
+  patchProjectPreferencesForProfile,
   listProjectsForProfile,
   patchProfileAccountUsername,
   patchProfileAccountPassword,

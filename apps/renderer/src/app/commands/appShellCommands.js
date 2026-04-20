@@ -29,7 +29,6 @@ export function useAppShellCommands({
   setPendingProjectTransitionId,
   setProjectListLoading,
   setProjectPickerLoading,
-  selectedProjectId,
   projectPickerProfileId,
   setProjectPickerProfileId,
   setProjects,
@@ -42,6 +41,9 @@ export function useAppShellCommands({
   showProjectDialog,
   closeDisconnectedProject,
   beginProjectTransition: externalBeginProjectTransition,
+  flushActiveProjectUi,
+  applyDesktopProfileAuthState,
+  resolveDesktopProfileUser,
   onCreateServerProfile,
   onDeleteServerProfile,
   onUpdateServerProfile,
@@ -270,14 +272,9 @@ export function useAppShellCommands({
       return
     }
 
-    const switchingProfiles = desktopServerState.selectedProfileId !== normalizedProfileId
-    const reopeningSameProjectUnderDifferentProfile = switchingProfiles && selectedProjectId === normalizedProjectId
-
     setBusy(true)
     setError('')
-    if (reopeningSameProjectUnderDifferentProfile) {
-      setSelectedProjectId(null)
-    }
+    await flushActiveProjectUi?.()
     beginProjectTransition(normalizedProjectId)
     try {
       setManualProjectSelectionRequired(false)
@@ -287,7 +284,9 @@ export function useAppShellCommands({
         if (nextState) {
           setDesktopServerState(nextState)
           configureApiBaseUrl(nextState.proxyBaseUrl || '')
+          applyDesktopProfileAuthState?.(nextState, normalizedProfileId)
         }
+        await resolveDesktopProfileUser?.(normalizedProfileId)
       }
       setSelectedProjectId(normalizedProjectId)
       setShowProjectDialog(null)
@@ -301,7 +300,9 @@ export function useAppShellCommands({
   }, [
     beginProjectTransition,
     desktopServerState.selectedProfileId,
-    selectedProjectId,
+    flushActiveProjectUi,
+    applyDesktopProfileAuthState,
+    resolveDesktopProfileUser,
     setBusy,
     setDesktopServerState,
     setError,
