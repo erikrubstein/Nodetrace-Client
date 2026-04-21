@@ -1,5 +1,9 @@
 import { defaultImageEdits } from '../lib/image'
 
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
 function adjustmentActionButton({ active = false, disabled = false, iconClassName, label, onClick }) {
   return (
     <span className="icon-button-wrap" key={label}>
@@ -21,6 +25,15 @@ function adjustmentActionButton({ active = false, disabled = false, iconClassNam
 
 function AdjustmentSlider({ defaultValue, edits, iconClassName, label, max, min, onChange, valueKey }) {
   const value = edits[valueKey]
+  const maxValue = Number(max)
+  const minValue = Number(min)
+
+  function applyValue(nextValue) {
+    onChange({
+      ...edits,
+      [valueKey]: clampNumber(nextValue, minValue, maxValue),
+    })
+  }
 
   return (
     <label className="preview-panel__adjustment-row">
@@ -31,12 +44,15 @@ function AdjustmentSlider({ defaultValue, edits, iconClassName, label, max, min,
         min={min}
         type="range"
         value={value}
-        onChange={(event) =>
-          onChange({
-            ...edits,
-            [valueKey]: Number(event.target.value),
-          })
-        }
+        onChange={(event) => applyValue(Number(event.target.value))}
+        onWheel={(event) => {
+          event.preventDefault()
+          const delta = Math.sign(event.deltaY)
+          if (delta === 0) {
+            return
+          }
+          applyValue(Number(value) - (delta * 5))
+        }}
       />
       <span className="preview-panel__control-header-actions">
         <strong>{value}</strong>
@@ -44,11 +60,7 @@ function AdjustmentSlider({ defaultValue, edits, iconClassName, label, max, min,
           disabled: value === defaultValue,
           iconClassName,
           label: `Reset ${label}`,
-          onClick: () =>
-            onChange({
-              ...edits,
-              [valueKey]: defaultValue,
-            }),
+          onClick: () => applyValue(defaultValue),
         })}
       </span>
     </label>

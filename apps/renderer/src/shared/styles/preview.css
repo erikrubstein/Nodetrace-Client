@@ -301,7 +301,7 @@
 
 .preview-panel__adjustment-row {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
+  grid-template-columns: 88px minmax(0, 1fr) 70px;
   align-items: center;
   column-gap: 12px;
   row-gap: 8px;
@@ -319,8 +319,18 @@
 }
 
 .preview-panel__adjustment-row .preview-panel__control-header-actions {
+  width: 70px;
+  display: inline-grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
   justify-self: end;
   padding-left: 10px;
+  gap: 8px;
+}
+
+.preview-panel__adjustment-row .preview-panel__control-header-actions strong {
+  min-width: 0;
+  text-align: left;
 }
 
 .field-stack {
