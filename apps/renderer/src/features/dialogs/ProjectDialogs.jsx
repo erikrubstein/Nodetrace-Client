@@ -1,6 +1,6 @@
 import ConfirmDialog from '../../components/ConfirmDialog'
 import IconButton from '../../components/IconButton'
-import { GearIcon, GlobeIcon, PlusIcon, UsersIcon, WarningIcon } from '../../components/icons'
+import { GearIcon, GlobeIcon, PlusIcon, UserIcon, UsersIcon, WarningIcon } from '../../components/icons'
 
 export default function ProjectDialogs({
   busy,
@@ -297,14 +297,16 @@ export default function ProjectDialogs({
             <div className={`project-picker${desktopEnvironment ? ' project-picker--desktop' : ''}`}>
               {desktopEnvironment ? (
                 <div className="project-picker__card project-picker__card--servers">
-                  <div className="project-picker__card-header">
-                    <div className="project-picker__section-title">Select Server Profile</div>
+                <div className="project-picker__card-header">
+                  <div className="project-picker__section-title">Select Server Profile</div>
+                  <div className="project-picker__card-actions-inline">
                     {onOpenManageAccounts ? (
                       <IconButton className="tool-button" disabled={busy} onClick={onOpenManageAccounts} tooltip="Manage Server Profiles">
                         <GearIcon />
                       </IconButton>
                     ) : null}
                   </div>
+                </div>
                   <div className="project-picker__card-body project-picker__card-body--servers project-picker__card-body--server-filtered">
                     <div className="project-picker__filters">
                       <button
@@ -358,17 +360,29 @@ export default function ProjectDialogs({
               <div className="project-picker__card project-picker__card--projects">
                 <div className="project-picker__card-header">
                   <div className="project-picker__section-title">Open Project</div>
-                  <IconButton
-                    className="tool-button"
-                    disabled={busy || (desktopEnvironment && !canOpenProjectsForSelectedProfile)}
-                    onClick={() => {
-                      setProjectName('')
-                      setShowProjectDialog('create')
-                    }}
-                    tooltip="Create Project"
-                  >
-                    <PlusIcon />
-                  </IconButton>
+                  <div className="project-picker__card-actions-inline">
+                    {!desktopEnvironment && onOpenManageAccounts ? (
+                      <IconButton
+                        className="tool-button"
+                        disabled={busy}
+                        onClick={() => void onOpenManageAccounts()}
+                        tooltip="Manage Account"
+                      >
+                        <UserIcon />
+                      </IconButton>
+                    ) : null}
+                    <IconButton
+                      className="tool-button"
+                      disabled={busy || (desktopEnvironment && !canOpenProjectsForSelectedProfile)}
+                      onClick={() => {
+                        setProjectName('')
+                        setShowProjectDialog('create')
+                      }}
+                      tooltip="Create Project"
+                    >
+                      <PlusIcon />
+                    </IconButton>
+                  </div>
                 </div>
                 <div className="project-picker__card-body">
                   <div className="project-picker__filters">

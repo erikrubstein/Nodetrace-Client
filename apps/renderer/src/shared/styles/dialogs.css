@@ -121,6 +121,13 @@
   gap: 10px;
 }
 
+.project-picker__card-actions-inline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .project-picker__card-body {
   min-height: 0;
   display: grid;

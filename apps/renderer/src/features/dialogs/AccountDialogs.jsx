@@ -29,11 +29,11 @@ export default function AccountDialogs({
               <button className="ghost-button" disabled={busy} onClick={() => setAccountDialog('password')} type="button">
                 Change Password
               </button>
-              <button className="danger-button" disabled={busy} onClick={() => setAccountDialog('delete-account')} type="button">
-                Delete Account
-              </button>
               <button className="ghost-button" disabled={busy} onClick={logoutUser} type="button">
                 Logout
+              </button>
+              <button className="danger-button" disabled={busy} onClick={() => setAccountDialog('delete-account')} type="button">
+                Delete Account
               </button>
             </div>
             <div className="dialog__actions">

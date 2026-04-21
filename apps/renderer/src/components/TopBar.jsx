@@ -62,6 +62,8 @@ export default function TopBar({
   undo,
   uploadFiles,
   onCheckForUpdates = null,
+  onOpenManageAccounts = null,
+  manageAccountsLabel = 'Manage Account',
   onOpenManageServerProfiles = null,
   onApplyTheme = null,
   onResetCache = null,
@@ -500,6 +502,18 @@ export default function TopBar({
           </button>
           {openMenu === 'settings' ? (
             <div className="menu-panel">
+              {onOpenManageAccounts ? (
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    onOpenManageAccounts()
+                    setOpenMenu(null)
+                  }}
+                  type="button"
+                >
+                  {manageAccountsLabel}
+                </button>
+              ) : null}
               {onOpenManageServerProfiles ? (
                 <button
                   className="menu-item"

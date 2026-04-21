@@ -5132,6 +5132,8 @@ function MainApp() {
         triggerAddPhoto={triggerAddPhoto}
         triggerAddPhotoNode={triggerAddPhotoNode}
         onCheckForUpdates={checkForUpdates}
+        onOpenManageAccounts={!desktopEnvironment ? () => openAccountManager() : null}
+        manageAccountsLabel="Manage Account"
         onOpenManageServerProfiles={desktopEnvironment ? () => openAccountManager() : null}
         onOpenNewWindow={desktopEnvironment ? () => openDesktopMainWindow() : null}
         onApplyTheme={applyThemePreference}
