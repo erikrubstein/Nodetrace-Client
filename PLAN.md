@@ -9,7 +9,7 @@ The goal is not cosmetic cleanup. The goal is to make the codebase easier to cha
 - reducing the number of oversized files
 - creating real directory boundaries around domains
 - making module ownership clearer
-- adding layered `CONTEXT.md` files so a new engineer or agent can orient quickly
+- adding layered `AGENTS.md` files so a new engineer or agent can orient quickly
 - defining a maintenance workflow so the structure stays healthy as the app grows
 
 This plan should be updated if the direction changes materially.
@@ -45,7 +45,7 @@ The refactor should follow these principles:
 3. Prefer small modules with explicit ownership.
 4. Keep shared utilities generic; feature-specific logic should stay with the feature.
 5. Avoid speculative abstraction. Extract only real seams.
-6. `CONTEXT.md` files must describe real boundaries, not aspirational ones.
+6. `AGENTS.md` files must describe real boundaries, not aspirational ones.
 7. If a file grows large because it owns multiple concerns, split it before continuing feature work in that area.
 
 ## Target Client Structure
@@ -54,10 +54,10 @@ The renderer should move toward this structure:
 
 ```text
 apps/renderer/src/
-  CONTEXT.md
+  AGENTS.md
 
   app/
-    CONTEXT.md
+    AGENTS.md
     App.jsx
     app-shell/
     commands/
@@ -65,7 +65,7 @@ apps/renderer/src/
     routing/
 
   features/
-    CONTEXT.md
+    AGENTS.md
     project-picker/
     server-profiles/
     workspace/
@@ -79,7 +79,7 @@ apps/renderer/src/
     panels/
 
   shared/
-    CONTEXT.md
+    AGENTS.md
     ui/
     tree/
     image/
@@ -87,9 +87,9 @@ apps/renderer/src/
     utils/
 
   platform/
-    CONTEXT.md
+    AGENTS.md
     desktop/
-      CONTEXT.md
+      AGENTS.md
 ```
 
 This is intentionally feature-first. The existing `components/hooks/lib` split is not enough on its own because it hides domain boundaries.
@@ -112,13 +112,13 @@ The desktop main process should move toward this structure:
 
 ```text
 apps/desktop/
-  CONTEXT.md
+  AGENTS.md
   launcher.cjs
   preload.cjs
   main.js
 
   main/
-    CONTEXT.md
+    AGENTS.md
     bootstrap.js
     windowing.js
     splash.js
@@ -160,7 +160,7 @@ The style system should move toward:
 
 ```text
 shared/styles/
-  CONTEXT.md
+  AGENTS.md
   tokens.css
   base.css
   app-shell.css
@@ -180,11 +180,11 @@ shared/styles/
 - feature styles belong in the nearest meaningful stylesheet, not in one monolithic file.
 - new styling should not go back into a giant global stylesheet unless the style is truly global.
 
-## CONTEXT.md Strategy
+## AGENTS.md Strategy
 
-`CONTEXT.md` files should be layered and become more specific as the directory gets narrower.
+`AGENTS.md` files should be layered and become more specific as the directory gets narrower.
 
-### What a root-level `CONTEXT.md` should contain
+### What a root-level `AGENTS.md` should contain
 
 - overall architecture
 - repo purpose
@@ -192,7 +192,7 @@ shared/styles/
 - global design rules
 - refactor/maintenance workflow
 
-### What a deeper `CONTEXT.md` should contain
+### What a deeper `AGENTS.md` should contain
 
 - the responsibility of that folder
 - what belongs there
@@ -202,14 +202,14 @@ shared/styles/
 - common change paths
 - notes for future editors/agents
 
-### What `CONTEXT.md` files should not become
+### What `AGENTS.md` files should not become
 
 - changelogs
 - giant essays
 - repeated file inventories
 - stale implementation summaries
 
-Each `CONTEXT.md` should stay directional and scoped to its folder.
+Each `AGENTS.md` should stay directional and scoped to its folder.
 
 ## Planned Phases
 
@@ -232,26 +232,26 @@ This refactor should happen in controlled phases.
 
 ### Phase 3: Document the New Shape
 
-- add root and subsystem `CONTEXT.md` files
+- add root and subsystem `AGENTS.md` files
 - describe boundaries, dependencies, invariants, and change paths
 - ensure the documentation reflects the actual structure, not the intended one from before the split
 
 ### Phase 4: Enforce the Workflow
 
 - use the new structure as the standard path for future changes
-- update relevant `CONTEXT.md` files when boundaries or responsibilities materially change
+- update relevant `AGENTS.md` files when boundaries or responsibilities materially change
 - split files again when they accumulate too many unrelated concerns
 
 ## Maintenance Workflow
 
 Future editors and agents should follow this workflow:
 
-1. Read the nearest relevant `CONTEXT.md` files before changing code in a subsystem.
+1. Read the nearest relevant `AGENTS.md` files before changing code in a subsystem.
 2. Prefer the most local folder that clearly owns the change.
 3. If a change crosses boundaries, update the owning boundary docs.
 4. If a file becomes too large because it owns multiple concerns, stop and split it before continuing to pile changes into it.
 5. If a new domain appears repeatedly, create a new directory for it instead of burying it in a generic bucket.
-6. When a refactor materially changes structure or ownership, update the affected `CONTEXT.md` files in the same change.
+6. When a refactor materially changes structure or ownership, update the affected `AGENTS.md` files in the same change.
 
 ## Explicit Rule For Future Growth
 
@@ -265,13 +265,13 @@ If a change is significant enough to affect:
 - important invariants
 - platform-specific behavior
 
-then the relevant `CONTEXT.md` files must be updated as part of that work.
+then the relevant `AGENTS.md` files must be updated as part of that work.
 
 If an area starts becoming hard to reason about because one file is absorbing too many responsibilities, that is a signal to re-architect the boundary:
 
 - create a new subdirectory if needed
 - move cohesive logic into smaller modules
-- add or update `CONTEXT.md`
+- add or update `AGENTS.md`
 
 ## Immediate Focus
 

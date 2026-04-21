@@ -27,15 +27,15 @@ The immediate hotspots are:
 ## Invariants
 - New feature logic should not be dumped back into a giant top-level file if a clearer feature boundary exists.
 - Shared modules must stay generic. If a helper knows too much about a specific feature, move it closer to that feature.
-- `CONTEXT.md` files describe real boundaries, not aspirational ones.
+- `AGENTS.md` files describe real boundaries, not aspirational ones.
 
 ## Workflow For Future Editors
-1. Read the nearest relevant `CONTEXT.md` files before making changes.
+1. Read the nearest relevant `AGENTS.md` files before making changes.
 2. Place changes in the narrowest folder that clearly owns them.
-3. If a significant change affects ownership, invariants, or change paths, update the relevant `CONTEXT.md` files in the same change.
+3. If a significant change affects ownership, invariants, or change paths, update the relevant `AGENTS.md` files in the same change.
 4. If a file grows large because it holds multiple concerns, stop and split it into a new module boundary or subdirectory before continuing to add more behavior.
 
 ## Notes For Agents
 - Prefer domain-first placement over `components/hooks/lib` dumping.
-- If a refactor creates a new stable subsystem, add a `CONTEXT.md` at that boundary.
+- If a refactor creates a new stable subsystem, add an `AGENTS.md` at that boundary.
 - If a change cannot be placed cleanly, that is a signal the architecture needs another boundary, not a signal to ignore the structure.

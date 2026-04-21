@@ -309,7 +309,7 @@ Normal local use does not require much configuration on the client side. The bac
 
 For implementation details and contribution guidance, see:
 
-- [../CONTEXT.md](../CONTEXT.md)
+- [../AGENTS.md](../AGENTS.md)
 
 That document explains:
 
