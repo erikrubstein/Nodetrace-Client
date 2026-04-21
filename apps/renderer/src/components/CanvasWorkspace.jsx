@@ -233,6 +233,18 @@ export default function CanvasWorkspace({
     }
   }, [])
 
+  function blurActiveTextInput() {
+    const activeElement = document.activeElement
+    if (
+      activeElement instanceof HTMLInputElement ||
+      activeElement instanceof HTMLTextAreaElement ||
+      activeElement instanceof HTMLSelectElement ||
+      activeElement?.isContentEditable
+    ) {
+      activeElement.blur()
+    }
+  }
+
   return (
     <section
       ref={viewportRef}
@@ -434,6 +446,7 @@ export default function CanvasWorkspace({
               void saveNodeDraft(editTargetNode, editForm)
             }}
             onPointerDown={(event) => {
+              blurActiveTextInput()
               event.preventDefault()
               event.stopPropagation()
               if (item.node.type === 'collapsed-group') {

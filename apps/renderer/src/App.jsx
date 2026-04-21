@@ -703,6 +703,29 @@ function MainApp() {
     setRightSidebarOpen(true)
   }, [panelDock])
 
+  const ensureSidebarPanelVisible = useCallback((panelId) => {
+    if (!panelId) {
+      return
+    }
+    if (!isPanelWindow && isDesktopEnvironment() && poppedOutPanelIds.includes(panelId)) {
+      dockPanelIntoSidebar(panelId)
+      return
+    }
+
+    const side = panelDock[panelId]
+    const minWidth = getPanelMinWidth(panelId)
+    if (side === 'left') {
+      setLeftSidebarWidth((current) => Math.max(current, minWidth))
+      setLeftActivePanel(panelId)
+      setLeftSidebarOpen(true)
+      return
+    }
+
+    setRightSidebarWidth((current) => Math.max(current, minWidth))
+    setRightActivePanel(panelId)
+    setRightSidebarOpen(true)
+  }, [dockPanelIntoSidebar, isPanelWindow, panelDock, poppedOutPanelIds])
+
   function openSidebarContextMenu(event) {
     setContextMenu(null)
     const estimatedMenuWidth = 220
@@ -4097,8 +4120,13 @@ function MainApp() {
 
       if (event.key === 'F2' && selectedNode) {
         event.preventDefault()
-        nameInputRef.current?.focus()
-        nameInputRef.current?.select()
+        ensureSidebarPanelVisible('inspector')
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            nameInputRef.current?.focus()
+            nameInputRef.current?.select()
+          })
+        })
         return
       }
 
@@ -4138,7 +4166,7 @@ function MainApp() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [focusPathMode, nameInputRef, redo, selectedNode, setCollapsed, undo])
+  }, [ensureSidebarPanelVisible, focusPathMode, nameInputRef, redo, selectedNode, setCollapsed, undo])
 
   async function deleteNode() {
     if (!selectedNode) {
