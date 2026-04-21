@@ -30,6 +30,7 @@ export function useAppShellCommands({
   setProjectListLoading,
   setProjectPickerLoading,
   projectPickerProfileId,
+  selectedProjectId,
   setProjectPickerProfileId,
   setProjects,
   setSelectedProjectId,
@@ -271,6 +272,11 @@ export function useAppShellCommands({
     if (!normalizedProfileId || !normalizedProjectId) {
       return
     }
+    const activeProfileId = String(desktopServerState.selectedProfileId || '').trim()
+    const activeProjectId = String(selectedProjectId || '').trim()
+    if (activeProfileId === normalizedProfileId && activeProjectId === normalizedProjectId) {
+      return
+    }
 
     setBusy(true)
     setError('')
@@ -303,6 +309,7 @@ export function useAppShellCommands({
     flushActiveProjectUi,
     applyDesktopProfileAuthState,
     resolveDesktopProfileUser,
+    selectedProjectId,
     setBusy,
     setDesktopServerState,
     setError,

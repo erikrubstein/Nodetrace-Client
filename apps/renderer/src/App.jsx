@@ -1710,6 +1710,7 @@ function MainApp() {
     setProjectListLoading,
     setProjectPickerLoading,
     projectPickerProfileId,
+    selectedProjectId,
     setProjectPickerProfileId,
     setProjects,
     setSelectedProjectId,
