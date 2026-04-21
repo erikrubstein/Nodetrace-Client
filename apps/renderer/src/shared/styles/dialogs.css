@@ -79,6 +79,28 @@
   overflow: visible;
 }
 
+.project-picker__brand {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 16px 0 14px;
+  margin-bottom: 28px;
+}
+
+.project-picker__brand-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.project-picker__brand-title {
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  line-height: 1;
+}
+
 .project-picker-dialog--accounts {
   width: min(920px, calc(100vw - 24px));
 }

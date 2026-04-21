@@ -1,6 +1,9 @@
 import ConfirmDialog from '../../components/ConfirmDialog'
 import IconButton from '../../components/IconButton'
 import { GearIcon, GlobeIcon, PlusIcon, UserIcon, UsersIcon, WarningIcon } from '../../components/icons'
+import { resolvePublicAssetUrl } from '../../lib/runtimePaths'
+
+const nodetraceLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
 export default function ProjectDialogs({
   busy,
@@ -294,6 +297,10 @@ export default function ProjectDialogs({
           role="presentation"
         >
           <div className="dialog dialog--wide dialog--frameless project-picker-dialog" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="project-picker__brand">
+              <img alt="Nodetrace" className="project-picker__brand-logo" src={nodetraceLogoUrl} />
+              <div className="project-picker__brand-title">Nodetrace</div>
+            </div>
             <div className={`project-picker${desktopEnvironment ? ' project-picker--desktop' : ''}`}>
               {desktopEnvironment ? (
                 <div className="project-picker__card project-picker__card--servers">
