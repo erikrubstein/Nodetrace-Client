@@ -79,7 +79,7 @@ export default function InspectorPanel({
                   onBlur={() => void saveNodeDraft(editTargetNode, editForm)}
                 />
               </label>
-              <label>
+              <div className="field-stack__control">
                 <span>Tags</span>
                 <TagInput
                   availableTags={availableTags}
@@ -92,7 +92,7 @@ export default function InspectorPanel({
                   }}
                   value={editForm.tags}
                 />
-              </label>
+              </div>
             </PanelSection>
           ) : (
             <PanelSection className="field-stack" title="Status">

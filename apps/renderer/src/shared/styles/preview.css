@@ -329,6 +329,14 @@
   gap: 8px;
 }
 
+.field-stack__control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .preview-panel__controls {
   gap: 6px;
 }
@@ -365,6 +373,20 @@
   padding: 6px 8px;
   border-radius: 4px;
   background: var(--control-bg);
+  cursor: text;
+  transition: background 0.16s ease;
+}
+
+.tag-input:hover .tag-input__field {
+  background: color-mix(in srgb, var(--control-bg) 96%, var(--text) 4%);
+}
+
+.tag-input__field--focused {
+  background: color-mix(in srgb, var(--control-bg) 92%, var(--text) 8%);
+}
+
+.tag-input:hover .tag-input__field--focused {
+  background: color-mix(in srgb, var(--control-bg) 92%, var(--text) 8%);
 }
 
 .tag-input__chip {
@@ -381,13 +403,17 @@
 
 .tag-input__chip-remove {
   width: 16px;
+  min-width: 16px;
+  max-width: 16px;
   height: 16px;
+  flex: 0 0 16px;
   display: grid;
   place-items: center;
   padding: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
+  line-height: 1;
 }
 
 .tag-input__chip-remove:hover:not(:disabled) {
@@ -396,12 +422,21 @@
 }
 
 .tag-input__input {
+  width: auto;
   min-width: 96px;
   flex: 1 1 120px;
   padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
+  transition: none;
+}
+
+.tag-input__input:hover,
+.tag-input__input:focus,
+.tag-input__input:focus-visible {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .tag-input__input:focus {

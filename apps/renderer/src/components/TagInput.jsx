@@ -19,8 +19,10 @@ function normalizeTagList(tags) {
 
 export default function TagInput({ availableTags, onBlur, onChange, onCommit, placeholder = 'Add tag', value }) {
   const containerRef = useRef(null)
+  const inputRef = useRef(null)
   const blurTimerRef = useRef(null)
   const [inputValue, setInputValue] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
 
@@ -55,8 +57,11 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
     onChange(nextValue)
     onCommit?.(nextValue)
     setInputValue('')
-    setMenuOpen(false)
-    setHighlightedIndex(-1)
+    setMenuOpen(true)
+    setHighlightedIndex(0)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
   }
 
   function removeTag(tagToRemove) {
@@ -65,16 +70,52 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
     onCommit?.(nextValue)
   }
 
+  function restoreLastTagToInput() {
+    const lastTag = normalizedValue[normalizedValue.length - 1]
+    if (!lastTag) {
+      return
+    }
+    const nextValue = normalizedValue.slice(0, -1)
+    onChange(nextValue)
+    onCommit?.(nextValue)
+    setInputValue(lastTag)
+    setMenuOpen(true)
+    setHighlightedIndex(-1)
+  }
+
   return (
     <div className="tag-input" ref={containerRef}>
-      <div className="tag-input__field" onClick={() => containerRef.current?.querySelector('input')?.focus()} role="presentation">
+      <div
+        className={`tag-input__field ${isFocused ? 'tag-input__field--focused' : ''}`.trim()}
+        onMouseDown={(event) => {
+          if (!(event.target instanceof Element)) {
+            return
+          }
+          if (event.target.closest('.tag-input__chip-remove')) {
+            return
+          }
+          event.preventDefault()
+          window.clearTimeout(blurTimerRef.current)
+          inputRef.current?.focus()
+          setMenuOpen(true)
+        }}
+        role="presentation"
+      >
         {normalizedValue.map((tag) => (
           <span className="tag-input__chip" key={tag}>
             <span>{tag}</span>
             <button
               aria-label={`Remove ${tag}`}
               className="tag-input__chip-remove"
-              onClick={() => removeTag(tag)}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                removeTag(tag)
+              }}
               type="button"
             >
               <i aria-hidden="true" className="fa-solid fa-xmark" />
@@ -83,6 +124,7 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
         ))}
         <input
           className="tag-input__input"
+          ref={inputRef}
           placeholder={!normalizedValue.length ? placeholder : ''}
           value={inputValue}
           onBlur={() => {
@@ -90,6 +132,7 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
               if (inputValue.trim()) {
                 commitTag(inputValue)
               }
+              setIsFocused(false)
               setMenuOpen(false)
               onBlur?.()
             }, 120)
@@ -98,7 +141,11 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
             setInputValue(event.target.value)
             setMenuOpen(true)
           }}
-          onFocus={() => setMenuOpen(true)}
+          onFocus={() => {
+            window.clearTimeout(blurTimerRef.current)
+            setIsFocused(true)
+            setMenuOpen(true)
+          }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
               if (!suggestions.length) {
@@ -134,7 +181,7 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
             }
             if (event.key === 'Backspace' && !inputValue && normalizedValue.length) {
               event.preventDefault()
-              removeTag(normalizedValue[normalizedValue.length - 1])
+              restoreLastTagToInput()
             }
           }}
           type="text"
