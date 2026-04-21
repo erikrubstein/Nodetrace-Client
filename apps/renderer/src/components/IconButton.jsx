@@ -1,5 +1,6 @@
 export default function IconButton({ children, tooltip, ...props }) {
   const {
+    'aria-label': ariaLabel,
     className,
     onClick,
     onPointerDown,
@@ -11,6 +12,7 @@ export default function IconButton({ children, tooltip, ...props }) {
   const button = (
     <button
       {...restProps}
+      aria-label={ariaLabel || tooltip || restProps['aria-label']}
       className={buttonClassName}
       onClick={(event) => {
         event.stopPropagation()

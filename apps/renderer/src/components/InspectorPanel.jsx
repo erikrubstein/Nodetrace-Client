@@ -104,16 +104,18 @@ export default function InspectorPanel({
             <PanelSection className="field-stack" title="Status">
               <label>
                 <span>Review Status</span>
-                <select
-                  className={`node-review-status node-review-status--${selectedNode.reviewStatus || 'new'}`}
-                  disabled={busy}
-                  value={selectedNode.reviewStatus || 'new'}
-                  onChange={(event) => void patchNodeReviewStatus(selectedNode.id, event.target.value)}
-                >
-                  <option value="new">New</option>
-                  <option value="needs_attention">Needs Attention</option>
-                  <option value="reviewed">Reviewed</option>
-                </select>
+                <div className={`node-review-status-shell node-review-status-shell--${selectedNode.reviewStatus || 'new'}`}>
+                  <select
+                    className={`node-review-status node-review-status--${selectedNode.reviewStatus || 'new'}`}
+                    disabled={busy}
+                    value={selectedNode.reviewStatus || 'new'}
+                    onChange={(event) => void patchNodeReviewStatus(selectedNode.id, event.target.value)}
+                  >
+                    <option value="new">New</option>
+                    <option value="needs_attention">Needs Attention</option>
+                    <option value="reviewed">Reviewed</option>
+                  </select>
+                </div>
               </label>
             </PanelSection>
           ) : null}

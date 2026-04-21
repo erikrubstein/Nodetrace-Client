@@ -619,18 +619,71 @@
   color: #171717;
 }
 
-.node-review-status--new {
-  background: var(--control-bg);
+.node-review-status-shell {
+  border-radius: 4px;
+  overflow: hidden;
+  transition:
+    background-color var(--transition-theme),
+    color var(--transition-theme);
+}
+
+.node-review-status {
+  background: transparent !important;
+  color: inherit;
+}
+
+.node-review-status:hover:not(:disabled),
+.node-review-status:focus,
+.node-review-status:focus-visible {
+  background: transparent !important;
+  color: inherit;
+}
+
+.node-review-status option {
+  background-color: var(--panel);
   color: var(--text);
 }
 
-.node-review-status--needs_attention {
-  background: #caa43a;
+.node-review-status-shell--new {
+  background-color: var(--control-bg);
+  color: var(--text);
+}
+
+.node-review-status-shell--new:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--control-bg) 96%, var(--text) 4%);
+}
+
+.node-review-status-shell--new:focus-within {
+  background-color: color-mix(in srgb, var(--control-bg) 92%, var(--text) 8%);
+}
+
+.node-review-status-shell--needs_attention {
+  background-color: #caa43a;
   color: #171717;
 }
 
-.node-review-status--reviewed {
-  background: #4f9953;
+.node-review-status-shell--needs_attention:hover:not(:disabled) {
+  background-color: color-mix(in srgb, #caa43a 94%, #171717 6%);
+  color: #171717;
+}
+
+.node-review-status-shell--needs_attention:focus-within {
+  background-color: color-mix(in srgb, #caa43a 88%, #171717 12%);
+  color: #171717;
+}
+
+.node-review-status-shell--reviewed {
+  background-color: #4f9953;
+  color: #ffffff;
+}
+
+.node-review-status-shell--reviewed:hover:not(:disabled) {
+  background-color: color-mix(in srgb, #4f9953 94%, #ffffff 6%);
+  color: #ffffff;
+}
+
+.node-review-status-shell--reviewed:focus-within {
+  background-color: color-mix(in srgb, #4f9953 88%, #ffffff 12%);
   color: #ffffff;
 }
 

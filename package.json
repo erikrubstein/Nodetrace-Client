@@ -2,7 +2,9 @@
   "name": "nodetrace",
   "productName": "Nodetrace",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Collaborative visual documentation for hierarchical photo trees.",
+  "author": "SolaSec",
   "type": "module",
   "main": "apps/desktop/launcher.cjs",
   "workspaces": [

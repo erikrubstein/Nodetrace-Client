@@ -1,332 +1,183 @@
-# Nodetrace
+# Nodetrace Client
 
 <p align="center">
-  <img src="./public/nodetrace.svg" alt="Nodetrace logo" width="120" />
+  <img src="./apps/renderer/public/nodetrace.svg" alt="Nodetrace logo" width="140" />
 </p>
 
-Nodetrace is a collaborative visual documentation tool for building and reviewing hierarchical photo trees.
+<p align="center">
+  Collaborative visual documentation for hierarchical photo trees.
+</p>
 
-It is built for workflows where a flat folder of images is not enough: cabinet to subassembly to board to component, with enough structure to support inspection, teardown review, collaboration, AI-assisted identification, and eventual HBOM preparation.
+Nodetrace Client is the front end for building, reviewing, and collaborating on structured photo trees. It ships as both a browser app and an Electron desktop app, and connects to a running Nodetrace Server for authentication, project storage, media, and collaboration.
 
-## What It Does
+## Highlights
 
-Nodetrace lets you:
+- hierarchical project and node model built for real documentation workflows
+- desktop and web clients backed by the same server
+- collaborative editing with presence indicators and shared project access
+- non-destructive image review tools in the preview panel
+- structured identification templates with optional AI-assisted field filling
+- search, filtering, multi-select, and bulk editing for large projects
+- export flows for full Nodetrace backups and conventional media trees
 
-- organize work into a true node tree
-- attach zero, one, or many photos to each node
-- collaborate with other users on the same project
-- assign structured identification templates to nodes
-- review field values one field at a time
-- use AI to assist with field completion
-- inspect and enhance images non-destructively in the preview panel
-- search and filter large projects quickly
-- export either a full Nodetrace backup or a normal media tree
+## Installation
 
-## Core Model
+### Desktop App
 
-- `Project`
-  A complete job with its own hierarchy, templates, settings, collaborators, and media.
-- `Node`
-  The primary structural item in the tree. A node may have no photo, one main photo, or additional attached photos.
+Desktop users should install a packaged release from GitHub Releases:
 
-Every node also has:
+- Windows: download and run the latest `Nodetrace Setup *.exe`
+- macOS: download the latest `.dmg` and drag Nodetrace into `Applications`
 
-- a unique node ID
-- an owner user
-- notes
-- tags
-- review status
-- optional structured identification data
+The desktop app can store multiple server profiles and switch between them.
 
-Every attached photo can also carry:
+### Web App
 
-- original and preview files
-- non-destructive image edits
-- main-photo ordering within the node
+The browser client is served by a Nodetrace Server deployment. End users do not install this repository directly for normal web use.
 
-## Major Features
+## Requirements For Local Development
 
-### Collaboration
+- Node.js 22 or newer recommended
+- npm 10 or newer recommended
+- a running [Nodetrace Server](../Nodetrace-Server/README.md)
 
-- username/password accounts
-- project owners and collaborators
-- optional public projects visible to anyone signed into the same server
-- per-project access control
-- live collaborator presence in the top bar
-- colored node outlines showing what other users currently have selected
-- click a collaborator chip to jump to the node they are viewing
+## Quick Start
 
-### Tree Editing
-
-- create empty nodes and photo nodes
-- add additional photos to existing nodes
-- drag-and-drop reparenting
-- convert a node into an additional photo on another node
-- convert an attached photo into its own child photo node
-- collapse and expand branches
-- multi-select nodes for bulk operations
-- right-drag marquee selection on the canvas
-- bulk template application and template clearing
-- undo/redo support for project edits
-
-### Canvas Workflow
-
-- zoomable and pannable visual tree
-- fit-to-view and focus-selected actions
-- optional background grid
-- selected-node path display
-- selection-aware layout changes that keep the selected node anchored during collapse/expand
-- per-client per-project saved workspace state restored from the last closed project
-
-### Docked Panels
-
-The UI uses left and right docked sidebars with one active panel per side. Panels can be moved between sides.
-
-Current panels include:
-
-- Preview
-- Camera
-- Search
-- Templates
-- Inspector
-- Data
-- Project Settings
-
-Layout is saved per client and per project.
-
-### Search and Filtering
-
-The Search panel supports:
-
-- name search
-- filter by review status
-- filter by notes presence
-- filter by one or more owners
-- filter by one or more templates
-- filter by photo presence
-- filter by pinned selection scope
-- batch-select all results
-- isolate search results on the canvas
-- show completed nodes with a visual checkmark in the results list
-- click a result to select it and focus it on the canvas
-
-### Structured Identification
-
-Nodetrace supports template-driven identification workflows.
-
-Templates define fields such as:
-
-- part number
-- manufacturer
-- identifiers
-- material description
-- confidence
-
-Per node, you can:
-
-- apply a template
-- fill or edit field values
-- mark fields reviewed individually
-- use AI Fill on AI-assisted fields
-
-Templates support:
-
-- manual fields
-- AI-assisted fields
-- template-level AI instructions
-- template-level parent/child scope limits
-
-### AI Assistance
-
-AI Fill is project-scoped and uses the project OpenAI API key managed by the project owner.
-
-Current behavior:
-
-- reviewed fields are never overwritten
-- reviewed field values are still used as trusted context
-- scoped node text is provided before images
-- attached photos are always included for in-scope nodes
-- template-level instructions guide how AI uses bounded context
-
-AI assistance is meant to provide a starting point, not final truth. Human review is still the workflow.
-
-### Preview and Image Enhancement
-
-The Preview panel supports non-destructive, per-photo image adjustments:
-
-- zoom and pan
-- fit view
-- crop
-- rotate 90 degrees
-- brightness
-- contrast
-- exposure
-- sharpness
-- denoise
-- invert colors
-- reset crop
-- reset adjustments
-- copy image
-- download image
-
-These edits do not modify the original uploaded file.
-
-### Capture Workflows
-
-#### Desktop
-
-- add empty nodes, photo nodes, and additional photos directly in the app
-- drag image files into the tree
-- use the Camera panel for live capture
-
-#### Mobile
-
-Nodetrace exposes a `/capture` page for phone uploads tied to the current desktop session.
-
-- connect a phone to the active desktop session
-- capture photos directly on the phone
-- create a new photo node under the selected node
-- add an additional photo to the selected node
-- choose existing photos for either path
-
-## Storage
-
-Project data is owned by the separate `Nodetrace-Server` repo.
-
-The client repo does not persist projects, uploads, or auth sessions as application data.
-
-During the current migration, the live server still points at the existing local data folder:
-
-- `C:\SolaSec\Tools\Nodetrace\Nodetrace-Client\data`
-
-Each image keeps:
-
-- an original-resolution file
-- a lower-resolution preview image for fast rendering
-
-## Export Options
-
-### Export Project
-
-Creates a full backup archive intended for re-import into Nodetrace.
-
-Includes:
-
-- project metadata
-- hierarchy
-- settings
-- collaborators and templates
-- identification data
-- original images
-- preview images
-- non-destructive image edit state
-
-### Export Media Tree
-
-Creates a normal folder-based `.zip` that mirrors the project structure for users who do not use Nodetrace.
-
-## Transition Note
-
-Nodetrace now uses a `node + attached media` storage model. Older variant-based compatibility paths have been removed after a destructive migration of the live server data.
-
-## Tech Stack
-
-- React
-- Vite
-- Electron desktop shell
-
-Repo layout:
-
-- `apps/renderer` - React + Vite UI
-- `apps/desktop` - Electron shell and panel-window orchestration
-- `packages/shared` - shared defaults and sizing metadata used by the client runtimes
-
-## Development
-
-Install dependencies:
+1. Install client dependencies:
 
 ```bash
 npm install
 ```
 
-Run the normal development setup:
-
-```bash
-npm run dev
-```
-
-Run the server separately from the `Nodetrace-Server` repo:
+2. In a separate terminal, start the server from the server repo:
 
 ```bash
 cd ../Nodetrace-Server
+npm install
 npm run dev
 ```
 
-Run desktop development:
+3. Start the client:
+
+Web:
+
+```bash
+npm run dev
+```
+
+Desktop:
 
 ```bash
 npm run dev:desktop
 ```
 
-By default:
+Default local URLs:
 
-- dev frontend: `http://localhost:5173`
-- expected backend/API: `http://localhost:3001`
+- renderer dev server: `http://127.0.0.1:5173`
+- API server: `http://127.0.0.1:3001`
 
-The client repo does not start or manage the server. Run the backend separately.
+## Using Nodetrace
 
-Desktop behavior:
+Typical workflow:
 
-- desktop keeps its own saved server profiles
-- desktop can switch between multiple servers
-- each server keeps its own login session
-- the desktop shell talks to servers through a local Electron proxy
-- each desktop window keeps ephemeral workspace state while open and only persists the last closed state for that client scope
+1. Sign in or create an account on a Nodetrace Server.
+2. Create a project or open an existing one.
+3. Build the node tree and attach photos where needed.
+4. Review notes, tags, status, and identification data in the side panels.
+5. Use search, templates, and preview tools to refine the project.
+6. Collaborate with other users or export the finished result.
 
-Web behavior:
+## Development Scripts
 
-- web uses one backend at a time
-- no server picker is shown in the browser
+- `npm run dev`
+  Starts the web renderer in development mode.
+- `npm run dev:desktop`
+  Starts the renderer plus Electron desktop shell.
+- `npm run dev:desktop:mac-ui`
+  Runs the desktop app with the mac-specific renderer UI override for local testing on non-macOS hosts.
+- `npm run dev:desktop:win-ui`
+  Runs the desktop app with the Windows-specific renderer UI override.
+- `npm run dev:renderer`
+  Starts only the Vite renderer workspace.
+- `npm run build:web`
+  Builds the web renderer into `dist/`.
+- `npm run preview:web`
+  Serves the built renderer locally.
+- `npm run dist:win`
+  Builds the Windows NSIS installer.
+- `npm run dist:mac`
+  Builds the macOS DMG package. Must be run on macOS for real release validation.
+- `npm run lint`
+  Lints the whole client repo.
+- `npm run test:e2e`
+  Runs the Playwright smoke test. Requires a running server.
 
-Release-oriented manual verification lives in [QA_CHECKLIST.md](C:/SolaSec/Tools/Nodetrace/QA_CHECKLIST.md).
+## Building Release Artifacts
 
-Useful root scripts:
+Web build:
 
-- `npm run dev` - renderer web dev
-- `npm run dev:desktop` - renderer + Electron desktop dev against a running server
-- `npm run dev:renderer` - renderer only
-- `npm run start:desktop` - Electron app using the built local renderer
-- `npm run build` - build the renderer into `dist`
-- `npm run preview:web` - preview the built renderer
-- `npm run lint` - lint the whole repo
-- `$env:NODETRACE_E2E_SERVER_URL='http://127.0.0.1:3001'; npm run test:e2e` - Playwright smoke test against a running server in PowerShell
+```bash
+npm run build:web
+```
 
-## Environment Notes
+Windows installer:
 
-Normal local use does not require much configuration on the client side. The backend has its own `.env` and runtime configuration in the separate server repo.
+```bash
+npm run dist:win
+```
 
-## Contributor Notes
+macOS package:
 
-For implementation details and contribution guidance, see:
+```bash
+npm run dist:mac
+```
 
-- [../AGENTS.md](../AGENTS.md)
+Generated desktop installers are written to `release/`.
 
-That document explains:
+## Testing
 
-- how the app is structured
-- how client and server responsibilities are split
-- where new feature logic should live
-- the patterns already used for panels, hooks, persistence, and async state
+Lint:
 
-## Intended Use
+```bash
+npm run lint
+```
 
-Nodetrace is especially useful for:
+Smoke test against a running local server:
 
-- industrial equipment inspection
-- teardown documentation
-- board and component photography
-- structured evidence capture
-- collaborative reverse-engineering workflows
-- HBOM preparation
+PowerShell:
 
-It is not intended to be a general photo gallery. It is a structured visual trace tool for documenting real-world systems.
+```powershell
+$env:NODETRACE_E2E_SERVER_URL='http://127.0.0.1:3001'
+npm run test:e2e
+```
+
+Bash:
+
+```bash
+NODETRACE_E2E_SERVER_URL=http://127.0.0.1:3001 npm run test:e2e
+```
+
+## Repository Layout
+
+- `apps/renderer/`
+  React + Vite web client
+- `apps/desktop/`
+  Electron desktop shell, preload bridge, and main-process integrations
+- `packages/shared/`
+  Shared defaults and project metadata used by the client runtimes
+- `tests/e2e/`
+  Playwright smoke coverage
+
+## Contributing
+
+1. Read the nearest relevant [AGENTS.md](./AGENTS.md) files before editing code.
+2. Keep changes within the folder that actually owns the behavior.
+3. Update `AGENTS.md` files when boundaries or responsibilities materially change.
+4. Run the relevant validation commands before opening a pull request:
+   - `npm run build:web`
+   - `npm run lint`
+   - `npm run test:e2e` when the change affects primary user flows
+
+## License
+
+[MIT](./LICENSE)

@@ -18,9 +18,9 @@ test('user can register, create a project, and add a node', async ({ page }) => 
   await page.getByRole('button', { name: 'Create Account' }).click()
 
   await expect(page.getByRole('button', { name: 'File' })).toBeVisible()
+  await expect(page.getByRole('dialog')).toBeVisible()
 
-  await page.getByRole('button', { name: 'File' }).click()
-  await page.getByRole('button', { name: 'Create Project' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
   await page.getByPlaceholder('Project name').fill(projectName)
   await page.getByRole('button', { name: 'Create' }).click()
 
