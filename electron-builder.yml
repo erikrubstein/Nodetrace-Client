@@ -15,7 +15,7 @@ extraMetadata:
 mac:
   category: public.app-category.graphics-design
   icon: build/icon.icns
-  identity: null
+  identity: "-"
   target:
     - dmg
 win:
