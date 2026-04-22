@@ -14,12 +14,12 @@ extraMetadata:
   main: apps/desktop/launcher.cjs
 mac:
   category: public.app-category.graphics-design
-  icon: build/icon.icns
+  icon: build/mac/nodetrace_icon/nodetrace.icon
   identity: "-"
   target:
     - dmg
 dmg:
-  icon: build/icon.icns
+  icon: build/mac/dmg-icon.icns
 win:
   icon: build/icon.ico
   target:
