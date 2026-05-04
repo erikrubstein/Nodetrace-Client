@@ -167,7 +167,8 @@ export default function useProjectSync({
       }
 
       try {
-        const preferredProjectId = requireManualProjectSelection ? null : selectedProjectId || null
+        const urlProjectId = getUrlState().projectId
+        const preferredProjectId = requireManualProjectSelection ? null : selectedProjectId || urlProjectId || null
         await loadProjects(preferredProjectId)
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
@@ -196,7 +197,8 @@ export default function useProjectSync({
 
     async function refreshProjects() {
       try {
-        const preferredProjectId = requireManualProjectSelection ? null : selectedProjectId || null
+        const urlProjectId = getUrlState().projectId
+        const preferredProjectId = requireManualProjectSelection ? null : selectedProjectId || urlProjectId || null
         await loadProjects(preferredProjectId, { silent: true })
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
@@ -240,10 +242,7 @@ export default function useProjectSync({
       return
     }
 
-    const urlState = getUrlState()
-    const preferredNodeId = selectedProjectId === urlState.projectId ? urlState.nodeId : null
-
-    loadTree(selectedProjectId, preferredNodeId).catch((loadError) => {
+    loadTree(selectedProjectId, null).catch((loadError) => {
       if (loadError instanceof ApiError && loadError.status === 401) {
         onAuthLost?.()
         return

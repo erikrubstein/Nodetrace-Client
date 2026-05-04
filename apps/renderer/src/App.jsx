@@ -104,9 +104,12 @@ const PANEL_WINDOW_TITLES = {
 }
 
 function MainApp() {
-  const { panelWindowId } = getUrlState()
+  const initialUrlStateRef = useRef(getUrlState())
+  const { panelWindowId } = initialUrlStateRef.current
   const desktopEnvironment = isDesktopEnvironment()
   const isPanelWindow = Boolean(panelWindowId)
+  const initialProjectId =
+    !desktopEnvironment && !isPanelWindow ? initialUrlStateRef.current.projectId || null : null
   const initialPanelLayoutRef = useRef(readStoredClientPanelLayout())
   const windowInstanceIdRef = useRef(`window-${Math.random().toString(36).slice(2, 10)}`)
   const applyingRemoteSelectionRef = useRef(false)
@@ -128,7 +131,7 @@ function MainApp() {
   const [projectPickerProjectsProfileId, setProjectPickerProjectsProfileId] = useState(null)
   const [projectPickerProjectsOwnerUserId, setProjectPickerProjectsOwnerUserId] = useState(null)
   const [projectPickerLoading, setProjectPickerLoading] = useState(false)
-  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
   const [manualProjectSelectionRequired, setManualProjectSelectionRequired] = useState(false)
   const [pendingProjectTransitionId, setPendingProjectTransitionId] = useState(null)
   const [tree, setTree] = useState(null)
@@ -1946,16 +1949,20 @@ function MainApp() {
     if (pendingProjectTransitionId) {
       return
     }
-    if (currentUser && !selectedProjectId && !tree && showProjectDialog == null) {
+    if (!currentUser) {
+      return
+    }
+    const urlProjectId = getUrlState().projectId
+    if (!selectedProjectId && !tree && !urlProjectId && showProjectDialog == null) {
       setShowProjectDialog('open')
     }
-    if (currentUser && !selectedProjectId && !tree && !manualProjectSelectionRequired) {
+    if (!selectedProjectId && !tree && !manualProjectSelectionRequired) {
       return
     }
-    if (currentUser && selectedProjectId && !tree) {
+    if (selectedProjectId && !tree) {
       return
     }
-    updateUrlState(selectedProjectId, selectedNodeId || getUrlState().nodeId)
+    updateUrlState(selectedProjectId)
   }, [authReady, currentUser, manualProjectSelectionRequired, pendingProjectTransitionId, selectedNodeId, selectedProjectId, showProjectDialog, tree])
 
   useEffect(() => {
@@ -2528,7 +2535,8 @@ function MainApp() {
       if (desktopEnvironment) {
         await refreshDesktopServerState()
       }
-      await loadProjects(null)
+      const preferredProjectId = desktopEnvironment ? null : getUrlState().projectId || null
+      await loadProjects(preferredProjectId)
     } catch (submitError) {
       setError(submitError.message)
     } finally {
