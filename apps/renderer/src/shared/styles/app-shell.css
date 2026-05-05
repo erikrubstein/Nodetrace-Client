@@ -171,6 +171,16 @@
   transform: translateX(-50%) translateY(0) !important;
 }
 
+.topbar__right .topbar__mobile-capture-tooltip--edge .icon-tooltip {
+  left: auto !important;
+  right: 0 !important;
+  transform: translateY(-2px) !important;
+}
+
+.topbar__right .topbar__mobile-capture-tooltip--edge:hover .icon-tooltip {
+  transform: translateY(0) !important;
+}
+
 .main-layout {
   min-height: 0;
   height: 100%;

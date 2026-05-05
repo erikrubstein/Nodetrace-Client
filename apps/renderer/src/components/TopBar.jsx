@@ -689,7 +689,9 @@ export default function TopBar({
           className={mobileConnectionCount > 0 ? 'icon-button--connected' : ''}
           onClick={() => setSessionDialogOpen(true)}
           tooltip="Mobile Capture"
-          wrapperClassName="topbar__mobile-capture-tooltip"
+          wrapperClassName={`topbar__mobile-capture-tooltip${
+            showDesktopControls ? '' : ' topbar__mobile-capture-tooltip--edge'
+          }`}
         >
           {mobileConnectionCount > 0 ? (
             <span className="icon-count-wrap">
