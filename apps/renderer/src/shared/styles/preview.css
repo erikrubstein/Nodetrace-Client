@@ -303,7 +303,7 @@
   border-radius: 999px;
   border: 2px solid color-mix(in srgb, var(--selected) 22%, transparent);
   border-top-color: var(--selected);
-  animation: spin 0.9s linear infinite;
+  animation: project-picker-spinner 0.9s linear infinite;
 }
 
 .camera-video {
