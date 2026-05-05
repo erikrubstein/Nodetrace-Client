@@ -9,6 +9,7 @@ import CollaboratorsPanel from './components/CollaboratorsPanel'
 import DesktopServerManager from './components/DesktopServerManager'
 import DockedSidebar from './components/DockedSidebar'
 import FieldsPanel from './components/FieldsPanel'
+import FullscreenPreviewOverlay from './components/FullscreenPreviewOverlay'
 import InspectorPanel from './components/InspectorPanel'
 import MobileEntryScreen from './components/MobileEntryScreen'
 import PanelShell from './components/PanelShell'
@@ -171,6 +172,7 @@ function MainApp() {
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState({ x: 80, y: 80, scale: 1 })
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
+  const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(initialPanelLayoutRef.current.leftSidebarOpen)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(initialPanelLayoutRef.current.rightSidebarOpen)
   const [leftActivePanel, setLeftActivePanel] = useState(initialPanelLayoutRef.current.leftActivePanel)
@@ -1964,6 +1966,12 @@ function MainApp() {
     }
     updateUrlState(selectedProjectId)
   }, [authReady, currentUser, manualProjectSelectionRequired, pendingProjectTransitionId, selectedNodeId, selectedProjectId, showProjectDialog, tree])
+
+  useEffect(() => {
+    if (fullscreenPreviewOpen && (!selectedNode || !(selectedNode.imageUrl || selectedNode.previewUrl))) {
+      setFullscreenPreviewOpen(false)
+    }
+  }, [fullscreenPreviewOpen, selectedNode])
 
   useEffect(() => {
     if (!isDesktopEnvironment() || typeof BroadcastChannel === 'undefined') {
@@ -4149,15 +4157,18 @@ function MainApp() {
       }
 
       if (event.key === 'Escape') {
+        if (fullscreenPreviewOpen) {
+          event.preventDefault()
+          setFullscreenPreviewOpen(false)
+          return
+        }
         setContextMenu(null)
         return
       }
 
-      if (event.key === ' ' && selectedNode && !isTypingTarget && !focusPathMode) {
-        if (selectedNode.children?.length || selectedNode.collapsed) {
-          event.preventDefault()
-          void setCollapsed(selectedNode.id, !selectedNode.collapsed)
-        }
+      if (event.key === ' ' && (selectedNode?.imageUrl || selectedNode?.previewUrl) && !isTypingTarget) {
+        event.preventDefault()
+        setFullscreenPreviewOpen((current) => !current)
         return
       }
 
@@ -4174,7 +4185,16 @@ function MainApp() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [ensureSidebarPanelVisible, focusPathMode, nameInputRef, redo, selectedNode, setCollapsed, undo])
+  }, [ensureSidebarPanelVisible, focusPathMode, fullscreenPreviewOpen, nameInputRef, redo, selectedNode, undo])
+
+  const handleCanvasNodeDoubleClick = useCallback((node) => {
+    if (!node || focusPathMode) {
+      return
+    }
+    if (node.children?.length || node.collapsed) {
+      void setCollapsed(node.id, !node.collapsed)
+    }
+  }, [focusPathMode, setCollapsed])
 
   async function deleteNode() {
     if (!selectedNode) {
@@ -5224,6 +5244,7 @@ function MainApp() {
           imageLoadRevision={imageLoadRevision}
           markImageLoaded={markImageLoaded}
           multiSelectedNodeIds={multiSelectedNodeIds}
+          onNodeDoubleClick={handleCanvasNodeDoubleClick}
           openNewNodeDialog={openNewNodeDialog}
           triggerAddPhoto={triggerAddPhoto}
           triggerAddPhotoNode={triggerAddPhotoNode}
@@ -5255,12 +5276,12 @@ function MainApp() {
           }
           toggleGrid={toggleGridPreference}
           toggleMultiSelection={toggleMultiSelection}
-            transform={transform}
-            tree={tree}
-            uploadFiles={uploadFiles}
-            viewportSize={viewportSize}
-            viewportRef={viewportRef}
-          />
+          transform={transform}
+          tree={tree}
+          uploadFiles={uploadFiles}
+          viewportSize={viewportSize}
+          viewportRef={viewportRef}
+        />
         <DockedSidebar
           activePanel={activeRightPanel}
           canPopout={canPopoutPanels && Boolean(activeRightPanel)}
@@ -5297,6 +5318,12 @@ function MainApp() {
           </div>
         </div>
       </main>
+
+      <FullscreenPreviewOverlay
+        open={fullscreenPreviewOpen}
+        onClose={() => setFullscreenPreviewOpen(false)}
+        selectedNode={selectedNode}
+      />
 
       {sidebarContextMenu ? (
         <div

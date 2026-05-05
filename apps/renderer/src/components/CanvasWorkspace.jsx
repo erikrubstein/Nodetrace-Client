@@ -153,6 +153,7 @@ export default function CanvasWorkspace({
   uploadFiles,
   viewportSize,
   viewportRef,
+  onNodeDoubleClick,
 }) {
   const isolatedNodeIdSet = useMemo(() => {
     if (canvasIsolationMode === 'search') {
@@ -432,18 +433,20 @@ export default function CanvasWorkspace({
               if (item.node.type === 'collapsed-group') {
                 return
               }
-              if (event.ctrlKey || event.metaKey) {
-                if (!focusPathMode) {
-                  void setCollapsed(item.id, !item.node.collapsed)
-                }
-                return
-              }
               if (event.shiftKey) {
                 toggleMultiSelection(item.id)
                 return
               }
               setEffectiveSelection([item.id], item.id)
               void saveNodeDraft(editTargetNode, editForm)
+            }}
+            onDoubleClick={(event) => {
+              if (item.node.type === 'collapsed-group') {
+                return
+              }
+              event.preventDefault()
+              event.stopPropagation()
+              onNodeDoubleClick?.(item.node)
             }}
             onPointerDown={(event) => {
               blurActiveTextInput()
