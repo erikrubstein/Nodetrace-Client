@@ -173,9 +173,9 @@ The release workflow maps the certificate secrets into the macOS installer build
 
 ```bash
 spctl --assess --verbose --type exec release/mac/Nodetrace.app
-xcrun stapler validate release/mac/Nodetrace.app
 xcrun stapler validate release/Nodetrace-macOS-arm64-v0.1.2.dmg
 codesign --verify --deep --strict --verbose=2 release/mac/Nodetrace.app
+codesign --verify --verbose=2 release/Nodetrace-macOS-arm64-v0.1.2.dmg
 ```
 
 ## Testing
