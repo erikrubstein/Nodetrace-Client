@@ -108,7 +108,7 @@ Typical workflow:
 - `npm run dist:win`
   Builds the Windows NSIS installer.
 - `npm run dist:mac`
-  Builds the macOS DMG package. Must be run on macOS for real release validation.
+  Builds the signed and notarized macOS DMG package. Must be run on macOS with Apple signing credentials for real release validation.
 - `npm run lint`
   Lints the whole client repo.
 - `npm run test:e2e`
@@ -142,6 +142,34 @@ npm run dist:mac
 
 Generated desktop installers are written to `release/`.
 The hosted web bundle zip is written to `release/web/`.
+
+### macOS Signing And Notarization
+
+The macOS DMG is configured for Developer ID signing through Electron Builder. The release workflow then notarizes, staples, and validates the DMG with Apple's `notarytool` and `stapler`. The workflow reads these GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE_BASE64`: base64-encoded `.p12` export of a Developer ID Application certificate
+- `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12` export
+- `CODE_SIGN_IDENTITY`: optional certificate identity from the exported certificate, for example `Developer ID Application: Example, LLC (ABCDE12345)`
+
+For the explicit notarization step, use App Store Connect API credentials:
+
+- `APPLE_API_KEY_BASE64`: base64-encoded `.p8` App Store Connect API key
+- `APPLE_API_KEY_ID`: key ID
+- `APPLE_API_ISSUER_ID`: issuer ID
+
+These secrets are not used by this repo's current build:
+
+- `KEYCHAIN_PASSWORD`: only needed for a custom keychain import/unlock step; Electron Builder handles the temporary signing keychain from `MACOS_CERTIFICATE_BASE64`.
+- `SPARKLE_PRIVATE_KEY`: only needed for Sparkle-style auto-update signatures; Nodetrace currently publishes DMG artifacts and does not configure Sparkle auto-update.
+
+The release workflow maps the certificate secrets into the macOS installer build and decodes the API key secret for the notarization step. After building locally on macOS, verify the app and DMG with:
+
+```bash
+spctl --assess --verbose --type exec release/mac/Nodetrace.app
+xcrun stapler validate release/mac/Nodetrace.app
+xcrun stapler validate release/Nodetrace-macOS-arm64-v0.1.2.dmg
+codesign --verify --deep --strict --verbose=2 release/mac/Nodetrace.app
+```
 
 ## Testing
 
@@ -186,4 +214,3 @@ NODETRACE_E2E_SERVER_URL=http://127.0.0.1:3001 npm run test:e2e
    - `npm run build:web`
    - `npm run lint`
    - `npm run test:e2e` when the change affects primary user flows
-
