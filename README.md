@@ -145,7 +145,7 @@ The hosted web bundle zip is written to `release/web/`.
 
 ### macOS Signing And Notarization
 
-The macOS DMG is configured for Developer ID signing through Electron Builder. The release workflow then notarizes, staples, and validates the DMG with Apple's `notarytool` and `stapler`. The workflow reads these GitHub Actions secrets:
+The macOS DMG is configured for Developer ID signing through Electron Builder. The release workflow imports the Developer ID certificate into a temporary keychain, signs the DMG container, then notarizes, staples, and validates the DMG with Apple's `notarytool` and `stapler`. The workflow reads these GitHub Actions secrets:
 
 - `MACOS_CERTIFICATE_BASE64`: base64-encoded `.p12` export of a Developer ID Application certificate
 - `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12` export
@@ -166,7 +166,7 @@ For compatibility with older Nodetrace repository secrets, the workflow also acc
 
 These secrets are not used by this repo's current build:
 
-- `KEYCHAIN_PASSWORD`: only needed for a custom keychain import/unlock step; Electron Builder handles the temporary signing keychain from `MACOS_CERTIFICATE_BASE64`.
+- `KEYCHAIN_PASSWORD`: not needed; the workflow creates a temporary signing keychain with a generated password.
 - `SPARKLE_PRIVATE_KEY`: only needed for Sparkle-style auto-update signatures; Nodetrace currently publishes DMG artifacts and does not configure Sparkle auto-update.
 
 The release workflow maps the certificate secrets into the macOS installer build and decodes the API key secret for the notarization step. After building locally on macOS, verify the app and DMG with:
