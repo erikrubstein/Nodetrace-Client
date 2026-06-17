@@ -157,6 +157,13 @@ For the explicit notarization step, use App Store Connect API credentials:
 - `APPLE_API_KEY_ID`: key ID
 - `APPLE_API_ISSUER_ID`: issuer ID
 
+For compatibility with older Nodetrace repository secrets, the workflow also accepts these legacy names:
+
+- `MAC_CSC_LINK` as a fallback for `MACOS_CERTIFICATE_BASE64`
+- `MAC_CSC_KEY_PASSWORD` as a fallback for `MACOS_CERTIFICATE_PASSWORD`
+- `APPLE_API_KEY` as a fallback for `APPLE_API_KEY_BASE64`
+- `APPLE_API_ISSUER` as a fallback for `APPLE_API_ISSUER_ID`
+
 These secrets are not used by this repo's current build:
 
 - `KEYCHAIN_PASSWORD`: only needed for a custom keychain import/unlock step; Electron Builder handles the temporary signing keychain from `MACOS_CERTIFICATE_BASE64`.
