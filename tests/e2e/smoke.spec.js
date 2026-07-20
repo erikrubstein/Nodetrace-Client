@@ -32,6 +32,28 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
 
   await expect(page.getByText(nodeName)).toBeVisible()
 
+  const createdNode = page.locator('.graph-node').filter({ hasText: nodeName })
+  await expect(createdNode).toBeVisible()
+  await createdNode.click()
+  const inspectorButton = page.getByRole('button', { name: 'Inspector' })
+  if (!(await inspectorButton.evaluate((button) => button.classList.contains('sidebar-rail__button--active')))) {
+    await inspectorButton.click()
+  }
+  const inspectorNameInput = page.getByRole('textbox', { name: 'Name' })
+  await expect(inspectorNameInput).toBeVisible()
+  const inspectorNameLabel = inspectorNameInput.locator('xpath=ancestor::label')
+  const inspectorNameLabelBox = await inspectorNameLabel.boundingBox()
+  const inspectorNameInputBox = await inspectorNameInput.boundingBox()
+  expect(inspectorNameLabelBox).not.toBeNull()
+  expect(inspectorNameInputBox).not.toBeNull()
+  await page.mouse.click(
+    inspectorNameLabelBox.x + 6,
+    inspectorNameLabelBox.y + Math.max(2, (inspectorNameInputBox.y - inspectorNameLabelBox.y) / 2),
+  )
+  await expect(inspectorNameInput).not.toBeFocused()
+  await inspectorNameInput.click()
+  await expect(inspectorNameInput).toBeFocused()
+
   const treeViewport = page.locator('.canvas-viewport')
   const treeStage = page.locator('.canvas-stage')
   const readTreeScale = () => treeStage.evaluate((stage) => {

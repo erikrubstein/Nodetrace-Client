@@ -4,6 +4,11 @@ label {
   gap: 4px;
   font-size: 0.8rem;
   color: var(--muted);
+  pointer-events: none;
+}
+
+label :is(input, textarea, select, button, a, [role='button'], [tabindex]) {
+  pointer-events: auto;
 }
 
 input,
