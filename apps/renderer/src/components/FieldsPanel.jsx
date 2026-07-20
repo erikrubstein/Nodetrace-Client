@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import PanelSection from './PanelSection'
+import { CloseIcon, LockIcon, SpinnerIcon, UnlockIcon } from './icons'
 
 function formatFieldDraft(field) {
   if (!field) {
@@ -164,7 +165,7 @@ export default function FieldsPanel({
                 onClick={openRemoveTemplateDialog}
                 type="button"
               >
-                <i aria-hidden="true" className="fa-solid fa-xmark" />
+                <CloseIcon />
               </button>
             </div>
           </div>
@@ -177,7 +178,7 @@ export default function FieldsPanel({
             >
               {aiFillRunning ? (
                 <>
-                  <i aria-hidden="true" className="fa-solid fa-spinner fa-spin button-spinner" />
+                  <SpinnerIcon className="button-spinner" />
                   <span>AI Fill</span>
                 </>
               ) : (
@@ -233,7 +234,7 @@ export default function FieldsPanel({
                       onClick={() => void handleToggleReviewed(field)}
                       type="button"
                     >
-                      <i aria-hidden="true" className={`fa-solid ${field.reviewed ? 'fa-lock' : 'fa-lock-open'}`} />
+                      {field.reviewed ? <LockIcon /> : <UnlockIcon />}
                     </button>
                   </div>
                 </div>

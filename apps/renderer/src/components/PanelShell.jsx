@@ -1,3 +1,12 @@
+import {
+  CloseIcon,
+  DockIcon,
+  MaximizeWindowIcon,
+  MinusIcon,
+  PopoutIcon,
+  RestoreWindowIcon,
+} from './icons'
+
 export default function PanelShell({
   activePanel,
   canDockBack = false,
@@ -32,7 +41,7 @@ export default function PanelShell({
           {canDockBack ? (
             <span className="icon-button-wrap">
               <button className="sidebar-shell__action" onClick={onDockBack} type="button">
-                <i aria-hidden="true" className="fa-solid fa-down-left-and-up-right-to-center" />
+                <DockIcon />
               </button>
               <span aria-hidden="true" className="icon-tooltip">
                 Dock In Sidebar
@@ -42,7 +51,7 @@ export default function PanelShell({
           {canPopout ? (
             <span className="icon-button-wrap">
               <button className="sidebar-shell__action" onClick={onPopout} type="button">
-                <i aria-hidden="true" className="fa-solid fa-up-right-from-square" />
+                <PopoutIcon />
               </button>
               <span aria-hidden="true" className="icon-tooltip">
                 Open In Window
@@ -57,7 +66,7 @@ export default function PanelShell({
                 onClick={onDesktopMinimize}
                 type="button"
               >
-                <i aria-hidden="true" className="fa-solid fa-minus" />
+                <MinusIcon />
               </button>
               <button
                 aria-label={desktopWindowMaximized ? 'Restore window' : 'Maximize window'}
@@ -65,7 +74,7 @@ export default function PanelShell({
                 onClick={onDesktopToggleMaximize}
                 type="button"
               >
-                <i aria-hidden="true" className={`fa-regular ${desktopWindowMaximized ? 'fa-clone' : 'fa-square'}`} />
+                {desktopWindowMaximized ? <RestoreWindowIcon /> : <MaximizeWindowIcon />}
               </button>
               <button
                 aria-label="Close window"
@@ -73,13 +82,13 @@ export default function PanelShell({
                 onClick={onDesktopClose}
                 type="button"
               >
-                <i aria-hidden="true" className="fa-solid fa-xmark" />
+                <CloseIcon />
               </button>
             </>
           ) : !windowMode ? (
             <span className="icon-button-wrap">
               <button className="sidebar-shell__action" onClick={onClose} type="button">
-                <i aria-hidden="true" className="fa-solid fa-xmark" />
+                <CloseIcon />
               </button>
               <span aria-hidden="true" className="icon-tooltip">
                 Collapse Sidebar

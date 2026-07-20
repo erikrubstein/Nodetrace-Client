@@ -77,10 +77,17 @@ import { shouldShowMobileEntryPrompt } from './app/runtime/mobileEntry'
 import { useAppShellCommands } from './app/commands/appShellCommands'
 import { useTreeMutationCommands } from './app/commands/treeMutationCommands'
 import { getPresenceColor, getPresenceInitials } from './features/collaboration/presence'
+import FloorPlanAppearancePanel from './features/floor-plans/FloorPlanAppearancePanel'
+import FloorPlanLocationsPanel from './features/floor-plans/FloorPlanLocationsPanel'
+import FloorPlanWorkspace from './features/floor-plans/FloorPlanWorkspace'
+import WorkspaceModeTools from './features/floor-plans/WorkspaceModeTools'
+import useFloorPlanCommands from './features/floor-plans/useFloorPlanCommands'
 import { buildTemplateFormState } from './features/node-editing/templateFormState'
 import {
   CameraIcon,
   GearIcon,
+  LocationIcon,
+  PaletteIcon,
   IdentificationIcon,
   PencilIcon,
   PreviewIcon,
@@ -102,6 +109,8 @@ const PANEL_WINDOW_TITLES = {
   templates: 'Templates',
   settings: 'Project Settings',
   collaborators: 'Project Access',
+  locations: 'Locations',
+  floorPlan: 'Floor Plan',
 }
 
 function MainApp() {
@@ -171,6 +180,10 @@ function MainApp() {
   const [dragHoverNodeId, setDragHoverNodeId] = useState(null)
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState({ x: 80, y: 80, scale: 1 })
+  const [workspaceMode, setWorkspaceMode] = useState(defaultUserProjectUi.workspaceMode)
+  const [activeFloorPlanId, setActiveFloorPlanId] = useState(defaultUserProjectUi.activeFloorPlanId)
+  const [floorPlanTransforms, setFloorPlanTransforms] = useState(defaultUserProjectUi.floorPlanTransforms)
+  const [pendingFloorPlanNodeId, setPendingFloorPlanNodeId] = useState(null)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(initialPanelLayoutRef.current.leftSidebarOpen)
@@ -226,6 +239,7 @@ function MainApp() {
   const pendingLocalEventsRef = useRef(0)
   const pendingInitialCanvasFitRef = useRef(false)
   const treeRef = useRef(null)
+  const floorPlanWorkspaceRef = useRef(null)
   const previousDesktopConnectionStatusRef = useRef(null)
   const desktopReconnectStatusRef = useRef(null)
   const suppressDesktopDisconnectUiRef = useRef(false)
@@ -324,6 +338,10 @@ function MainApp() {
     setMultiSelectedNodeIds([])
     setShowGrid(defaultUserProjectUi.showGrid)
     setTransform(defaultUserProjectUi.canvasTransform || { x: 80, y: 80, scale: 1 })
+    setWorkspaceMode(defaultUserProjectUi.workspaceMode)
+    setActiveFloorPlanId(defaultUserProjectUi.activeFloorPlanId)
+    setFloorPlanTransforms(defaultUserProjectUi.floorPlanTransforms)
+    setPendingFloorPlanNodeId(null)
     setProjectUiReady(false)
     setMobileConnectionCount(0)
     pendingInitialCanvasFitRef.current = false
@@ -816,13 +834,24 @@ function MainApp() {
   const selectedNode = tree?.nodes.find((node) => node.id === selectedNodeId) || null
   const projectSettings = tree?.project?.settings || defaultProjectSettings
   const projectUi = tree?.project?.ui || defaultUserProjectUi
+  const floorPlanEnabled = Boolean(projectSettings.floorPlanEnabled)
+  const effectiveWorkspaceMode = floorPlanEnabled ? workspaceMode : 'tree'
+  const floorPlans = tree?.project?.floorPlans || []
+  const resolvedActiveFloorPlanId = floorPlans.some((floorPlan) => floorPlan.id === activeFloorPlanId)
+    ? activeFloorPlanId
+    : floorPlans[0]?.id || null
+  const activeFloorPlan = floorPlans.find((floorPlan) => floorPlan.id === resolvedActiveFloorPlanId) || null
+  const enabledPanelIds = useMemo(
+    () => floorPlanEnabled ? panelIds : panelIds.filter((panelId) => panelId !== 'locations' && panelId !== 'floorPlan'),
+    [floorPlanEnabled],
+  )
   const leftDockedPanelIds = useMemo(
-    () => panelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'left'),
-    [panelDock],
+    () => enabledPanelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'left'),
+    [enabledPanelIds, panelDock],
   )
   const rightDockedPanelIds = useMemo(
-    () => panelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'right'),
-    [panelDock],
+    () => enabledPanelIds.filter((panelId) => (panelDock?.[panelId] || defaultUserProjectUi.panelDock[panelId]) === 'right'),
+    [enabledPanelIds, panelDock],
   )
   const availableLeftDockedPanelIds = useMemo(
     () => leftDockedPanelIds.filter((panelId) => !poppedOutPanelIds.includes(panelId)),
@@ -895,14 +924,20 @@ function MainApp() {
   const buildCurrentProjectUiSnapshot = useCallback(
     () =>
       normalizeClientProjectUi({
+        workspaceMode,
         showGrid,
         canvasTransform: transform,
+        activeFloorPlanId: resolvedActiveFloorPlanId,
+        floorPlanTransforms,
         selectedNodeIds: effectiveSelectedNodeIds,
       }),
     [
+      floorPlanTransforms,
       effectiveSelectedNodeIds,
+      resolvedActiveFloorPlanId,
       showGrid,
       transform,
+      workspaceMode,
     ],
   )
   const persistServerProjectUi = useCallback(
@@ -1006,26 +1041,65 @@ function MainApp() {
   )
   function markPendingUiSignature(overrides = {}) {
     const nextUi = {
+      workspaceMode: overrides.workspaceMode ?? workspaceMode,
       showGrid: overrides.showGrid ?? showGrid,
       canvasTransform: overrides.canvasTransform ?? transform,
+      activeFloorPlanId: overrides.activeFloorPlanId ?? resolvedActiveFloorPlanId,
+      floorPlanTransforms: overrides.floorPlanTransforms ?? floorPlanTransforms,
       selectedNodeIds: overrides.selectedNodeIds ?? effectiveSelectedNodeIds,
     }
-    pendingUiSignatureRef.current = JSON.stringify(nextUi)
+    pendingUiSignatureRef.current = JSON.stringify(normalizeClientProjectUi(nextUi))
+  }
+  function setWorkspaceModePreference(nextMode) {
+    const normalizedMode = nextMode === 'floor-plan' && floorPlanEnabled ? 'floor-plan' : 'tree'
+    markPendingUiSignature({ workspaceMode: normalizedMode })
+    setWorkspaceMode(normalizedMode)
+    if (normalizedMode === 'floor-plan') {
+      ensureSidebarPanelVisible('locations')
+    } else {
+      setPendingFloorPlanNodeId(null)
+    }
+  }
+  function setActiveFloorPlanPreference(floorPlanId) {
+    const normalizedId = String(floorPlanId || '').trim() || null
+    markPendingUiSignature({ activeFloorPlanId: normalizedId })
+    setActiveFloorPlanId(normalizedId)
+    setPendingFloorPlanNodeId(null)
+  }
+  function setFloorPlanTransformPreference(floorPlanId, nextTransform) {
+    const normalizedId = String(floorPlanId || '').trim()
+    if (!normalizedId) {
+      return
+    }
+    setFloorPlanTransforms((current) => {
+      const nextTransforms = {
+        ...current,
+        [normalizedId]: nextTransform,
+      }
+      markPendingUiSignature({ floorPlanTransforms: nextTransforms })
+      return nextTransforms
+    })
   }
   const setCanvasTransform = useCallback((nextTransformOrUpdater) => {
     setTransform((current) => {
       const nextTransform =
         typeof nextTransformOrUpdater === 'function' ? nextTransformOrUpdater(current) : nextTransformOrUpdater
       pendingUiSignatureRef.current = JSON.stringify({
+        workspaceMode,
         showGrid,
         canvasTransform: nextTransform,
+        activeFloorPlanId: resolvedActiveFloorPlanId,
+        floorPlanTransforms,
         selectedNodeIds: effectiveSelectedNodeIds,
       })
       return nextTransform
     })
   }, [
     effectiveSelectedNodeIds,
+    floorPlanTransforms,
+    resolvedActiveFloorPlanId,
     showGrid,
+    workspaceMode,
   ])
   const setEffectiveSelection = useCallback((nodeIds, preferredPrimaryId = null) => {
     const validIds = Array.from(new Set((nodeIds || []).filter(Boolean))).filter(
@@ -1487,6 +1561,9 @@ function MainApp() {
     }
     setShowGrid(nextUi.showGrid)
     setTransform(nextUi.canvasTransform || { x: 80, y: 80, scale: 1 })
+    setWorkspaceMode(nextUi.workspaceMode)
+    setActiveFloorPlanId(nextUi.activeFloorPlanId)
+    setFloorPlanTransforms(nextUi.floorPlanTransforms)
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
     const nextSelectionIds = Array.isArray(nextUi.selectedNodeIds)
       ? nextUi.selectedNodeIds.filter((nodeId) => (tree?.nodes || []).some((node) => node.id === nodeId))
@@ -1495,7 +1572,7 @@ function MainApp() {
       setEffectiveSelection(nextSelectionIds, nextSelectionIds[0])
     }
     setProjectUiReady(true)
-  }, [isPanelWindow, projectUi, projectUi.canvasTransform, projectUi.selectedNodeIds, projectUi.showGrid, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -2210,6 +2287,22 @@ function MainApp() {
       pendingLocalEventsRef.current = Math.max(0, pendingLocalEventsRef.current - 1)
     }
   }, [])
+
+  const {
+    handleDeleteFloorPlan,
+    handleRemoveFloorPlanPlacement,
+    handleSaveFloorPlanPlacement,
+    handleUploadFloorPlan,
+    handleUpdateFloorPlanAppearance,
+  } = useFloorPlanCommands({
+    beginLocalEventExpectation,
+    selectedProjectId,
+    setActiveFloorPlanId,
+    setBusy,
+    setError,
+    setTree,
+    setWorkspaceMode,
+  })
 
   const {
     appendNodesToTree,
@@ -4361,8 +4454,28 @@ function MainApp() {
     uploadFiles,
   })
 
+  const selectFloorPlanNode = useCallback((nodeId) => {
+    setEffectiveSelection([nodeId], nodeId)
+  }, [setEffectiveSelection])
+
   useEffect(() => {
-    if (!projectUiReady || !pendingInitialCanvasFitRef.current) {
+    if (floorPlanEnabled || workspaceMode === 'tree') {
+      return
+    }
+    setWorkspaceMode('tree')
+    setPendingFloorPlanNodeId(null)
+  }, [floorPlanEnabled, workspaceMode])
+
+  const fitActiveWorkspaceToView = useCallback(() => {
+    if (effectiveWorkspaceMode === 'floor-plan') {
+      floorPlanWorkspaceRef.current?.fitToView()
+      return
+    }
+    fitCanvasToView()
+  }, [effectiveWorkspaceMode, fitCanvasToView])
+
+  useEffect(() => {
+    if (effectiveWorkspaceMode !== 'tree' || !projectUiReady || !pendingInitialCanvasFitRef.current) {
       return
     }
     if (!tree?.project || !layout.width || !layout.height) {
@@ -4370,7 +4483,7 @@ function MainApp() {
     }
     pendingInitialCanvasFitRef.current = false
     fitCanvasToView()
-  }, [fitCanvasToView, layout.height, layout.width, projectUiReady, tree?.project])
+  }, [effectiveWorkspaceMode, fitCanvasToView, layout.height, layout.width, projectUiReady, tree?.project])
 
   useEffect(() => {
     if (!resolvedLeftActivePanel) {
@@ -4734,6 +4847,44 @@ function MainApp() {
           />
         ),
       },
+      locations: floorPlanEnabled ? {
+        id: 'locations',
+        title: 'Locations',
+        icon: <LocationIcon />,
+        allowPopout: false,
+        content: (
+          <FloorPlanLocationsPanel
+            activeFloorPlan={activeFloorPlan}
+            nodes={tree?.nodes || []}
+            onBeginPlacement={(nodeId) => {
+              setPendingFloorPlanNodeId(nodeId)
+              if (nodeId) {
+                setWorkspaceModePreference('floor-plan')
+              }
+            }}
+            onSelectNode={selectFloorPlanNode}
+            pendingPlacementNodeId={pendingFloorPlanNodeId}
+            selectedNodeId={selectedNodeId}
+          />
+        ),
+      } : null,
+      floorPlan: floorPlanEnabled ? {
+        id: 'floorPlan',
+        title: 'Floor Plan',
+        icon: <PaletteIcon />,
+        allowPopout: false,
+        content: (
+          <FloorPlanAppearancePanel
+            activeFloorPlan={activeFloorPlan}
+            busy={busy}
+            floorPlans={floorPlans}
+            onActiveFloorPlanChange={setActiveFloorPlanPreference}
+            onDeleteFloorPlan={handleDeleteFloorPlan}
+            onUpdateAppearance={handleUpdateFloorPlanAppearance}
+            onUploadFloorPlan={handleUploadFloorPlan}
+          />
+        ),
+      } : null,
       templates: {
         id: 'templates',
         title: 'Templates',
@@ -5113,7 +5264,7 @@ function MainApp() {
         canExpandSelected={canExpandSelected}
         fileInputRef={fileInputRef}
         focusSelectedNode={focusSelectedNode}
-        fitCanvasToView={fitCanvasToView}
+        fitCanvasToView={fitActiveWorkspaceToView}
         focusPathMode={focusPathMode}
         historyState={historyState}
         importInputRef={importInputRef}
@@ -5123,7 +5274,7 @@ function MainApp() {
         onPresenceSelect={selectNodeAndFocus}
         openMenu={openMenu}
         panelDock={panelDock}
-        panelTitles={Object.fromEntries(panelIds.map((panelId) => [panelId, panelDefinitions[panelId]?.title || panelId]))}
+        panelTitles={Object.fromEntries(enabledPanelIds.map((panelId) => [panelId, panelDefinitions[panelId]?.title || panelId]))}
         pendingUploadMode={pendingUploadMode}
         pendingUploadParentId={pendingUploadParentId}
         presenceUsers={remotePresenceUsers}
@@ -5149,9 +5300,9 @@ function MainApp() {
         setImportArchiveFile={setImportArchiveFile}
         setImportProjectName={setImportProjectName}
         movePanelDock={movePanelDock}
-          setOpenMenu={setOpenMenu}
-          setSessionDialogOpen={setSessionDialogOpen}
-          setShowProjectDialog={setShowProjectDialog}
+        setOpenMenu={setOpenMenu}
+        setSessionDialogOpen={setSessionDialogOpen}
+        setShowProjectDialog={setShowProjectDialog}
         selectChildren={selectChildren}
         selectParents={selectParents}
         selectSearchResults={selectSearchResults}
@@ -5209,7 +5360,7 @@ function MainApp() {
         />
         <DockedSidebar
           activePanel={activeLeftPanel}
-          canPopout={canPopoutPanels && Boolean(activeLeftPanel)}
+          canPopout={canPopoutPanels && Boolean(activeLeftPanel) && activeLeftPanel?.allowPopout !== false}
           onClose={() => setLeftSidebarOpen(false)}
           onPopout={() => activeLeftPanel && void popoutPanel(activeLeftPanel.id)}
           onResizeStart={(event) => {
@@ -5220,7 +5371,36 @@ function MainApp() {
           side="left"
           visible={effectiveLeftSidebarOpen && Boolean(activeLeftPanel)}
         />
-        <CanvasWorkspace
+        <div className="workspace-stack">
+          {floorPlanEnabled ? (
+            <WorkspaceModeTools
+              busy={busy}
+              mode={effectiveWorkspaceMode}
+              onModeChange={setWorkspaceModePreference}
+            />
+          ) : null}
+          {effectiveWorkspaceMode === 'floor-plan' ? (
+            <FloorPlanWorkspace
+            activeFloorPlanId={resolvedActiveFloorPlanId}
+            busy={busy}
+            floorPlans={floorPlans}
+            nodes={tree?.nodes || []}
+            onActiveFloorPlanChange={setActiveFloorPlanPreference}
+            onPendingPlacementChange={setPendingFloorPlanNodeId}
+            onRemovePlacement={handleRemoveFloorPlanPlacement}
+            onSavePlacement={handleSaveFloorPlanPlacement}
+            onSelectNode={selectFloorPlanNode}
+            onTransformChange={(nextTransform) =>
+              setFloorPlanTransformPreference(resolvedActiveFloorPlanId, nextTransform)
+            }
+            onUploadFloorPlan={handleUploadFloorPlan}
+            pendingPlacementNodeId={pendingFloorPlanNodeId}
+            ref={floorPlanWorkspaceRef}
+            theme={theme}
+            transform={resolvedActiveFloorPlanId ? floorPlanTransforms[resolvedActiveFloorPlanId] || null : null}
+          />
+        ) : (
+          <CanvasWorkspace
           beginNodeDrag={beginNodeDrag}
           beginCanvasPointerDown={beginCanvasPointerDown}
           busy={busy}
@@ -5281,10 +5461,12 @@ function MainApp() {
           uploadFiles={uploadFiles}
           viewportSize={viewportSize}
           viewportRef={viewportRef}
-        />
+          />
+          )}
+        </div>
         <DockedSidebar
           activePanel={activeRightPanel}
-          canPopout={canPopoutPanels && Boolean(activeRightPanel)}
+          canPopout={canPopoutPanels && Boolean(activeRightPanel) && activeRightPanel?.allowPopout !== false}
           onClose={() => setRightSidebarOpen(false)}
           onPopout={() => activeRightPanel && void popoutPanel(activeRightPanel.id)}
           onResizeStart={(event) => {

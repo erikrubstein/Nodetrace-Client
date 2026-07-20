@@ -13,6 +13,7 @@ Nodetrace Client is the front end for building, reviewing, and collaborating on 
 ## Highlights
 
 - hierarchical project and node model built for real documentation workflows
+- opt-in spatial floor-plan workspace with location and appearance panels
 - desktop and web clients backed by the same server
 - collaborative editing with presence indicators and shared project access
 - non-destructive image review tools in the preview panel
@@ -76,6 +77,16 @@ Default local URLs:
 - renderer dev server: `http://127.0.0.1:5173`
 - API server: `http://127.0.0.1:3001`
 
+The web and desktop development clients load persistent connection settings from `.env` in the client repo root:
+
+```dotenv
+VITE_HOST=127.0.0.1
+VITE_PORT=5173
+VITE_API_BASE_URL=http://127.0.0.1:3001
+```
+
+Shell environment variables override values from this file. Restart the client after changing it.
+
 ## Using Nodetrace
 
 Typical workflow:
@@ -83,9 +94,11 @@ Typical workflow:
 1. Sign in or create an account on a Nodetrace Server.
 2. Create a project or open an existing one.
 3. Build the node tree and attach photos where needed.
-4. Review notes, tags, status, and identification data in the side panels.
-5. Use search, templates, and preview tools to refine the project.
-6. Collaborate with other users or export the finished result.
+4. Enable floor plans in Project Settings when a project needs spatial documentation.
+5. Use the centered canvas tools to switch views, then manage plans, appearance, and locations from the side panels.
+6. Review notes, tags, status, and identification data in the side panels.
+7. Use search, templates, and preview tools to refine the project.
+8. Collaborate with other users or export the finished result.
 
 ## Development Scripts
 

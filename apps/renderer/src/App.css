@@ -7,4 +7,5 @@
 @import './shared/styles/forms.css';
 @import './shared/styles/dialogs.css';
 @import './shared/styles/search.css';
+@import './features/floor-plans/floor-plans.css';
 @import './shared/styles/responsive.css';

@@ -1,7 +1,12 @@
 import IconButton from './IconButton'
 import { resolvePublicAssetUrl } from '../lib/runtimePaths'
 import {
+  ChevronRightIcon,
+  CloseIcon,
+  MaximizeWindowIcon,
+  MinusIcon,
   PhoneIcon,
+  RestoreWindowIcon,
 } from './icons'
 
 const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
@@ -127,7 +132,7 @@ export default function TopBar({
                 <button className="menu-item" disabled={busy} type="button">
                   <span>Import</span>
                   <span aria-hidden="true" className="menu-submenu-caret">
-                    <i className="fa-solid fa-chevron-right" />
+                    <ChevronRightIcon />
                   </span>
                 </button>
                 <div className="menu-panel menu-panel--submenu">
@@ -150,7 +155,7 @@ export default function TopBar({
                 <button className="menu-item" disabled={!selectedProjectId || busy} type="button">
                   <span>Export</span>
                   <span aria-hidden="true" className="menu-submenu-caret">
-                    <i className="fa-solid fa-chevron-right" />
+                    <ChevronRightIcon />
                   </span>
                 </button>
                 <div className="menu-panel menu-panel--submenu">
@@ -552,7 +557,7 @@ export default function TopBar({
                 <button className="menu-item" type="button">
                   <span>Apply Theme</span>
                   <span aria-hidden="true" className="menu-submenu-caret">
-                    <i className="fa-solid fa-chevron-right" />
+                    <ChevronRightIcon />
                   </span>
                 </button>
                 <div className="menu-panel menu-panel--submenu">
@@ -710,7 +715,7 @@ export default function TopBar({
               onClick={() => void onDesktopMinimize?.()}
               type="button"
             >
-              <i aria-hidden="true" className="fa-solid fa-minus" />
+              <MinusIcon />
             </button>
             <button
               aria-label={desktopWindowMaximized ? 'Restore window' : 'Maximize window'}
@@ -718,7 +723,7 @@ export default function TopBar({
               onClick={() => void onDesktopToggleMaximize?.()}
               type="button"
             >
-              <i aria-hidden="true" className={`fa-regular ${desktopWindowMaximized ? 'fa-clone' : 'fa-square'}`} />
+              {desktopWindowMaximized ? <RestoreWindowIcon /> : <MaximizeWindowIcon />}
             </button>
             <button
               aria-label="Close window"
@@ -726,7 +731,7 @@ export default function TopBar({
               onClick={() => void onDesktopClose?.()}
               type="button"
             >
-              <i aria-hidden="true" className="fa-solid fa-xmark" />
+              <CloseIcon />
             </button>
           </div>
         ) : null}

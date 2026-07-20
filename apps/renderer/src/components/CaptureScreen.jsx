@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, resolveApiUrl } from '../lib/api'
 import { createPreviewFile } from '../lib/image'
 import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+import { AddPhotoIcon } from './icons'
 
 const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
@@ -323,7 +324,7 @@ export default function CaptureScreen() {
                   onClick={() => openPicker('photo_node', false)}
                   type="button"
                 >
-                  <i aria-hidden="true" className="fa-solid fa-image" />
+                  <AddPhotoIcon />
                 </button>
               </div>
             </section>
@@ -345,7 +346,7 @@ export default function CaptureScreen() {
                   onClick={() => openPicker('additional_photo', false)}
                   type="button"
                 >
-                  <i aria-hidden="true" className="fa-solid fa-image" />
+                  <AddPhotoIcon />
                 </button>
               </div>
             </section>

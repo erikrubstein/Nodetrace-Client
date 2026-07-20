@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   defaultImageEdits,
   mapDisplayedCropToSourceCrop,
@@ -8,8 +8,19 @@ import {
 } from '../lib/image'
 import { copyDesktopImageToClipboard, isDesktopEnvironment } from '../lib/desktop'
 import ImageAdjustmentControls from './ImageAdjustmentControls'
+import {
+  ConvertToChildIcon,
+  CopyIcon,
+  CropIcon,
+  DownloadIcon,
+  EraserIcon,
+  FitViewIcon,
+  RotateIcon,
+  StarIcon,
+  TrashIcon,
+} from './icons'
 
-function tooltipButton({ active = false, disabled = false, iconClassName, label, onClick }) {
+function tooltipButton({ active = false, disabled = false, icon, label, onClick }) {
   return (
     <span className="icon-button-wrap" key={label}>
       <button
@@ -19,7 +30,7 @@ function tooltipButton({ active = false, disabled = false, iconClassName, label,
         onClick={onClick}
         type="button"
       >
-        <i aria-hidden="true" className={iconClassName} />
+        {createElement(icon)}
       </button>
       <span aria-hidden="true" className="icon-tooltip">
         {label}
@@ -516,19 +527,19 @@ export default function PreviewPanel({
       actions: [
         tooltipButton({
           disabled: !hasImage || busy || !imageReady,
-          iconClassName: 'fa-solid fa-download',
+          icon: DownloadIcon,
           label: 'Download Image',
           onClick: handleDownload,
         }),
         tooltipButton({
           disabled: !hasImage || busy || !imageReady,
-          iconClassName: 'fa-solid fa-copy',
+          icon: CopyIcon,
           label: 'Copy Image',
           onClick: handleCopy,
         }),
         tooltipButton({
           disabled: !hasImage,
-          iconClassName: 'fa-solid fa-expand',
+          icon: FitViewIcon,
           label: 'Fit View',
           onClick: fitPreviewView,
         }),
@@ -540,14 +551,14 @@ export default function PreviewPanel({
       actions: [
         tooltipButton({
           disabled: !hasImage || busy,
-          iconClassName: 'fa-solid fa-rotate-right',
+          icon: RotateIcon,
           label: 'Rotate 90 Degrees',
           onClick: () => updateEdit('rotationTurns', (localEdits.rotationTurns + 1) % 4),
         }),
         tooltipButton({
           active: cropMode,
           disabled: !hasImage || busy || !imageReady,
-          iconClassName: 'fa-solid fa-crop-simple',
+          icon: CropIcon,
           label: cropMode ? 'Crop Mode Active' : 'Crop Image',
           onClick: () => {
             setCropMode((current) => !current)
@@ -556,7 +567,7 @@ export default function PreviewPanel({
         }),
         tooltipButton({
           disabled: !hasImage || busy || !hasCrop,
-          iconClassName: 'fa-solid fa-eraser',
+          icon: EraserIcon,
           label: 'Reset Crop',
           onClick: resetCrop,
         }),
@@ -568,7 +579,7 @@ export default function PreviewPanel({
       actions: [
         tooltipButton({
           disabled: !hasImage || busy || selectedMedia?.isPrimary,
-          iconClassName: 'fa-solid fa-star',
+          icon: StarIcon,
           label: 'Make Main Photo',
           onClick: async () => {
             try {
@@ -580,7 +591,7 @@ export default function PreviewPanel({
         }),
         tooltipButton({
           disabled: !hasImage || busy,
-          iconClassName: 'fa-solid fa-turn-down',
+          icon: ConvertToChildIcon,
           label: 'Conver to Child',
           onClick: async () => {
             try {
@@ -592,7 +603,7 @@ export default function PreviewPanel({
         }),
         tooltipButton({
           disabled: !hasImage || busy,
-          iconClassName: 'fa-solid fa-trash',
+          icon: TrashIcon,
           label: 'Remove Photo',
           onClick: async () => {
             try {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import IconButton from './IconButton'
+import { CloseIcon } from './icons'
 import { normalizeImageEdits, renderImageEditsToCanvas } from '../lib/image'
+import { getZoomWheelDelta } from '../lib/wheel'
 
 export default function FullscreenPreviewOverlay({
   open = false,
@@ -185,11 +187,15 @@ export default function FullscreenPreviewOverlay({
     }
 
     const wheelListener = (event) => {
+      const zoomDelta = getZoomWheelDelta(event)
+      if (!zoomDelta) {
+        return
+      }
       event.preventDefault()
       const rect = viewport.getBoundingClientRect()
       const cursorX = event.clientX - rect.left
       const cursorY = event.clientY - rect.top
-      const factor = event.deltaY < 0 ? 1.08 : 0.92
+      const factor = zoomDelta < 0 ? 1.08 : 0.92
 
       setTransform((current) => {
         const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))
@@ -243,7 +249,7 @@ export default function FullscreenPreviewOverlay({
           tooltip="Close Preview"
           wrapperClassName="fullscreen-preview-overlay__close-wrap"
         >
-          <i aria-hidden="true" className="fa-solid fa-xmark" />
+          <CloseIcon />
         </IconButton>
       </div>
       <div

@@ -7,6 +7,8 @@ export const panelMinWidths = {
   templates: 520,
   inspector: 320,
   fields: 420,
+  locations: 320,
+  floorPlan: 340,
   settings: 360,
   collaborators: 360,
 }
@@ -18,6 +20,8 @@ export const panelInitialWidths = {
   templates: 760,
   inspector: 420,
   fields: 620,
+  locations: 380,
+  floorPlan: 420,
   settings: 460,
   collaborators: 460,
 }

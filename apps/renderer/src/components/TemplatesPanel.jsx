@@ -1,3 +1,5 @@
+import { CloseIcon, ImportIcon, PlusIcon } from './icons'
+
 export default function TemplatesPanel({
   busy,
   clearError,
@@ -44,7 +46,7 @@ export default function TemplatesPanel({
             onClick={openImportTemplateDialog}
             type="button"
           >
-            <i aria-hidden="true" className="fa-solid fa-file-import" />
+            <ImportIcon />
           </button>
           <button
             aria-label="New template"
@@ -53,7 +55,7 @@ export default function TemplatesPanel({
             onClick={createNewTemplate}
             type="button"
           >
-            <i aria-hidden="true" className="fa-solid fa-plus" />
+            <PlusIcon />
           </button>
         </div>
 
@@ -165,7 +167,7 @@ export default function TemplatesPanel({
                     }}
                     type="button"
                   >
-                    <i aria-hidden="true" className="fa-solid fa-xmark" />
+                    <CloseIcon />
                   </button>
                 </div>
               </div>

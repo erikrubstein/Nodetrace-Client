@@ -574,6 +574,16 @@ export function compactNodePath(path, options = {}) {
 }
 
 export function buildClientTree(project, rows) {
+  const normalizedProject = {
+    ...project,
+    floorPlans: Array.isArray(project?.floorPlans)
+      ? project.floorPlans.map((floorPlan) => ({
+          ...floorPlan,
+          imageUrl: resolveApiUrl(floorPlan.imageUrl),
+          placements: Array.isArray(floorPlan.placements) ? floorPlan.placements : [],
+        }))
+      : [],
+  }
   const normalizedRows = (rows || []).map((node) => ({
     ...node,
     imageUrl: resolveApiUrl(node.imageUrl),
@@ -632,7 +642,7 @@ export function buildClientTree(project, rows) {
   sortBranch(root)
 
   return {
-    project,
+    project: normalizedProject,
     root,
     nodes: Array.from(byId.values()),
   }

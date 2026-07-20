@@ -7,6 +7,7 @@
 - `dialogs/`
 - `collaboration/`
 - `node-editing/`
+- `floor-plans/`
 
 Additional feature folders should be created as refactoring continues.
 

@@ -17,6 +17,8 @@ The immediate hotspots are:
 - `apps/renderer/src/components/AppDialogs.jsx`
 - `apps/desktop/main.js`
 
+The spatial workspace is owned by `apps/renderer/src/features/floor-plans/`; its placement interactions stay separate from tree layout and reparenting behavior.
+
 ## Boundary Rules
 - `apps/renderer/src/app/` owns renderer-wide orchestration and cross-feature composition.
 - `apps/renderer/src/features/` owns feature-specific UI, logic, and local helpers.

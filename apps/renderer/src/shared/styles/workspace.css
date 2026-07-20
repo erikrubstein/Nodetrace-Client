@@ -349,8 +349,9 @@
   font-size: 0.7rem;
 }
 
-.graph-node__placeholder i {
-  font-size: 2rem;
+.graph-node__placeholder svg {
+  width: 32px;
+  height: 32px;
 }
 
 .graph-node__meta {
@@ -822,4 +823,3 @@
 .danger-text {
   color: var(--danger);
 }
-

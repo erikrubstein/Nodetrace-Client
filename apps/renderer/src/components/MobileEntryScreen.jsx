@@ -1,4 +1,5 @@
 import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+import { CameraIcon, TreeViewIcon } from './icons'
 
 const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
@@ -16,13 +17,13 @@ export default function MobileEntryScreen({ onContinueToProject, onOpenCapture }
           <div className="mobile-entry-card__grid">
             <button className="mobile-entry-card__option" onClick={onOpenCapture} type="button">
               <span className="mobile-entry-card__icon" aria-hidden="true">
-                <i className="fa-solid fa-camera" />
+                <CameraIcon />
               </span>
               <span className="mobile-entry-card__option-title">Capture</span>
             </button>
             <button className="mobile-entry-card__option" onClick={onContinueToProject} type="button">
               <span className="mobile-entry-card__icon" aria-hidden="true">
-                <i className="fa-solid fa-diagram-project" />
+                <TreeViewIcon />
               </span>
               <span className="mobile-entry-card__option-title">Project</span>
             </button>

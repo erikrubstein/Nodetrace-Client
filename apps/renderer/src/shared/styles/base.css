@@ -3,6 +3,21 @@
   scrollbar-color: var(--hover-stroke) transparent;
 }
 
+svg.lucide {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.icon-spin {
+  animation: icon-spin 0.9s linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;

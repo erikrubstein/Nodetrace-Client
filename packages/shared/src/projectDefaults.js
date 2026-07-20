@@ -1,4 +1,15 @@
-export const panelIds = ['preview', 'camera', 'search', 'templates', 'inspector', 'fields', 'settings', 'collaborators']
+export const panelIds = [
+  'preview',
+  'camera',
+  'search',
+  'templates',
+  'inspector',
+  'fields',
+  'locations',
+  'floorPlan',
+  'settings',
+  'collaborators',
+]
 
 export const defaultPanelDock = {
   preview: 'left',
@@ -7,6 +18,8 @@ export const defaultPanelDock = {
   templates: 'left',
   inspector: 'right',
   fields: 'right',
+  locations: 'right',
+  floorPlan: 'right',
   settings: 'right',
   collaborators: 'right',
 }
@@ -17,12 +30,16 @@ export const defaultProjectSettings = {
   verticalGap: 44,
   imageMode: 'square',
   layoutMode: 'compact',
+  floorPlanEnabled: false,
 }
 
 export const defaultUserProjectUi = {
   theme: 'dark',
+  workspaceMode: 'tree',
   showGrid: true,
   canvasTransform: null,
+  activeFloorPlanId: null,
+  floorPlanTransforms: {},
   selectedNodeIds: [],
   leftSidebarOpen: false,
   rightSidebarOpen: true,

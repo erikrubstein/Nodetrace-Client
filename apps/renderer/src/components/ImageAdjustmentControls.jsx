@@ -1,10 +1,13 @@
+import { createElement } from 'react'
+
 import { defaultImageEdits } from '../lib/image'
+import { ContrastIcon, ResetIcon } from './icons'
 
 function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
 
-function adjustmentActionButton({ active = false, disabled = false, iconClassName, label, onClick }) {
+function adjustmentActionButton({ active = false, disabled = false, icon, label, onClick }) {
   return (
     <span className="icon-button-wrap" key={label}>
       <button
@@ -14,7 +17,7 @@ function adjustmentActionButton({ active = false, disabled = false, iconClassNam
         onClick={onClick}
         type="button"
       >
-        <i aria-hidden="true" className={iconClassName} />
+        {createElement(icon)}
       </button>
       <span aria-hidden="true" className="icon-tooltip">
         {label}
@@ -23,7 +26,7 @@ function adjustmentActionButton({ active = false, disabled = false, iconClassNam
   )
 }
 
-function AdjustmentSlider({ defaultValue, edits, iconClassName, label, max, min, onChange, valueKey }) {
+function AdjustmentSlider({ defaultValue, edits, icon, label, max, min, onChange, valueKey }) {
   const value = edits[valueKey]
   const maxValue = Number(max)
   const minValue = Number(min)
@@ -58,7 +61,7 @@ function AdjustmentSlider({ defaultValue, edits, iconClassName, label, max, min,
         <strong>{value}</strong>
         {adjustmentActionButton({
           disabled: value === defaultValue,
-          iconClassName,
+          icon,
           label: `Reset ${label}`,
           onClick: () => applyValue(defaultValue),
         })}
@@ -83,13 +86,13 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
         <div className="preview-panel__adjustment-header-actions">
           {adjustmentActionButton({
             active: edits.invert,
-            iconClassName: 'fa-solid fa-circle-half-stroke',
+            icon: ContrastIcon,
             label: 'Invert Colors',
             onClick: onToggleInvert,
           })}
           {adjustmentActionButton({
             disabled: !hasAdjustmentChanges,
-            iconClassName: 'fa-solid fa-arrow-rotate-left',
+            icon: ResetIcon,
             label: 'Reset Adjustments',
             onClick: onResetAll,
           })}
@@ -98,7 +101,7 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
       <AdjustmentSlider
         defaultValue={defaultImageEdits.brightness}
         edits={edits}
-        iconClassName="fa-solid fa-arrow-rotate-left"
+        icon={ResetIcon}
         label="Brightness"
         max="100"
         min="-100"
@@ -108,7 +111,7 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
       <AdjustmentSlider
         defaultValue={defaultImageEdits.contrast}
         edits={edits}
-        iconClassName="fa-solid fa-arrow-rotate-left"
+        icon={ResetIcon}
         label="Contrast"
         max="200"
         min="0"
@@ -118,7 +121,7 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
       <AdjustmentSlider
         defaultValue={defaultImageEdits.exposure}
         edits={edits}
-        iconClassName="fa-solid fa-arrow-rotate-left"
+        icon={ResetIcon}
         label="Exposure"
         max="100"
         min="-100"
@@ -128,7 +131,7 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
       <AdjustmentSlider
         defaultValue={defaultImageEdits.sharpness}
         edits={edits}
-        iconClassName="fa-solid fa-arrow-rotate-left"
+        icon={ResetIcon}
         label="Sharpness"
         max="100"
         min="0"
@@ -138,7 +141,7 @@ export default function ImageAdjustmentControls({ edits, onChange, onResetAll, o
       <AdjustmentSlider
         defaultValue={defaultImageEdits.denoise}
         edits={edits}
-        iconClassName="fa-solid fa-arrow-rotate-left"
+        icon={ResetIcon}
         label="Denoise"
         max="100"
         min="0"

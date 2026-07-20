@@ -35,9 +35,32 @@ export function normalizeClientProjectUi(value) {
         }
       : null
 
+  const floorPlanTransforms = {}
+  if (source.floorPlanTransforms && typeof source.floorPlanTransforms === 'object') {
+    for (const [floorPlanId, requestedTransform] of Object.entries(source.floorPlanTransforms)) {
+      if (
+        floorPlanId &&
+        requestedTransform &&
+        typeof requestedTransform === 'object' &&
+        Number.isFinite(Number(requestedTransform.x)) &&
+        Number.isFinite(Number(requestedTransform.y)) &&
+        Number.isFinite(Number(requestedTransform.scale))
+      ) {
+        floorPlanTransforms[floorPlanId] = {
+          x: Number(requestedTransform.x),
+          y: Number(requestedTransform.y),
+          scale: Math.max(0.12, Math.min(5, Number(requestedTransform.scale))),
+        }
+      }
+    }
+  }
+
   return {
+    workspaceMode: source.workspaceMode === 'floor-plan' ? 'floor-plan' : 'tree',
     showGrid: source.showGrid == null ? defaultUserProjectUi.showGrid : Boolean(source.showGrid),
     canvasTransform,
+    activeFloorPlanId: String(source.activeFloorPlanId || '').trim() || null,
+    floorPlanTransforms,
     selectedNodeIds: Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : [],
   }
 }
@@ -97,4 +120,3 @@ export function writeStoredClientPanelLayout(snapshot) {
     JSON.stringify(normalizeClientPanelLayout(snapshot)),
   )
 }
-

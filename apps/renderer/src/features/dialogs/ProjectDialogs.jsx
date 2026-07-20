@@ -1,6 +1,14 @@
 import ConfirmDialog from '../../components/ConfirmDialog'
 import IconButton from '../../components/IconButton'
-import { GearIcon, GlobeIcon, PlusIcon, UserIcon, UsersIcon, WarningIcon } from '../../components/icons'
+import {
+  GearIcon,
+  GlobeIcon,
+  PlusIcon,
+  SpinnerIcon,
+  UserIcon,
+  UsersIcon,
+  WarningIcon,
+} from '../../components/icons'
 import { resolvePublicAssetUrl } from '../../lib/runtimePaths'
 
 const nodetraceLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
@@ -365,7 +373,7 @@ export default function ProjectDialogs({
                               {hasWarning ? (
                                 <span className={`project-row__warning-inline ${warningClass}`} aria-hidden="true">
                                   {profile.connectionStatus === 'connecting' ? (
-                                    <i className="fa-solid fa-spinner fa-spin" />
+                                    <SpinnerIcon />
                                   ) : (
                                     <WarningIcon />
                                   )}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getContainedRect } from '../lib/image'
 import { NODE_HEIGHT, NODE_WIDTH, SIDEBAR_RAIL_WIDTH } from '../lib/constants'
 import { debugLog } from '../lib/debug'
+import { getZoomWheelDelta } from '../lib/wheel'
 
 export default function useWorkspaceInteractions({
   addToEffectiveSelection,
@@ -606,6 +607,10 @@ export default function useWorkspaceInteractions({
       if (event.target instanceof Element && event.target.closest('.canvas-caption__path')) {
         return
       }
+      const zoomDelta = getZoomWheelDelta(event)
+      if (!zoomDelta) {
+        return
+      }
       event.preventDefault()
       const rect = viewportRef.current?.getBoundingClientRect()
       if (!rect) {
@@ -614,7 +619,7 @@ export default function useWorkspaceInteractions({
 
       const cursorX = event.clientX - rect.left
       const cursorY = event.clientY - rect.top
-      const factor = event.deltaY < 0 ? 1.08 : 0.92
+      const factor = zoomDelta < 0 ? 1.08 : 0.92
 
       setTransform((current) => {
         const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))
@@ -675,6 +680,10 @@ export default function useWorkspaceInteractions({
     }
 
     const wheelListener = (event) => {
+      const zoomDelta = getZoomWheelDelta(event)
+      if (!zoomDelta) {
+        return
+      }
       event.preventDefault()
       const rect = previewViewportRef.current?.getBoundingClientRect()
       if (!rect) {
@@ -683,7 +692,7 @@ export default function useWorkspaceInteractions({
 
       const cursorX = event.clientX - rect.left
       const cursorY = event.clientY - rect.top
-      const factor = event.deltaY < 0 ? 1.08 : 0.92
+      const factor = zoomDelta < 0 ? 1.08 : 0.92
 
       setPreviewTransform((current) => {
         const nextScale = Math.max(0.1, Math.min(10, current.scale * factor))

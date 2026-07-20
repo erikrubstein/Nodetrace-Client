@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { collectDescendantIds, findNode } from '../lib/tree'
 
 import IconButton from './IconButton'
-import { PencilIcon, TrashIcon } from './icons'
+import {
+  CheckIcon,
+  FilterIcon,
+  PencilIcon,
+  SelectAllIcon,
+  TrashIcon,
+  WarningIcon,
+} from './icons'
 
 const SEARCH_SESSION_KEY_PREFIX = 'nodetrace-search-state'
 
@@ -394,7 +401,7 @@ export default function SearchPanel({
                   onClick={() => setFilterMenuOpen((current) => !current)}
                   tooltip="Filters"
                 >
-                  <i aria-hidden="true" className="fa-solid fa-filter" />
+                  <FilterIcon />
                 </IconButton>
                 {filterMenuOpen ? (
                   <div className="search-panel__filter-popover">
@@ -734,7 +741,7 @@ export default function SearchPanel({
               onClick={() => bulkSelectNodeIds(results.map((node) => node.id))}
               tooltip="Select All Results"
             >
-              <i aria-hidden="true" className="fa-solid fa-check-double" />
+              <SelectAllIcon />
             </IconButton>
           </div>
         </div>
@@ -761,7 +768,7 @@ export default function SearchPanel({
                     ) : null}
                     {node.reviewStatus === 'reviewed' ? (
                       <span className="search-panel__result-complete" aria-label="Reviewed" title="Reviewed">
-                        <i aria-hidden="true" className="fa-solid fa-check" />
+                        <CheckIcon />
                       </span>
                     ) : node.reviewStatus === 'needs_attention' ? (
                       <span
@@ -769,7 +776,7 @@ export default function SearchPanel({
                         aria-label="Needs Attention"
                         title="Needs Attention"
                       >
-                        <i aria-hidden="true" className="fa-solid fa-triangle-exclamation" />
+                        <WarningIcon />
                       </span>
                     ) : null}
                   </span>

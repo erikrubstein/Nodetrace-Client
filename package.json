@@ -14,9 +14,9 @@
   "scripts": {
     "dev": "npm run dev:web",
     "dev:web": "npm run dev --workspace nodetrace-renderer",
-    "dev:desktop": "concurrently \"npm run dev:renderer\" \"electron apps/desktop --dev-url=http://127.0.0.1:5173\"",
-    "dev:desktop:mac-ui": "cross-env NODETRACE_DESKTOP_PLATFORM_OVERRIDE=darwin concurrently \"npm run dev:renderer\" \"electron apps/desktop --dev-url=http://127.0.0.1:5173 --dev-platform=darwin\"",
-    "dev:desktop:win-ui": "cross-env NODETRACE_DESKTOP_PLATFORM_OVERRIDE=win32 concurrently \"npm run dev:renderer\" \"electron apps/desktop --dev-url=http://127.0.0.1:5173 --dev-platform=win32\"",
+    "dev:desktop": "node scripts/start-desktop.mjs",
+    "dev:desktop:mac-ui": "cross-env NODETRACE_DESKTOP_PLATFORM_OVERRIDE=darwin node scripts/start-desktop.mjs --dev-platform=darwin",
+    "dev:desktop:win-ui": "cross-env NODETRACE_DESKTOP_PLATFORM_OVERRIDE=win32 node scripts/start-desktop.mjs --dev-platform=win32",
     "dev:renderer": "npm run dev --workspace nodetrace-renderer",
     "start": "npm run preview:web",
     "start:desktop": "electron apps/desktop",
@@ -33,6 +33,7 @@
     "lint:desktop": "npm run lint --workspace nodetrace-desktop"
   },
   "dependencies": {
+    "lucide-react": "^1.25.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

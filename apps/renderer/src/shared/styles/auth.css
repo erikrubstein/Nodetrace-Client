@@ -291,6 +291,11 @@
   line-height: 1;
 }
 
+.mobile-entry-card__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
 .mobile-entry-card__option-title {
   font-size: 0.92rem;
   font-weight: 700;
@@ -530,6 +535,11 @@ body.capture-route #root {
   line-height: 1;
 }
 
+.capture-tool-button svg {
+  width: 17px;
+  height: 17px;
+}
+
 .capture-native-input {
   display: none;
 }
@@ -667,4 +677,3 @@ body.capture-route #root {
   background: transparent;
   text-decoration: underline;
 }
-

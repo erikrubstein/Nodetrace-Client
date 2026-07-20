@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { CloseIcon } from './icons'
 
 const RESERVED_TAGS = new Set(['any'])
 
@@ -118,7 +119,7 @@ export default function TagInput({ availableTags, onBlur, onChange, onCommit, pl
               }}
               type="button"
             >
-              <i aria-hidden="true" className="fa-solid fa-xmark" />
+              <CloseIcon />
             </button>
           </span>
         ))}

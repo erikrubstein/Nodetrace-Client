@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import IconButton from './IconButton'
-import { PencilIcon, PlusIcon, TrashIcon, WarningIcon } from './icons'
+import {
+  CloseIcon,
+  MaximizeWindowIcon,
+  MinusIcon,
+  PencilIcon,
+  PlusIcon,
+  RestoreWindowIcon,
+  SpinnerIcon,
+  TrashIcon,
+  WarningIcon,
+} from './icons'
 import { resolvePublicAssetUrl } from '../lib/runtimePaths'
 
 const nodetraceLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
@@ -284,7 +294,7 @@ export default function DesktopServerManager({
             }}
             type="button"
           >
-            <i aria-hidden="true" className="fa-solid fa-minus" />
+            <MinusIcon />
           </button>
           <button
             aria-label={desktopWindowMaximized ? 'Restore window' : 'Maximize window'}
@@ -295,7 +305,7 @@ export default function DesktopServerManager({
             }}
             type="button"
           >
-            <i aria-hidden="true" className={`fa-regular ${desktopWindowMaximized ? 'fa-clone' : 'fa-square'}`} />
+            {desktopWindowMaximized ? <RestoreWindowIcon /> : <MaximizeWindowIcon />}
           </button>
           <button
             aria-label="Close window"
@@ -306,7 +316,7 @@ export default function DesktopServerManager({
             }}
             type="button"
           >
-            <i aria-hidden="true" className="fa-solid fa-xmark" />
+            <CloseIcon />
           </button>
         </div>
       ) : null}
@@ -360,7 +370,7 @@ export default function DesktopServerManager({
                         {warning ? (
                           <span className={warningClass} aria-hidden="true">
                             {profile.connectionStatus === 'connecting' ? (
-                              <i className="fa-solid fa-spinner fa-spin" />
+                              <SpinnerIcon />
                             ) : (
                               <WarningIcon />
                             )}
@@ -629,7 +639,7 @@ export default function DesktopServerManager({
                       onClick={() => void handleSave()}
                       type="button"
                     >
-                      {busy ? <i aria-hidden="true" className="fa-solid fa-spinner fa-spin button-spinner" /> : null}
+                      {busy ? <SpinnerIcon className="button-spinner" /> : null}
                       {editor.id ? 'Save Server Profile' : 'Add Server Profile'}
                     </button>
                   </>

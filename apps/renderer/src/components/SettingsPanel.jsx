@@ -1,4 +1,5 @@
 import IconButton from './IconButton'
+import { CloseIcon } from './icons'
 
 export default function SettingsPanel({
   busy,
@@ -111,6 +112,32 @@ export default function SettingsPanel({
       </section>
 
       <section className="inspector__section settings-panel__section">
+        <div className="inspector__title">Features</div>
+        <div className="settings-panel__grid">
+          <label>
+            <span>Floor plans</span>
+            <select
+              aria-label="Floor plans"
+              disabled={busy}
+              onChange={(event) =>
+                persistProjectSettings({
+                  ...projectSettings,
+                  floorPlanEnabled: event.target.value === 'enabled',
+                })
+              }
+              value={projectSettings.floorPlanEnabled ? 'enabled' : 'disabled'}
+            >
+              <option value="disabled">Off</option>
+              <option value="enabled">On</option>
+            </select>
+          </label>
+        </div>
+        <div className="inspector__notice">
+          Turning this off hides the spatial workspace and its panels. Existing floor plans and placements are retained.
+        </div>
+      </section>
+
+      <section className="inspector__section settings-panel__section">
         <div className="inspector__title">Project</div>
         <button className="ghost-button settings-panel__reset" disabled={busy} onClick={openRenameProjectDialog} type="button">
           Rename Project
@@ -134,7 +161,7 @@ export default function SettingsPanel({
                 onClick={clearProjectOpenAiKey}
                 tooltip="Remove Key"
               >
-                <i aria-hidden="true" className="fa-solid fa-xmark" />
+                <CloseIcon />
               </IconButton>
             ) : null}
           </div>
