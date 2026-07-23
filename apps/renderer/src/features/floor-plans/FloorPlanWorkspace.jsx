@@ -480,7 +480,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
       <section className="floor-plan-workspace floor-plan-workspace--empty" hidden={!active}>
         <input
           accept="image/jpeg,image/png,image/webp"
-          aria-label="Upload floor plan image"
+          aria-label="Upload plan image"
           className="floor-plan-workspace__file-input"
           onChange={(event) => {
             const file = event.target.files?.[0]
@@ -497,12 +497,12 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
             <MapOverviewIcon />
           </span>
           <div>
-            <h2>Add a floor plan</h2>
+            <h2>Add a plan</h2>
             <p>Upload a PNG, JPEG, or WebP image, then place existing tree nodes as location markers.</p>
           </div>
           <button disabled={busy} onClick={() => uploadInputRef.current?.click()} type="button">
             <UploadIcon />
-            Upload floor plan
+            Upload plan
           </button>
         </div>
       </section>
@@ -524,7 +524,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     >
       <div className="canvas-tools" data-floor-plan-interactive="true">
         <IconButton
-          aria-label="Fit floor plan to view"
+          aria-label="Fit plan to view"
           className="canvas-tool-button"
           disabled={busy}
           onClick={fitToView}

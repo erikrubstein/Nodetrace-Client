@@ -13,7 +13,7 @@ Nodetrace Client is the front end for building, reviewing, and collaborating on 
 ## Highlights
 
 - hierarchical project and node model built for real documentation workflows
-- opt-in spatial floor-plan workspace with location and appearance panels
+- opt-in spatial plan workspace with location and appearance panels
 - desktop and web clients backed by the same server
 - collaborative editing with presence indicators and shared project access
 - non-destructive image review tools in the preview panel
@@ -94,7 +94,7 @@ Typical workflow:
 1. Sign in or create an account on a Nodetrace Server.
 2. Create a project or open an existing one.
 3. Build the node tree and attach photos where needed.
-4. Enable floor plans in Project Settings when a project needs spatial documentation.
+4. Enable plans in Project Settings when a project needs spatial documentation.
 5. Use the centered canvas tools to switch views, then manage plans, appearance, and locations from the side panels.
 6. Review notes, tags, status, and identification data in the side panels.
 7. Use search, templates, and preview tools to refine the project.

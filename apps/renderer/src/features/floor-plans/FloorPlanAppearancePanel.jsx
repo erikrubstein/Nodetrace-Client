@@ -27,7 +27,7 @@ export default function FloorPlanAppearancePanel({
     <div className="settings-panel floor-plan-appearance-panel">
       <input
         accept="image/jpeg,image/png,image/webp"
-        aria-label="Upload another floor plan image"
+        aria-label="Upload another plan image"
         className="floor-plan-workspace__file-input"
         onChange={(event) => {
           const file = event.target.files?.[0]
@@ -46,7 +46,7 @@ export default function FloorPlanAppearancePanel({
             <label>
               <span>Current plan</span>
               <select
-                aria-label="Floor plan"
+                aria-label="Plan"
                 onChange={(event) => onActiveFloorPlanChange(event.target.value)}
                 value={activeFloorPlan.id}
               >
@@ -57,7 +57,7 @@ export default function FloorPlanAppearancePanel({
             </label>
           </div>
         ) : (
-          <div className="inspector__notice">No floor plan has been uploaded.</div>
+          <div className="inspector__notice">No plan has been uploaded.</div>
         )}
         <button className="ghost-button settings-panel__reset" disabled={busy} onClick={() => uploadInputRef.current?.click()} type="button">
           Upload Plan
@@ -76,7 +76,7 @@ export default function FloorPlanAppearancePanel({
             <label>
               <span>Background</span>
               <select
-                aria-label="Floor plan background"
+                aria-label="Plan background"
                 disabled={busy}
                 onChange={(event) => patchAppearance({ transparentWhite: event.target.value === 'transparent' })}
                 value={appearance.transparentWhite ? 'transparent' : 'visible'}
@@ -90,7 +90,7 @@ export default function FloorPlanAppearancePanel({
                 <label>
                   <span>Ink</span>
                   <select
-                    aria-label="Floor plan ink"
+                    aria-label="Plan ink"
                     disabled={busy}
                     onChange={(event) => patchAppearance({ inkMode: event.target.value })}
                     value={appearance.inkMode}
@@ -104,7 +104,7 @@ export default function FloorPlanAppearancePanel({
                   <span>Background color</span>
                   <div className="floor-plan-appearance-panel__control-with-reset">
                     <input
-                      aria-label="Floor plan background color"
+                      aria-label="Plan background color"
                       disabled={busy}
                       onChange={(event) => patchAppearance({ backgroundColor: event.target.value })}
                       type="color"
@@ -130,7 +130,7 @@ export default function FloorPlanAppearancePanel({
                 <span>Ink color</span>
                 <div className="floor-plan-appearance-panel__control-with-reset">
                   <input
-                    aria-label="Floor plan ink color"
+                    aria-label="Plan ink color"
                     disabled={busy}
                     onChange={(event) => patchAppearance({ inkColor: event.target.value })}
                     type="color"
@@ -158,7 +158,7 @@ export default function FloorPlanAppearancePanel({
                   <span>Brightness</span>
                   <div className="settings-panel__range-control floor-plan-appearance-panel__range-control">
                     <input
-                      aria-label="Floor plan brightness"
+                      aria-label="Plan brightness"
                       disabled={busy}
                       max="100"
                       min="0"
@@ -168,7 +168,7 @@ export default function FloorPlanAppearancePanel({
                     />
                     <strong>{appearance.themeBrightness}%</strong>
                     <IconButton
-                      aria-label="Reset floor plan brightness"
+                      aria-label="Reset plan brightness"
                       className="tool-button"
                       disabled={busy || appearance.themeBrightness === defaultFloorPlanAppearance.themeBrightness}
                       onClick={() => patchAppearance({
@@ -185,7 +185,7 @@ export default function FloorPlanAppearancePanel({
                 <span>Background cutoff</span>
                 <div className="settings-panel__range-control floor-plan-appearance-panel__range-control">
                   <input
-                    aria-label="Floor plan background cutoff"
+                    aria-label="Plan background cutoff"
                     disabled={busy}
                     max="255"
                     min="1"

@@ -115,9 +115,9 @@ export default function SettingsPanel({
         <div className="inspector__title">Features</div>
         <div className="settings-panel__grid">
           <label>
-            <span>Floor plans</span>
+            <span>Plans</span>
             <select
-              aria-label="Floor plans"
+              aria-label="Plans"
               disabled={busy}
               onChange={(event) =>
                 persistProjectSettings({
@@ -133,7 +133,7 @@ export default function SettingsPanel({
           </label>
         </div>
         <div className="inspector__notice">
-          Turning this off hides the spatial workspace and its panels. Existing floor plans and placements are retained.
+          Turning this off hides the spatial workspace and its panels. Existing plans and placements are retained.
         </div>
       </section>
 

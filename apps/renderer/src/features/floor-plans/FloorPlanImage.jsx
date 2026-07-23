@@ -58,7 +58,7 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
       try {
         const response = await fetch(src, { credentials: 'same-origin' })
         if (!response.ok) {
-          throw new Error('Unable to load floor plan image')
+          throw new Error('Unable to load plan image')
         }
         objectUrl = URL.createObjectURL(await response.blob())
         const image = await new Promise((resolve, reject) => {

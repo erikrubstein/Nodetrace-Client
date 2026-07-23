@@ -58,7 +58,7 @@ export default function useFloorPlanCommands({
   }, [applyFloorPlanList, beginLocalEventExpectation, selectedProjectId, setActiveFloorPlanId, setBusy, setError, setWorkspaceMode])
 
   const handleDeleteFloorPlan = useCallback(async (floorPlan) => {
-    if (!floorPlan || !window.confirm(`Delete the floor plan "${floorPlan.name}" and all of its marker placements?`)) {
+    if (!floorPlan || !window.confirm(`Delete the plan "${floorPlan.name}" and all of its marker placements?`)) {
       return
     }
     const rollbackLocalEvent = beginLocalEventExpectation()

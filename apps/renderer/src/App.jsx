@@ -116,7 +116,7 @@ const PANEL_WINDOW_TITLES = {
   settings: 'Project Settings',
   collaborators: 'Project Access',
   locations: 'Locations',
-  floorPlan: 'Floor Plan',
+  floorPlan: 'Plan',
 }
 
 function MainApp() {
@@ -5040,7 +5040,7 @@ function MainApp() {
       } : null,
       floorPlan: floorPlanEnabled ? {
         id: 'floorPlan',
-        title: 'Floor Plan',
+        title: 'Plan',
         icon: <PaletteIcon />,
         allowPopout: false,
         content: (

@@ -32,7 +32,7 @@ export default function FloorPlanLocationsPanel({
   }, [nodes, placementsByNodeId, query])
 
   if (!activeFloorPlan) {
-    return <div className="inspector__notice floor-plan-panel__notice">Upload a floor plan before placing locations.</div>
+    return <div className="inspector__notice floor-plan-panel__notice">Upload a plan before placing locations.</div>
   }
 
   return (
@@ -84,7 +84,7 @@ export default function FloorPlanLocationsPanel({
               <span className="floor-plan-location-row__actions">
                 {placed ? (
                   <IconButton
-                    aria-label={`Remove ${node.name} from floor plan`}
+                    aria-label={`Remove ${node.name} from plan`}
                     className="tool-button"
                     disabled={busy}
                     onClick={() => onRemovePlacement(node.id)}
