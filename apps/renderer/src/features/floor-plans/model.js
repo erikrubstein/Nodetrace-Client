@@ -5,6 +5,7 @@ export const defaultFloorPlanAppearance = {
   backgroundColor: '#ffffff',
   inkMode: 'original',
   inkColor: '#efefef',
+  themeBrightness: 50,
   whiteThreshold: 245,
 }
 
@@ -15,6 +16,9 @@ export function normalizeFloorPlanAppearance(input) {
   const requestedInkMode = String(source.inkMode || '').trim()
   const requestedColor = String(source.inkColor || '').trim()
   const requestedBackgroundColor = String(source.backgroundColor || '').trim()
+  const requestedThemeBrightness = source.themeBrightness == null || source.themeBrightness === ''
+    ? Number.NaN
+    : Number(source.themeBrightness)
   const requestedWhiteThreshold = source.whiteThreshold == null || source.whiteThreshold === ''
     ? Number.NaN
     : Number(source.whiteThreshold)
@@ -27,6 +31,9 @@ export function normalizeFloorPlanAppearance(input) {
     inkColor: /^#[0-9a-f]{6}$/i.test(requestedColor)
       ? requestedColor.toLowerCase()
       : defaultFloorPlanAppearance.inkColor,
+    themeBrightness: Number.isFinite(requestedThemeBrightness)
+      ? Math.max(0, Math.min(100, requestedThemeBrightness))
+      : defaultFloorPlanAppearance.themeBrightness,
     whiteThreshold: Number.isFinite(requestedWhiteThreshold)
       ? Math.max(1, Math.min(255, requestedWhiteThreshold))
       : defaultFloorPlanAppearance.whiteThreshold,

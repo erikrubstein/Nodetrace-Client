@@ -107,15 +107,15 @@
   transform-origin: 0 0;
   border-radius: 3px;
   background: var(--canvas);
-  box-shadow:
-    0 18px 70px rgb(0 0 0 / 0.32),
-    0 0 0 1px rgb(255 255 255 / 0.16);
+  box-shadow: none;
+  outline: 1px solid rgb(255 255 255 / 0.16);
 }
 
 .floor-plan-stage.is-transparent {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  outline: none;
 }
 
 .floor-plan-stage__image {
@@ -134,11 +134,7 @@
 }
 
 .floor-plan-stage__image--processed.is-ready {
-  opacity: 1;
-}
-
-.floor-plan-stage__image--fallback.is-hidden {
-  visibility: hidden;
+  opacity: var(--floor-plan-brightness, 1);
 }
 
 .floor-plan-marker-position {
@@ -399,4 +395,16 @@
   width: 100%;
   min-height: 34px;
   padding: 3px;
+}
+
+.floor-plan-appearance-panel__control-with-reset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+}
+
+.floor-plan-appearance-panel__range-control {
+  grid-template-columns: minmax(0, 1fr) auto 30px;
+  gap: 8px;
 }

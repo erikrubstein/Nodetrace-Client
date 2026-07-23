@@ -100,6 +100,7 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   const workspaceView = page.getByRole('group', { name: 'Workspace view' })
   await expect(workspaceView).toBeVisible()
   await workspaceView.getByRole('button', { name: 'Floor plan view' }).click()
+  await expect(page.getByLabel('Floor plans')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Add a floor plan' })).toBeVisible()
 
   await page.getByLabel('Upload floor plan image').setInputFiles({
@@ -111,11 +112,41 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
     ),
   })
 
+  const floorPlanStage = page.locator('.floor-plan-stage')
+  await expect(floorPlanStage).toHaveCSS('box-shadow', 'none')
+  await expect(floorPlanStage).toHaveCSS('outline-width', '1px')
   await page.getByRole('button', { name: 'Floor Plan', exact: true }).click()
+  const appearancePanel = page.locator('.floor-plan-appearance-panel')
+  await expect.poll(() => appearancePanel.evaluate((panel) => {
+    const sections = panel.querySelectorAll(':scope > .inspector__section')
+    const styles = getComputedStyle(panel)
+    return {
+      direction: styles.flexDirection,
+      display: styles.display,
+      gap: Number.parseFloat(styles.gap),
+      sectionGap: sections.length > 1
+        ? sections[1].getBoundingClientRect().top - sections[0].getBoundingClientRect().bottom
+        : 0,
+    }
+  })).toEqual({
+    direction: 'column',
+    display: 'flex',
+    gap: 12,
+    sectionGap: 12,
+  })
   await expect(page.getByRole('combobox', { name: 'Floor plan', exact: true })).toHaveValue(/.+/)
-  await page.getByLabel('Floor plan ink').selectOption('custom')
-  await page.getByLabel('Floor plan ink color').fill('#00ff66')
-  await page.getByLabel('Floor plan background').selectOption('transparent')
+  const floorPlanInk = page.getByLabel('Floor plan ink', { exact: true })
+  const floorPlanBackground = page.getByLabel('Floor plan background', { exact: true })
+  await expect(floorPlanInk).toHaveCount(0)
+  await expect(page.getByLabel('Floor plan background color')).toHaveCount(0)
+  await expect(page.getByLabel('Floor plan background cutoff')).toHaveCount(0)
+  await floorPlanBackground.selectOption('transparent')
+  await expect(page.locator('.floor-plan-stage > img.floor-plan-stage__image')).toHaveCount(0)
+  await expect(page.locator('.floor-plan-stage__image--processed')).toHaveCount(1)
+  await expect(floorPlanInk).toHaveValue('original')
+  await floorPlanInk.selectOption('custom')
+  const floorPlanInkColor = page.getByLabel('Floor plan ink color')
+  await floorPlanInkColor.fill('#00ff66')
   await page.getByLabel('Floor plan background color').fill('#f0f0f0')
   const cutoff = page.getByLabel('Floor plan background cutoff')
   await expect(cutoff).toHaveAttribute('min', '1')
@@ -142,12 +173,69 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
     return { incorrectlyColoredPixels, recoloredPixels, transparentPixels }
   })).toEqual({ incorrectlyColoredPixels: 0, recoloredPixels: 3, transparentPixels: 1 })
   await expect(processedPlan).toHaveClass(/is-ready/)
-  await expect(page.locator('.floor-plan-stage__image--fallback')).toHaveClass(/is-hidden/)
+  await expect(page.locator('.floor-plan-stage__image--fallback')).toHaveCount(0)
+  await processedPlan.evaluate((canvas) => {
+    window.__nodetraceFloorPlanCanvas = canvas
+  })
+  await floorPlanInkColor.fill('#00ee66')
+  expect(await page.locator('.floor-plan-stage').evaluate((stage) => ({
+    originalImageCount: stage.querySelectorAll(':scope > img.floor-plan-stage__image').length,
+    processedReady: stage.querySelector('.floor-plan-stage__image--processed')?.classList.contains('is-ready'),
+  }))).toEqual({
+    originalImageCount: 0,
+    processedReady: true,
+  })
+  await expect.poll(() => processedPlan.evaluate((canvas) => {
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+    return Array.from(pixels).some((value, index) => index % 4 === 1 && value === 238)
+  })).toBe(true)
+  const resetInkColor = page.getByRole('button', { name: 'Reset ink color' })
+  const resetBackgroundColor = page.getByRole('button', { name: 'Reset background color' })
+  const resetBackgroundCutoff = page.getByRole('button', { name: 'Reset background cutoff' })
+  await expect(resetInkColor).toBeEnabled()
+  await resetInkColor.click()
+  await expect(page.getByLabel('Floor plan ink color')).toHaveValue('#efefef')
+  await expect(resetInkColor).toBeDisabled()
+  await expect(resetBackgroundColor).toBeEnabled()
+  await resetBackgroundColor.click()
+  await expect(page.getByLabel('Floor plan background color')).toHaveValue('#ffffff')
+  await expect(resetBackgroundColor).toBeDisabled()
+  await expect(resetBackgroundCutoff).toBeEnabled()
+  await resetBackgroundCutoff.click()
+  await expect(page.getByLabel('Floor plan background cutoff')).toHaveValue('245')
+  await expect(resetBackgroundCutoff).toBeDisabled()
+  const planBrightness = page.getByRole('slider', { name: 'Floor plan brightness', exact: true })
+  await expect(planBrightness).toHaveCount(0)
+  await floorPlanInk.selectOption('theme')
+  await expect(planBrightness).toBeVisible()
+  await expect(planBrightness).toHaveAttribute('min', '0')
+  await expect(planBrightness).toHaveAttribute('max', '100')
+  await expect(planBrightness).toHaveValue('50')
+  const resetBrightness = page.getByRole('button', { name: 'Reset floor plan brightness' })
+  await expect(resetBrightness).toBeDisabled()
+  await planBrightness.fill('35')
+  await expect(planBrightness).toHaveValue('35')
+  await expect.poll(() => processedPlan.evaluate((canvas) => getComputedStyle(canvas).opacity)).toBe('0.35')
+  await expect(resetBrightness).toBeEnabled()
+  await resetBrightness.click()
+  await expect(planBrightness).toHaveValue('50')
+  await expect(resetBrightness).toBeDisabled()
+  await planBrightness.fill('35')
+  await floorPlanBackground.selectOption('visible')
+  await expect(floorPlanInk).toHaveCount(0)
+  await expect(planBrightness).toHaveCount(0)
+  await expect(page.getByLabel('Floor plan background color')).toHaveCount(0)
+  await expect(page.getByLabel('Floor plan background cutoff')).toHaveCount(0)
+  await expect(processedPlan).toHaveCount(0)
+  await floorPlanBackground.selectOption('transparent')
+  await expect(floorPlanInk).toHaveValue('theme')
+  await expect(planBrightness).toHaveValue('35')
+  await expect(page.locator('.floor-plan-stage > img.floor-plan-stage__image')).toHaveCount(0)
+  await expect(processedPlan).toBeVisible()
   await processedPlan.evaluate((canvas) => {
     window.__nodetraceFloorPlanCanvas = canvas
   })
 
-  const floorPlanStage = page.locator('.floor-plan-stage')
   await expect(floorPlanStage).toHaveClass(/is-transparent/)
   await expect.poll(async () => floorPlanStage.evaluate((stage) => {
     const styles = getComputedStyle(stage)
@@ -280,7 +368,10 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await locationButton.dblclick()
   await expect(page.getByRole('button', { name: childNodeName, exact: true })).toBeVisible()
 
+  await page.getByRole('button', { name: 'Floor Plan', exact: true }).click()
+  await expect(appearancePanel).toBeVisible()
   await workspaceView.getByRole('button', { name: 'Tree view' }).click()
+  await expect(appearancePanel).toBeVisible()
   await expect(processedPlan).toBeHidden()
   await expect(processedPlan).toHaveCount(1)
   const treeNestedNode = page.locator('.canvas-viewport').getByRole('button', { name: childNodeName, exact: true })
@@ -299,6 +390,8 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await expect(treeNestedNode).toBeVisible()
 
   await workspaceView.getByRole('button', { name: 'Floor plan view' }).click()
+  await expect(appearancePanel).toBeVisible()
+  await expect(page.getByLabel('Search locations')).toHaveCount(0)
   await expect(processedPlan).toBeVisible()
   expect(await processedPlan.evaluate((canvas) => canvas === window.__nodetraceFloorPlanCanvas)).toBe(true)
   const floorPlanNestedNode = page.locator('.floor-plan-workspace').getByRole('button', {
@@ -329,10 +422,16 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await expect(floorPlanNestedNode).toBeVisible()
   await page.reload()
   await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
+  await expect(page.locator('.floor-plan-stage > img.floor-plan-stage__image')).toHaveCount(0)
+  await expect(processedPlan).toHaveClass(/is-ready/)
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
   await expect(
     page.locator('.floor-plan-workspace').getByRole('button', { name: childNodeName, exact: true }),
   ).toBeVisible()
+  await page.getByRole('button', { name: 'Floor Plan', exact: true }).click()
+  await expect(
+    page.getByRole('slider', { name: 'Floor plan brightness', exact: true }),
+  ).toHaveValue('35')
   await page.getByRole('button', { name: 'Project Settings' }).click()
   await page.getByLabel('Direction').selectOption('vertical')
   await expect(locationAnchor).toHaveClass(/is-vertical/)

@@ -20,15 +20,34 @@ function parseCanvasColor(value) {
 export default function FloorPlanImage({ alt, appearance: appearanceInput, src, theme }) {
   const canvasRef = useRef(null)
   const [renderFailed, setRenderFailed] = useState(false)
-  const [renderedKey, setRenderedKey] = useState('')
+  const [renderedSource, setRenderedSource] = useState('')
   const appearance = useMemo(() => normalizeFloorPlanAppearance(appearanceInput), [appearanceInput])
-  const treatmentEnabled = appearance.transparentWhite || appearance.inkMode !== 'original'
-  const renderKey = useMemo(() => JSON.stringify([src, theme, appearance]), [appearance, src, theme])
+  const pixelAppearance = useMemo(() => ({
+    backgroundColor: appearance.backgroundColor,
+    inkColor: appearance.inkColor,
+    inkMode: appearance.transparentWhite ? appearance.inkMode : 'original',
+    transparentWhite: appearance.transparentWhite,
+    whiteThreshold: appearance.whiteThreshold,
+  }), [
+    appearance.backgroundColor,
+    appearance.inkColor,
+    appearance.inkMode,
+    appearance.transparentWhite,
+    appearance.whiteThreshold,
+  ])
+  const treatmentEnabled = pixelAppearance.transparentWhite || pixelAppearance.inkMode !== 'original'
+  const renderKey = useMemo(
+    () => JSON.stringify([src, theme, pixelAppearance]),
+    [pixelAppearance, src, theme],
+  )
+  const planBrightness = appearance.transparentWhite && appearance.inkMode === 'theme'
+    ? appearance.themeBrightness / 100
+    : 1
 
   useEffect(() => {
     if (!treatmentEnabled || !src) {
       setRenderFailed(false)
-      setRenderedKey('')
+      setRenderedSource('')
       return undefined
     }
 
@@ -57,18 +76,19 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         const renderScale = Math.min(1, MAX_RENDER_DIMENSION / Math.max(naturalWidth, naturalHeight))
         const width = Math.max(1, Math.round(naturalWidth * renderScale))
         const height = Math.max(1, Math.round(naturalHeight * renderScale))
-        const canvas = canvasRef.current
-        canvas.width = width
-        canvas.height = height
-        const context = canvas.getContext('2d', { willReadFrequently: true })
+        const visibleCanvas = canvasRef.current
+        const renderCanvas = document.createElement('canvas')
+        renderCanvas.width = width
+        renderCanvas.height = height
+        const context = renderCanvas.getContext('2d', { willReadFrequently: true })
         context.clearRect(0, 0, width, height)
         context.drawImage(image, 0, 0, width, height)
 
         const imageData = context.getImageData(0, 0, width, height)
         const pixels = imageData.data
-        const computedThemeColor = getComputedStyle(canvas).color
-        const tint = parseCanvasColor(appearance.inkMode === 'custom' ? appearance.inkColor : computedThemeColor)
-        const background = parseCanvasColor(appearance.backgroundColor)
+        const computedThemeColor = getComputedStyle(visibleCanvas).color
+        const tint = parseCanvasColor(pixelAppearance.inkMode === 'custom' ? pixelAppearance.inkColor : computedThemeColor)
+        const background = parseCanvasColor(pixelAppearance.backgroundColor)
         const cutoffFeather = 12
 
         for (let index = 0; index < pixels.length; index += 4) {
@@ -76,7 +96,7 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
           const green = pixels[index + 1]
           const blue = pixels[index + 2]
 
-          if (appearance.transparentWhite) {
+          if (pixelAppearance.transparentWhite) {
             const backgroundDistance = Math.max(
               Math.abs(red - background.red),
               Math.abs(green - background.green),
@@ -85,13 +105,13 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
             const backgroundSimilarity = 255 - backgroundDistance
             const opacity = Math.max(
               0,
-              Math.min(1, (appearance.whiteThreshold - backgroundSimilarity) / cutoffFeather),
+              Math.min(1, (pixelAppearance.whiteThreshold - backgroundSimilarity) / cutoffFeather),
             )
             pixels[index + 3] = Math.round(pixels[index + 3] * opacity)
           }
 
-          if (appearance.inkMode !== 'original' && pixels[index + 3] > 0) {
-            if (appearance.transparentWhite) {
+          if (pixelAppearance.inkMode !== 'original' && pixels[index + 3] > 0) {
+            if (pixelAppearance.transparentWhite) {
               pixels[index] = tint.red
               pixels[index + 1] = tint.green
               pixels[index + 2] = tint.blue
@@ -107,14 +127,21 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
 
         context.clearRect(0, 0, width, height)
         context.putImageData(imageData, 0, 0)
-        if (!cancelled) {
-          setRenderFailed(false)
-          setRenderedKey(renderKey)
+        if (cancelled || !canvasRef.current) {
+          return
         }
+        const nextCanvas = canvasRef.current
+        nextCanvas.width = width
+        nextCanvas.height = height
+        const nextContext = nextCanvas.getContext('2d')
+        nextContext.clearRect(0, 0, width, height)
+        nextContext.drawImage(renderCanvas, 0, 0)
+        setRenderFailed(false)
+        setRenderedSource(src)
       } catch {
         if (!cancelled) {
           setRenderFailed(true)
-          setRenderedKey('')
+          setRenderedSource('')
         }
       } finally {
         if (objectUrl) {
@@ -131,28 +158,24 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [appearance, renderKey, src, theme, treatmentEnabled])
+  }, [pixelAppearance, renderKey, src, theme, treatmentEnabled])
 
-  if (!treatmentEnabled || renderFailed) {
+  if (!treatmentEnabled) {
     return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={src} />
   }
 
-  const renderReady = renderedKey === renderKey
+  const renderReady = renderedSource === src
+  if (renderFailed && !renderReady) {
+    return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={src} />
+  }
+
   return (
-    <>
-      <img
-        alt=""
-        aria-hidden="true"
-        className={`floor-plan-stage__image floor-plan-stage__image--fallback${renderReady ? ' is-hidden' : ''}`}
-        draggable="false"
-        src={src}
-      />
-      <canvas
-        aria-label={alt}
-        className={`floor-plan-stage__image floor-plan-stage__image--processed${renderReady ? ' is-ready' : ''}`}
-        ref={canvasRef}
-        role="img"
-      />
-    </>
+    <canvas
+      aria-label={alt}
+      className={`floor-plan-stage__image floor-plan-stage__image--processed${renderReady ? ' is-ready' : ''}`}
+      ref={canvasRef}
+      role="img"
+      style={{ '--floor-plan-brightness': planBrightness }}
+    />
   )
 }

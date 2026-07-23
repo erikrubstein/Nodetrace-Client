@@ -1083,9 +1083,7 @@ function MainApp() {
     const normalizedMode = nextMode === 'floor-plan' && floorPlanEnabled ? 'floor-plan' : 'tree'
     markPendingUiSignature({ workspaceMode: normalizedMode })
     setWorkspaceMode(normalizedMode)
-    if (normalizedMode === 'floor-plan') {
-      ensureSidebarPanelVisible('locations')
-    } else {
+    if (normalizedMode === 'tree') {
       setPendingFloorPlanNodeId(null)
     }
   }
