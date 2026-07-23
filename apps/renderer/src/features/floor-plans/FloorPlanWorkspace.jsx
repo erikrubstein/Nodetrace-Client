@@ -5,150 +5,171 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
-  useState,
 } from 'react'
 
 import IconButton from '../../components/IconButton'
+import GraphNodeVisual from '../../components/GraphNodeVisual'
 import {
-  AddPhotoIcon,
   FitViewIcon,
-  FolderIcon,
-  LocationIcon,
   MapOverviewIcon,
-  RemoveLocationIcon,
+  ResetIcon,
   UploadIcon,
 } from '../../components/icons'
 import { getZoomWheelDelta } from '../../lib/wheel'
 import FloorPlanImage from './FloorPlanImage'
 import {
   buildFloorPlanNodeIndex,
-  buildMiniTreeEntries,
+  buildFloorPlanTreeLayout,
   FLOOR_PLAN_NODE_DRAG_TYPE,
   getFloorPlanWorldSize,
 } from './model'
 
-const DEFAULT_TRANSFORM = { x: 60, y: 60, scale: 1 }
+const DEFAULT_TRANSFORM = { x: 60, y: 60, scale: 1, markerScale: 1 }
+const MIN_MARKER_SCALE = 0.4
+const MAX_MARKER_SCALE = 3
+const MARKER_TREE_GAP = 28
+const MARKER_NODE_HALF_SIZE = 56
 
 function FloorPlanMarker({
-  childrenById,
-  descendantCount,
-  expanded,
+  expandedNodeIds,
+  imageLoadRevision,
+  loadedImages,
+  markImageLoaded,
   node,
-  onExpand,
-  onRemove,
+  nodeIndex,
   onSelect,
+  onToggleNode,
+  markerScale,
   placement,
+  projectSettings,
+  selectedNodeId,
   viewportScale,
 }) {
-  const miniTreeEntries = useMemo(
-    () => (expanded ? buildMiniTreeEntries(node.id, childrenById) : []),
-    [childrenById, expanded, node.id],
+  const treeLayout = useMemo(
+    () => buildFloorPlanTreeLayout(node.id, nodeIndex, projectSettings, expandedNodeIds),
+    [expandedNodeIds, node.id, nodeIndex, projectSettings],
   )
-  const hiddenDescendantCount = Math.max(0, descendantCount - miniTreeEntries.length)
+  const markerExpanded = treeLayout.nodes.some(
+    (item) => item.node.type !== 'collapsed-group' && expandedNodeIds.has(item.id),
+  )
+  const verticalLayout = projectSettings.orientation === 'vertical'
+  const markerTreeOrigin = verticalLayout
+    ? { x: -MARKER_NODE_HALF_SIZE, y: MARKER_TREE_GAP }
+    : { x: MARKER_TREE_GAP, y: -MARKER_NODE_HALF_SIZE }
 
   return (
     <div
-      className={`floor-plan-marker-position ${expanded ? 'is-expanded' : ''}`}
+      className={`floor-plan-marker-position ${markerExpanded ? 'is-expanded' : ''}`}
       style={{ left: `${placement.x * 100}%`, top: `${placement.y * 100}%` }}
     >
       <div
-        className={`floor-plan-marker ${expanded ? 'is-expanded' : ''}`}
+        className="floor-plan-marker"
         data-floor-plan-interactive="true"
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = 'move'
-          event.dataTransfer.setData(FLOOR_PLAN_NODE_DRAG_TYPE, node.id)
-        }}
-        style={{ '--floor-plan-marker-scale': 1 / Math.max(0.12, viewportScale) }}
+        style={{ '--floor-plan-marker-scale': markerScale / Math.max(0.12, viewportScale) }}
       >
-        <button
-          aria-label={`Open location ${node.name}`}
-          className="floor-plan-marker__anchor"
-          onClick={(event) => {
-            event.stopPropagation()
-            onExpand(node.id)
-          }}
-          type="button"
+        <svg
+          className={`floor-plan-marker__anchor ${verticalLayout ? 'is-vertical' : 'is-horizontal'}`}
+          aria-hidden="true"
         >
-          <span className="floor-plan-marker__pin" aria-hidden="true">
-            <LocationIcon />
-          </span>
-          <span className="floor-plan-marker__summary">
-            {node.previewUrl || node.imageUrl ? (
-              <img alt="" className="floor-plan-marker__thumbnail" draggable="false" src={node.previewUrl || node.imageUrl} />
-            ) : (
-              <span className="floor-plan-marker__thumbnail floor-plan-marker__thumbnail--empty" aria-hidden="true">
-                {node.type === 'photo' ? <AddPhotoIcon /> : <FolderIcon />}
-              </span>
-            )}
-            <span className="floor-plan-marker__text">
-              <strong>{node.name}</strong>
-              <small>{descendantCount ? `${descendantCount} nested item${descendantCount === 1 ? '' : 's'}` : 'Location'}</small>
-            </span>
-          </span>
-        </button>
-        {expanded ? (
-          <div className="floor-plan-marker__tree">
-            {miniTreeEntries.length ? (
-              miniTreeEntries.map((entry) => (
-                <button
-                  className="floor-plan-marker__tree-row"
-                  key={entry.node.id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSelect(entry.node.id)
-                  }}
-                  style={{ '--floor-plan-depth': `${Math.min(entry.depth, 4) * 10}px` }}
-                  type="button"
-                >
-                  {entry.node.hasImage ? <AddPhotoIcon /> : <FolderIcon />}
-                  <span>{entry.node.name}</span>
-                </button>
-              ))
-            ) : (
-              <div className="floor-plan-marker__tree-empty">No nested nodes yet</div>
-            )}
-            {hiddenDescendantCount ? (
-              <div className="floor-plan-marker__tree-more">+{hiddenDescendantCount} more</div>
-            ) : null}
+          <line x1="0" x2={verticalLayout ? 0 : MARKER_TREE_GAP} y1="0" y2={verticalLayout ? MARKER_TREE_GAP : 0} />
+          <circle className="floor-plan-marker__anchor-background" cx="0" cy="0" r="12" />
+          <circle className="floor-plan-marker__anchor-dot" cx="0" cy="0" r="6" />
+        </svg>
+        <svg className="floor-plan-marker__links" aria-hidden="true">
+          {treeLayout.links.map((link) => (
+            <line
+              className={link.sourceId === selectedNodeId ? 'is-selected' : ''}
+              key={link.key}
+              x1={markerTreeOrigin.x + link.x1}
+              x2={markerTreeOrigin.x + link.x2}
+              y1={markerTreeOrigin.y + link.y1}
+              y2={markerTreeOrigin.y + link.y2}
+            />
+          ))}
+        </svg>
+        {treeLayout.nodes.map((item) => {
+          const collapsedGroup = item.node.type === 'collapsed-group'
+          const rootNode = item.id === node.id
+          return (
             <button
-              className="floor-plan-marker__remove"
+              aria-label={item.node.name}
+              className={`graph-node floor-plan-marker__tree-node ${rootNode ? 'is-root' : ''} ${
+                selectedNodeId === item.id ? 'selected' : ''
+              } ${projectSettings.imageMode === 'square' ? 'image-square' : 'image-original'} ${
+                item.node.hasImage ? 'node-with-photo' : 'node-without-photo'
+              } ${collapsedGroup ? 'collapsed-node' : ''}`}
+              data-node-id={item.id}
+              draggable={rootNode}
+              key={item.id}
               onClick={(event) => {
                 event.stopPropagation()
-                onRemove(node.id)
+                if (collapsedGroup) {
+                  return
+                }
+                onSelect(item.id)
+              }}
+              onDoubleClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (!collapsedGroup && (nodeIndex.childrenById.get(item.id) || []).length) {
+                  onToggleNode(item.id)
+                }
+              }}
+              onDragStart={(event) => {
+                if (!rootNode) {
+                  event.preventDefault()
+                  return
+                }
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData(FLOOR_PLAN_NODE_DRAG_TYPE, node.id)
+              }}
+              style={{
+                left: `${markerTreeOrigin.x + item.x}px`,
+                top: `${markerTreeOrigin.y + item.y}px`,
               }}
               type="button"
             >
-              <RemoveLocationIcon />
-              Remove from plan
+              <GraphNodeVisual
+                imageLoadRevision={imageLoadRevision}
+                loadedImages={loadedImages}
+                markImageLoaded={markImageLoaded}
+                node={item.node}
+              />
             </button>
-          </div>
-        ) : null}
+          )
+        })}
       </div>
     </div>
   )
 }
 
 const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
+  active,
   activeFloorPlanId,
   busy,
+  expandedNodeIds,
   floorPlans,
+  imageLoadRevision,
+  loadedImages,
+  markImageLoaded,
   nodes,
   onActiveFloorPlanChange,
   onPendingPlacementChange,
-  onRemovePlacement,
+  onExpandedNodeIdsChange,
   onSavePlacement,
   onSelectNode,
   onTransformChange,
   onUploadFloorPlan,
   pendingPlacementNodeId,
+  projectSettings,
+  selectedNodeId,
   theme,
   transform,
 }, ref) {
   const viewportRef = useRef(null)
   const uploadInputRef = useRef(null)
   const panRef = useRef(null)
-  const [expandedMarkerNodeId, setExpandedMarkerNodeId] = useState(null)
+  const initializedSelectionFloorPlanIdRef = useRef(null)
 
   const activeFloorPlan = useMemo(
     () => floorPlans.find((floorPlan) => floorPlan.id === activeFloorPlanId) || floorPlans[0] || null,
@@ -157,11 +178,77 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   const nodeIndex = useMemo(() => buildFloorPlanNodeIndex(nodes), [nodes])
   const worldSize = useMemo(() => getFloorPlanWorldSize(activeFloorPlan), [activeFloorPlan])
   const activeTransform = transform || DEFAULT_TRANSFORM
+  const markerScale = Math.max(
+    MIN_MARKER_SCALE,
+    Math.min(MAX_MARKER_SCALE, Number(activeTransform.markerScale) || 1),
+  )
+  const placedRootIds = useMemo(
+    () => new Set((activeFloorPlan?.placements || []).map((placement) => placement.nodeId)),
+    [activeFloorPlan?.placements],
+  )
+  const selectedPlacementRootId = useMemo(() => {
+    let currentNode = nodeIndex.byId.get(selectedNodeId)
+    const visited = new Set()
+    while (currentNode && !visited.has(currentNode.id)) {
+      if (placedRootIds.has(currentNode.id)) {
+        return currentNode.id
+      }
+      visited.add(currentNode.id)
+      currentNode = currentNode.parent_id == null ? null : nodeIndex.byId.get(currentNode.parent_id)
+    }
+    return null
+  }, [nodeIndex.byId, placedRootIds, selectedNodeId])
+  const expandedTreeNodeIds = useMemo(
+    () => new Set(expandedNodeIds || []),
+    [expandedNodeIds],
+  )
   useEffect(() => {
     if (activeFloorPlan && activeFloorPlan.id !== activeFloorPlanId) {
       onActiveFloorPlanChange(activeFloorPlan.id)
     }
   }, [activeFloorPlan, activeFloorPlanId, onActiveFloorPlanChange])
+
+  useEffect(() => {
+    if (!active || !nodes.length) {
+      return
+    }
+    const currentFloorPlanId = activeFloorPlan?.id || null
+    if (currentFloorPlanId && initializedSelectionFloorPlanIdRef.current !== currentFloorPlanId) {
+      initializedSelectionFloorPlanIdRef.current = currentFloorPlanId
+      const initialPlacedRootId =
+        selectedPlacementRootId ||
+        (activeFloorPlan?.placements || []).find((placement) => nodeIndex.byId.has(placement.nodeId))?.nodeId ||
+        null
+      if (initialPlacedRootId && selectedNodeId !== initialPlacedRootId) {
+        onSelectNode(initialPlacedRootId)
+        return
+      }
+    }
+    if (selectedPlacementRootId) {
+      return
+    }
+    if (!placedRootIds.size && selectedNodeId && nodeIndex.byId.has(selectedNodeId)) {
+      return
+    }
+    const fallbackNodeId =
+      (activeFloorPlan?.placements || []).find((placement) => nodeIndex.byId.has(placement.nodeId))?.nodeId ||
+      nodes.find((candidate) => candidate.parent_id == null)?.id ||
+      nodes[0].id
+    onSelectNode(fallbackNodeId)
+  }, [active, activeFloorPlan?.id, activeFloorPlan?.placements, nodeIndex.byId, nodes, onSelectNode, placedRootIds.size, selectedNodeId, selectedPlacementRootId])
+
+  function toggleFloorPlanTreeNode(nodeId) {
+    if (!activeFloorPlan?.id) {
+      return
+    }
+    const nextExpandedIds = new Set(expandedTreeNodeIds)
+    if (nextExpandedIds.has(nodeId)) {
+      nextExpandedIds.delete(nodeId)
+    } else {
+      nextExpandedIds.add(nodeId)
+    }
+    onExpandedNodeIdsChange(Array.from(nextExpandedIds))
+  }
 
   const fitToView = useCallback(() => {
     const viewport = viewportRef.current
@@ -173,21 +260,22 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     const availableHeight = Math.max(160, rect.height - 96)
     const scale = Math.max(0.12, Math.min(2.5, Math.min(availableWidth / worldSize.width, availableHeight / worldSize.height)))
     onTransformChange({
+      markerScale,
       scale,
       x: (rect.width - worldSize.width * scale) / 2,
       y: (rect.height - worldSize.height * scale) / 2,
     })
-  }, [activeFloorPlan, onTransformChange, worldSize.height, worldSize.width])
+  }, [activeFloorPlan, markerScale, onTransformChange, worldSize.height, worldSize.width])
 
   useImperativeHandle(ref, () => ({ fitToView }), [fitToView])
 
   useEffect(() => {
-    if (!activeFloorPlan || transform) {
+    if (!active || !activeFloorPlan || transform) {
       return undefined
     }
     const frame = window.requestAnimationFrame(fitToView)
     return () => window.cancelAnimationFrame(frame)
-  }, [activeFloorPlan, fitToView, transform])
+  }, [active, activeFloorPlan, fitToView, transform])
 
   function positionFromClientPoint(clientX, clientY) {
     const viewport = viewportRef.current
@@ -262,6 +350,16 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
       return
     }
     event.preventDefault()
+    if (event.shiftKey) {
+      onTransformChange({
+        ...activeTransform,
+        markerScale: Math.max(
+          MIN_MARKER_SCALE,
+          Math.min(MAX_MARKER_SCALE, markerScale * Math.exp(-zoomDelta * 0.0012)),
+        ),
+      })
+      return
+    }
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect) {
       return
@@ -272,9 +370,18 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     const worldY = (pointerY - activeTransform.y) / activeTransform.scale
     const nextScale = Math.max(0.12, Math.min(5, activeTransform.scale * Math.exp(-zoomDelta * 0.0012)))
     onTransformChange({
+      ...activeTransform,
+      markerScale,
       scale: nextScale,
       x: pointerX - worldX * nextScale,
       y: pointerY - worldY * nextScale,
+    })
+  }
+
+  function resetMarkerZoom() {
+    onTransformChange({
+      ...activeTransform,
+      markerScale: 1,
     })
   }
 
@@ -288,7 +395,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
 
   if (!activeFloorPlan) {
     return (
-      <section className="floor-plan-workspace floor-plan-workspace--empty">
+      <section className="floor-plan-workspace floor-plan-workspace--empty" hidden={!active}>
         <input
           accept="image/jpeg,image/png,image/webp"
           aria-label="Upload floor plan image"
@@ -323,6 +430,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   return (
     <section
       className={`floor-plan-workspace ${pendingPlacementNodeId ? 'is-placing' : ''}`}
+      hidden={!active}
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
       onPointerDown={beginPan}
@@ -341,6 +449,15 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
           tooltip="Fit View"
         >
           <FitViewIcon />
+        </IconButton>
+        <IconButton
+          aria-label="Reset node zoom"
+          className="canvas-tool-button"
+          disabled={busy || Math.abs(markerScale - 1) < 0.001}
+          onClick={resetMarkerZoom}
+          tooltip="Reset Node Zoom"
+        >
+          <ResetIcon />
         </IconButton>
       </div>
       <div
@@ -364,28 +481,27 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
           }
           return (
             <FloorPlanMarker
-              childrenById={nodeIndex.childrenById}
-              descendantCount={nodeIndex.descendantCountById.get(node.id) || 0}
-              expanded={expandedMarkerNodeId === node.id}
+              expandedNodeIds={expandedTreeNodeIds}
+              imageLoadRevision={imageLoadRevision}
               key={node.id}
+              loadedImages={loadedImages}
+              markImageLoaded={markImageLoaded}
               node={node}
-              onExpand={(nodeId) => {
-                setExpandedMarkerNodeId((current) => current === nodeId ? null : nodeId)
-                onSelectNode(nodeId)
-              }}
-              onRemove={(nodeId) => {
-                setExpandedMarkerNodeId(null)
-                void onRemovePlacement(activeFloorPlan.id, nodeId)
-              }}
+              nodeIndex={nodeIndex}
               onSelect={onSelectNode}
+              onToggleNode={toggleFloorPlanTreeNode}
               placement={placement}
+              markerScale={markerScale}
+              projectSettings={projectSettings}
+              selectedNodeId={selectedNodeId}
               viewportScale={activeTransform.scale}
             />
           )
         })}
       </div>
-      <div className="floor-plan-status">
-        {Math.round(activeTransform.scale * 100)}% · {activeFloorPlan.placements?.length || 0} placed
+      <div className="canvas-caption canvas-caption--right floor-plan-status">
+        Plan {Math.round(activeTransform.scale * 100)}% · Nodes {Math.round(markerScale * 100)}% ·{' '}
+        {activeFloorPlan.placements?.length || 0} placed
       </div>
     </section>
   )

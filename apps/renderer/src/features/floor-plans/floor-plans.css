@@ -119,6 +119,8 @@
 }
 
 .floor-plan-stage__image {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
@@ -128,6 +130,15 @@
 
 .floor-plan-stage__image--processed {
   color: var(--text);
+  opacity: 0;
+}
+
+.floor-plan-stage__image--processed.is-ready {
+  opacity: 1;
+}
+
+.floor-plan-stage__image--fallback.is-hidden {
+  visibility: hidden;
 }
 
 .floor-plan-marker-position {
@@ -141,186 +152,85 @@
 
 .floor-plan-marker {
   position: relative;
-  left: -15px;
-  top: -34px;
-  width: 174px;
+  width: 0;
+  height: 0;
   transform: scale(var(--floor-plan-marker-scale, 1));
-  transform-origin: 15px 34px;
+  transform-origin: 0 0;
   color: var(--text);
-  cursor: pointer;
-  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.26));
-}
-
-.floor-plan-marker.is-expanded {
-  width: 238px;
 }
 
 .floor-plan-marker__anchor {
-  width: 100%;
-  min-height: 34px;
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  color: inherit;
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.floor-plan-marker__anchor:hover:not(:disabled) {
-  background: transparent;
+.floor-plan-marker__anchor line,
+.floor-plan-marker__links line {
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 
-.floor-plan-marker__pin {
-  width: 30px;
-  height: 34px;
-  flex: 0 0 30px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: #c84f4f;
-  font-size: 30px;
-  line-height: 1;
+.floor-plan-marker__anchor-background {
+  fill: var(--canvas);
 }
 
-.floor-plan-marker__pin svg {
-  width: 23px;
-  height: 30px;
-  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.34));
+.floor-plan-marker__anchor-dot {
+  fill: #c84f4f;
 }
 
-.floor-plan-marker__pin svg > path {
-  fill: currentColor;
+.floor-plan-marker__links {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.floor-plan-marker__pin svg > circle {
-  fill: #fff;
-  stroke: #fff;
+.floor-plan-marker__links line.is-selected {
+  stroke: var(--selected);
 }
 
-.floor-plan-marker__summary {
-  min-width: 0;
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+.floor-plan-marker__tree-node {
+  z-index: 3;
+  gap: 14px;
 }
 
-.floor-plan-marker.is-expanded .floor-plan-marker__summary {
-  border-color: var(--selected);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+.floor-plan-marker__tree-node::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -6px;
+  left: -6px;
+  width: calc(100% + 12px);
+  height: 124px;
+  border-radius: 12px;
+  background: var(--canvas);
+  pointer-events: none;
 }
 
-.floor-plan-marker__thumbnail {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 4px;
-  object-fit: cover;
-  background: var(--surface);
+.floor-plan-marker__tree-node.selected::before {
+  top: -9px;
+  left: -9px;
+  width: calc(100% + 18px);
+  height: 130px;
+  border-radius: 15px;
 }
 
-.floor-plan-marker__thumbnail--empty {
-  display: grid;
-  place-items: center;
-  color: var(--muted);
+.floor-plan-marker__tree-node > * {
+  position: relative;
+  z-index: 1;
 }
 
-.floor-plan-marker__text {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.floor-plan-marker__text strong,
-.floor-plan-marker__text small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.floor-plan-marker__text strong {
-  font-size: 0.72rem;
-}
-
-.floor-plan-marker__text small {
-  color: var(--muted);
-  font-size: 0.58rem;
-}
-
-.floor-plan-marker__tree {
-  margin-left: 34px;
-  padding: 6px;
-  border: 1px solid var(--selected);
-  border-top: 0;
-  border-radius: 0 0 8px 8px;
-  background: color-mix(in srgb, var(--panel) 98%, transparent);
-}
-
-.floor-plan-marker__tree-row {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 6px 5px calc(6px + var(--floor-plan-depth));
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 0.65rem;
-  text-align: left;
-}
-
-.floor-plan-marker__tree-row:hover:not(:disabled) {
-  background: var(--menu-active);
-}
-
-.floor-plan-marker__tree-row svg {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  color: var(--muted);
-}
-
-.floor-plan-marker__tree-row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.floor-plan-marker__tree-empty,
-.floor-plan-marker__tree-more {
-  padding: 6px;
-  color: var(--muted);
-  font-size: 0.62rem;
-}
-
-.floor-plan-marker__remove {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 6px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.62rem;
-}
-
-.floor-plan-marker__remove:hover:not(:disabled) {
-  background: transparent;
-  color: var(--danger);
+.floor-plan-marker__tree-node.is-root {
+  z-index: 4;
 }
 
 .floor-plan-locations-panel {
@@ -441,6 +351,12 @@
   font-size: 0.6rem;
 }
 
+.floor-plan-location-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .floor-plan-panel__empty {
   padding: 20px 12px;
   color: var(--muted);
@@ -449,15 +365,6 @@
 }
 
 .floor-plan-status {
-  position: absolute;
-  z-index: 20;
-  right: 12px;
-  bottom: 8px;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--canvas) 90%, transparent);
-  color: var(--muted);
-  font-size: 0.62rem;
   pointer-events: none;
 }
 

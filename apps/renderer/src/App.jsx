@@ -82,6 +82,12 @@ import FloorPlanLocationsPanel from './features/floor-plans/FloorPlanLocationsPa
 import FloorPlanWorkspace from './features/floor-plans/FloorPlanWorkspace'
 import WorkspaceModeTools from './features/floor-plans/WorkspaceModeTools'
 import useFloorPlanCommands from './features/floor-plans/useFloorPlanCommands'
+import {
+  applyFloorPlanTreeCommand,
+  buildFloorPlanNodeIndex,
+  collectFloorPlanVisibleNodeIds,
+  getFloorPlanTreeCommandTargetIds,
+} from './features/floor-plans/model'
 import { buildTemplateFormState } from './features/node-editing/templateFormState'
 import {
   CameraIcon,
@@ -183,6 +189,9 @@ function MainApp() {
   const [workspaceMode, setWorkspaceMode] = useState(defaultUserProjectUi.workspaceMode)
   const [activeFloorPlanId, setActiveFloorPlanId] = useState(defaultUserProjectUi.activeFloorPlanId)
   const [floorPlanTransforms, setFloorPlanTransforms] = useState(defaultUserProjectUi.floorPlanTransforms)
+  const [floorPlanExpandedNodeIds, setFloorPlanExpandedNodeIds] = useState(
+    defaultUserProjectUi.floorPlanExpandedNodeIds,
+  )
   const [pendingFloorPlanNodeId, setPendingFloorPlanNodeId] = useState(null)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false)
@@ -341,6 +350,7 @@ function MainApp() {
     setWorkspaceMode(defaultUserProjectUi.workspaceMode)
     setActiveFloorPlanId(defaultUserProjectUi.activeFloorPlanId)
     setFloorPlanTransforms(defaultUserProjectUi.floorPlanTransforms)
+    setFloorPlanExpandedNodeIds(defaultUserProjectUi.floorPlanExpandedNodeIds)
     setPendingFloorPlanNodeId(null)
     setProjectUiReady(false)
     setMobileConnectionCount(0)
@@ -894,6 +904,14 @@ function MainApp() {
     () => new Map((tree?.nodes || []).map((node) => [node.id, node])),
     [tree?.nodes],
   )
+  const floorPlanNodeIndex = useMemo(
+    () => buildFloorPlanNodeIndex(tree?.nodes || []),
+    [tree?.nodes],
+  )
+  const activeFloorPlanExpandedNodeIds = useMemo(
+    () => new Set(floorPlanExpandedNodeIds[resolvedActiveFloorPlanId] || []),
+    [floorPlanExpandedNodeIds, resolvedActiveFloorPlanId],
+  )
   const effectiveSelectedRootIds = useMemo(
     () => getSelectionRootIds(tree?.root, effectiveSelectedNodeIds),
     [effectiveSelectedNodeIds, tree?.root],
@@ -929,10 +947,12 @@ function MainApp() {
         canvasTransform: transform,
         activeFloorPlanId: resolvedActiveFloorPlanId,
         floorPlanTransforms,
+        floorPlanExpandedNodeIds,
         selectedNodeIds: effectiveSelectedNodeIds,
       }),
     [
       floorPlanTransforms,
+      floorPlanExpandedNodeIds,
       effectiveSelectedNodeIds,
       resolvedActiveFloorPlanId,
       showGrid,
@@ -1039,17 +1059,26 @@ function MainApp() {
       rightSidebarWidth,
     ],
   )
-  function markPendingUiSignature(overrides = {}) {
+  const markPendingUiSignature = useCallback((overrides = {}) => {
     const nextUi = {
       workspaceMode: overrides.workspaceMode ?? workspaceMode,
       showGrid: overrides.showGrid ?? showGrid,
       canvasTransform: overrides.canvasTransform ?? transform,
       activeFloorPlanId: overrides.activeFloorPlanId ?? resolvedActiveFloorPlanId,
       floorPlanTransforms: overrides.floorPlanTransforms ?? floorPlanTransforms,
+      floorPlanExpandedNodeIds: overrides.floorPlanExpandedNodeIds ?? floorPlanExpandedNodeIds,
       selectedNodeIds: overrides.selectedNodeIds ?? effectiveSelectedNodeIds,
     }
     pendingUiSignatureRef.current = JSON.stringify(normalizeClientProjectUi(nextUi))
-  }
+  }, [
+    effectiveSelectedNodeIds,
+    floorPlanExpandedNodeIds,
+    floorPlanTransforms,
+    resolvedActiveFloorPlanId,
+    showGrid,
+    transform,
+    workspaceMode,
+  ])
   function setWorkspaceModePreference(nextMode) {
     const normalizedMode = nextMode === 'floor-plan' && floorPlanEnabled ? 'floor-plan' : 'tree'
     markPendingUiSignature({ workspaceMode: normalizedMode })
@@ -1080,6 +1109,27 @@ function MainApp() {
       return nextTransforms
     })
   }
+  const setFloorPlanExpandedNodeIdsPreference = useCallback((floorPlanId, nextNodeIdsOrUpdater) => {
+    const normalizedId = String(floorPlanId || '').trim()
+    if (!normalizedId) {
+      return
+    }
+    setFloorPlanExpandedNodeIds((current) => {
+      const currentNodeIds = current[normalizedId] || []
+      const requestedNodeIds =
+        typeof nextNodeIdsOrUpdater === 'function'
+          ? nextNodeIdsOrUpdater(currentNodeIds)
+          : nextNodeIdsOrUpdater
+      const nextExpandedNodeIds = {
+        ...current,
+        [normalizedId]: Array.from(
+          new Set((requestedNodeIds || []).map((nodeId) => String(nodeId || '').trim()).filter(Boolean)),
+        ),
+      }
+      markPendingUiSignature({ floorPlanExpandedNodeIds: nextExpandedNodeIds })
+      return nextExpandedNodeIds
+    })
+  }, [markPendingUiSignature])
   const setCanvasTransform = useCallback((nextTransformOrUpdater) => {
     setTransform((current) => {
       const nextTransform =
@@ -1090,6 +1140,7 @@ function MainApp() {
         canvasTransform: nextTransform,
         activeFloorPlanId: resolvedActiveFloorPlanId,
         floorPlanTransforms,
+        floorPlanExpandedNodeIds,
         selectedNodeIds: effectiveSelectedNodeIds,
       })
       return nextTransform
@@ -1097,6 +1148,7 @@ function MainApp() {
   }, [
     effectiveSelectedNodeIds,
     floorPlanTransforms,
+    floorPlanExpandedNodeIds,
     resolvedActiveFloorPlanId,
     showGrid,
     workspaceMode,
@@ -1295,7 +1347,7 @@ function MainApp() {
     }
     return nextMap
   }, [remotePresenceUsers])
-  const canCollapseSelected = useMemo(
+  const treeCanCollapseSelected = useMemo(
     () =>
       effectiveSelectedNodeIds.some((nodeId) => {
         const node = treeNodeById.get(nodeId)
@@ -1303,7 +1355,7 @@ function MainApp() {
       }),
     [effectiveSelectedNodeIds, treeNodeById],
   )
-  const canExpandSelected = useMemo(
+  const treeCanExpandSelected = useMemo(
     () =>
       effectiveSelectedNodeIds.some((nodeId) => {
         const node = treeNodeById.get(nodeId)
@@ -1311,7 +1363,7 @@ function MainApp() {
       }),
     [effectiveSelectedNodeIds, treeNodeById],
   )
-  const canCollapseRecursively = useMemo(
+  const treeCanCollapseRecursively = useMemo(
     () =>
       effectiveSelectedNodeIds.some((nodeId) => {
         let current = treeNodeById.get(nodeId) || null
@@ -1325,7 +1377,7 @@ function MainApp() {
       }),
     [effectiveSelectedNodeIds, treeNodeById],
   )
-  const canExpandRecursively = useMemo(
+  const treeCanExpandRecursively = useMemo(
     () =>
       effectiveSelectedNodeIds.some((nodeId) => {
         const subtreeNode = tree?.root ? findNode(tree.root, nodeId) : null
@@ -1333,6 +1385,44 @@ function MainApp() {
       }),
     [effectiveSelectedNodeIds, tree?.root],
   )
+  const floorPlanTreeCommandCapabilities = useMemo(() => {
+    const sharedOptions = {
+      expandedNodeIds: activeFloorPlanExpandedNodeIds,
+      floorPlan: activeFloorPlan,
+      nodeIndex: floorPlanNodeIndex,
+      selectedNodeIds: effectiveSelectedNodeIds,
+    }
+    return {
+      canCollapseAll: getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: true, scope: 'all' }).size > 0,
+      canCollapseSelected:
+        getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: true, scope: 'selected' }).size > 0,
+      canCollapseRecursively:
+        getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: true, scope: 'recursive' }).size > 0,
+      canExpandAll: getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: false, scope: 'all' }).size > 0,
+      canExpandSelected:
+        getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: false, scope: 'selected' }).size > 0,
+      canExpandRecursively:
+        getFloorPlanTreeCommandTargetIds({ ...sharedOptions, collapsed: false, scope: 'recursive' }).size > 0,
+    }
+  }, [activeFloorPlan, activeFloorPlanExpandedNodeIds, effectiveSelectedNodeIds, floorPlanNodeIndex])
+  const canCollapseAll = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canCollapseAll
+    : Boolean(tree?.nodes?.length)
+  const canExpandAll = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canExpandAll
+    : Boolean(tree?.nodes?.length)
+  const canCollapseSelected = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canCollapseSelected
+    : treeCanCollapseSelected
+  const canExpandSelected = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canExpandSelected
+    : treeCanExpandSelected
+  const canCollapseRecursively = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canCollapseRecursively
+    : treeCanCollapseRecursively
+  const canExpandRecursively = effectiveWorkspaceMode === 'floor-plan'
+    ? floorPlanTreeCommandCapabilities.canExpandRecursively
+    : treeCanExpandRecursively
 
   const resolveNearestVisibleSelectionId = useCallback((nodeId, nodes) => {
     if (!nodeId || !nodes?.length) {
@@ -1564,6 +1654,7 @@ function MainApp() {
     setWorkspaceMode(nextUi.workspaceMode)
     setActiveFloorPlanId(nextUi.activeFloorPlanId)
     setFloorPlanTransforms(nextUi.floorPlanTransforms)
+    setFloorPlanExpandedNodeIds(nextUi.floorPlanExpandedNodeIds)
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
     const nextSelectionIds = Array.isArray(nextUi.selectedNodeIds)
       ? nextUi.selectedNodeIds.filter((nodeId) => (tree?.nodes || []).some((node) => node.id === nodeId))
@@ -1572,7 +1663,7 @@ function MainApp() {
       setEffectiveSelection(nextSelectionIds, nextSelectionIds[0])
     }
     setProjectUiReady(true)
-  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanExpandedNodeIds, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -2376,7 +2467,7 @@ function MainApp() {
     projectUiReady,
   ])
 
-  async function setAllNodesCollapsed(collapsed) {
+  const setAllNodesCollapsed = useCallback(async (collapsed) => {
     if (!selectedProjectId || !tree?.nodes?.length) {
       return
     }
@@ -2435,7 +2526,14 @@ function MainApp() {
       setBusy(false)
       setOpenMenu(null)
     }
-  }
+  }, [
+    prepareCollapsedSelection,
+    preserveNodeCanvasPositionForNextNodes,
+    selectedNodeId,
+    selectedProjectId,
+    setProjectCollapsedStateRequest,
+    tree?.nodes,
+  ])
 
   const moveDraggedNode = useCallback(
     async (nodeId, parentId, asAdditionalPhoto = false) => {
@@ -4156,6 +4254,74 @@ function MainApp() {
     }
   }, [effectiveSelectedNodeIds, setCollapsed, tree?.nodes?.length, tree?.root, treeNodeById])
 
+  const setFloorPlanTreeNodesCollapsed = useCallback((collapsed, scope) => {
+    if (!resolvedActiveFloorPlanId || !activeFloorPlan) {
+      return
+    }
+    const nextExpandedNodeIds = applyFloorPlanTreeCommand({
+      collapsed,
+      expandedNodeIds: activeFloorPlanExpandedNodeIds,
+      floorPlan: activeFloorPlan,
+      nodeIndex: floorPlanNodeIndex,
+      scope,
+      selectedNodeIds: effectiveSelectedNodeIds,
+    })
+    setFloorPlanExpandedNodeIdsPreference(resolvedActiveFloorPlanId, nextExpandedNodeIds)
+    if (collapsed) {
+      const visibleNodeIds = collectFloorPlanVisibleNodeIds(
+        activeFloorPlan,
+        floorPlanNodeIndex,
+        new Set(nextExpandedNodeIds),
+      )
+      const nextSelectedNodeIds = effectiveSelectedNodeIds.map((nodeId) => {
+        let current = floorPlanNodeIndex.byId.get(nodeId) || null
+        const visited = new Set()
+        while (current && !visibleNodeIds.has(current.id) && !visited.has(current.id)) {
+          visited.add(current.id)
+          current = current.parent_id == null ? null : floorPlanNodeIndex.byId.get(current.parent_id) || null
+        }
+        return current?.id || null
+      }).filter(Boolean)
+      const uniqueSelectedNodeIds = Array.from(new Set(nextSelectedNodeIds))
+      if (uniqueSelectedNodeIds.length) {
+        setEffectiveSelection(uniqueSelectedNodeIds, uniqueSelectedNodeIds[0])
+      }
+    }
+  }, [
+    activeFloorPlan,
+    activeFloorPlanExpandedNodeIds,
+    effectiveSelectedNodeIds,
+    floorPlanNodeIndex,
+    resolvedActiveFloorPlanId,
+    setEffectiveSelection,
+    setFloorPlanExpandedNodeIdsPreference,
+  ])
+
+  const setActiveWorkspaceAllNodesCollapsed = useCallback((collapsed) => {
+    if (effectiveWorkspaceMode === 'floor-plan') {
+      setFloorPlanTreeNodesCollapsed(collapsed, 'all')
+      setOpenMenu(null)
+      return
+    }
+    void setAllNodesCollapsed(collapsed)
+  }, [effectiveWorkspaceMode, setAllNodesCollapsed, setFloorPlanTreeNodesCollapsed])
+
+  const setActiveWorkspaceSelectedNodesCollapsed = useCallback((collapsed) => {
+    if (effectiveWorkspaceMode === 'floor-plan') {
+      setFloorPlanTreeNodesCollapsed(collapsed, 'selected')
+      return
+    }
+    void setSelectedNodesCollapsed(collapsed)
+  }, [effectiveWorkspaceMode, setFloorPlanTreeNodesCollapsed, setSelectedNodesCollapsed])
+
+  const setActiveWorkspaceSelectedNodesCollapsedRecursively = useCallback((collapsed) => {
+    if (effectiveWorkspaceMode === 'floor-plan') {
+      setFloorPlanTreeNodesCollapsed(collapsed, 'recursive')
+      return
+    }
+    void setSelectedNodesCollapsedRecursively(collapsed)
+  }, [effectiveWorkspaceMode, setFloorPlanTreeNodesCollapsed, setSelectedNodesCollapsedRecursively])
+
   const selectNodeAndFocus = useCallback(async (nodeId) => {
     if (!nodeId || !tree?.nodes?.length) {
       return
@@ -4647,22 +4813,22 @@ function MainApp() {
           invertEffectiveSelection()
           break
         case 'tree.collapse-all':
-          void setAllNodesCollapsed(true)
+          setActiveWorkspaceAllNodesCollapsed(true)
           break
         case 'tree.collapse-selected':
-          void setSelectedNodesCollapsed(true)
+          setActiveWorkspaceSelectedNodesCollapsed(true)
           break
         case 'tree.collapse-recursively':
-          void setSelectedNodesCollapsedRecursively(true)
+          setActiveWorkspaceSelectedNodesCollapsedRecursively(true)
           break
         case 'tree.expand-all':
-          void setAllNodesCollapsed(false)
+          setActiveWorkspaceAllNodesCollapsed(false)
           break
         case 'tree.expand-selected':
-          void setSelectedNodesCollapsed(false)
+          setActiveWorkspaceSelectedNodesCollapsed(false)
           break
         case 'tree.expand-recursively':
-          void setSelectedNodesCollapsedRecursively(false)
+          setActiveWorkspaceSelectedNodesCollapsedRecursively(false)
           break
         case 'settings.manage-server-profiles':
           openAccountManager()
@@ -4720,9 +4886,9 @@ function MainApp() {
     selectSearchResults,
     selectedProjectId,
     selectedNode?.parent_id,
-    setAllNodesCollapsed,
-    setSelectedNodesCollapsed,
-    setSelectedNodesCollapsedRecursively,
+    setActiveWorkspaceAllNodesCollapsed,
+    setActiveWorkspaceSelectedNodesCollapsed,
+    setActiveWorkspaceSelectedNodesCollapsedRecursively,
     triggerAddPhoto,
     triggerAddPhotoNode,
     tree?.project?.name,
@@ -4855,11 +5021,17 @@ function MainApp() {
         content: (
           <FloorPlanLocationsPanel
             activeFloorPlan={activeFloorPlan}
+            busy={busy}
             nodes={tree?.nodes || []}
             onBeginPlacement={(nodeId) => {
               setPendingFloorPlanNodeId(nodeId)
               if (nodeId) {
                 setWorkspaceModePreference('floor-plan')
+              }
+            }}
+            onRemovePlacement={(nodeId) => {
+              if (activeFloorPlan?.id) {
+                void handleRemoveFloorPlanPlacement(activeFloorPlan.id, nodeId)
               }
             }}
             onSelectNode={selectFloorPlanNode}
@@ -5258,8 +5430,10 @@ function MainApp() {
         appendParents={appendParents}
         appendSearchResults={appendSearchResults}
         busy={busy}
+        canCollapseAll={canCollapseAll}
         canCollapseRecursively={canCollapseRecursively}
         canCollapseSelected={canCollapseSelected}
+        canExpandAll={canExpandAll}
         canExpandRecursively={canExpandRecursively}
         canExpandSelected={canExpandSelected}
         fileInputRef={fileInputRef}
@@ -5290,9 +5464,9 @@ function MainApp() {
         selectedProjectId={selectedProjectId}
         selectionCount={effectiveSelectedNodeIds.length}
         openNewNodeDialog={openNewNodeDialog}
-        setCollapsedRecursively={setSelectedNodesCollapsedRecursively}
-        setCollapsedSelected={setSelectedNodesCollapsed}
-        setAllNodesCollapsed={setAllNodesCollapsed}
+        setCollapsedRecursively={setActiveWorkspaceSelectedNodesCollapsedRecursively}
+        setCollapsedSelected={setActiveWorkspaceSelectedNodesCollapsed}
+        setAllNodesCollapsed={setActiveWorkspaceAllNodesCollapsed}
         setDeleteNodeOpen={setDeleteNodeOpen}
         setDeleteProjectText={setDeleteProjectText}
         setExportFileName={setExportFileName}
@@ -5379,15 +5553,22 @@ function MainApp() {
               onModeChange={setWorkspaceModePreference}
             />
           ) : null}
-          {effectiveWorkspaceMode === 'floor-plan' ? (
+          {floorPlanEnabled ? (
             <FloorPlanWorkspace
+            active={effectiveWorkspaceMode === 'floor-plan'}
             activeFloorPlanId={resolvedActiveFloorPlanId}
             busy={busy}
+            expandedNodeIds={floorPlanExpandedNodeIds[resolvedActiveFloorPlanId] || []}
             floorPlans={floorPlans}
+            imageLoadRevision={imageLoadRevision}
+            loadedImages={loadedImages}
+            markImageLoaded={markImageLoaded}
             nodes={tree?.nodes || []}
             onActiveFloorPlanChange={setActiveFloorPlanPreference}
+            onExpandedNodeIdsChange={(nextNodeIds) =>
+              setFloorPlanExpandedNodeIdsPreference(resolvedActiveFloorPlanId, nextNodeIds)
+            }
             onPendingPlacementChange={setPendingFloorPlanNodeId}
-            onRemovePlacement={handleRemoveFloorPlanPlacement}
             onSavePlacement={handleSaveFloorPlanPlacement}
             onSelectNode={selectFloorPlanNode}
             onTransformChange={(nextTransform) =>
@@ -5395,11 +5576,14 @@ function MainApp() {
             }
             onUploadFloorPlan={handleUploadFloorPlan}
             pendingPlacementNodeId={pendingFloorPlanNodeId}
+            projectSettings={projectSettings}
             ref={floorPlanWorkspaceRef}
+            selectedNodeId={selectedNodeId}
             theme={theme}
             transform={resolvedActiveFloorPlanId ? floorPlanTransforms[resolvedActiveFloorPlanId] || null : null}
           />
-        ) : (
+          ) : null}
+          {effectiveWorkspaceMode === 'tree' ? (
           <CanvasWorkspace
           beginNodeDrag={beginNodeDrag}
           beginCanvasPointerDown={beginCanvasPointerDown}
@@ -5462,7 +5646,7 @@ function MainApp() {
           viewportSize={viewportSize}
           viewportRef={viewportRef}
           />
-          )}
+          ) : null}
         </div>
         <DockedSidebar
           activePanel={activeRightPanel}

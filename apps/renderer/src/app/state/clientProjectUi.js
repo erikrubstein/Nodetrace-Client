@@ -50,8 +50,21 @@ export function normalizeClientProjectUi(value) {
           x: Number(requestedTransform.x),
           y: Number(requestedTransform.y),
           scale: Math.max(0.12, Math.min(5, Number(requestedTransform.scale))),
+          markerScale: Math.max(0.4, Math.min(3, Number(requestedTransform.markerScale) || 1)),
         }
       }
+    }
+  }
+
+  const floorPlanExpandedNodeIds = {}
+  if (source.floorPlanExpandedNodeIds && typeof source.floorPlanExpandedNodeIds === 'object') {
+    for (const [floorPlanId, requestedNodeIds] of Object.entries(source.floorPlanExpandedNodeIds)) {
+      if (!floorPlanId || !Array.isArray(requestedNodeIds)) {
+        continue
+      }
+      floorPlanExpandedNodeIds[floorPlanId] = Array.from(
+        new Set(requestedNodeIds.map((nodeId) => String(nodeId || '').trim()).filter(Boolean)),
+      )
     }
   }
 
@@ -61,6 +74,7 @@ export function normalizeClientProjectUi(value) {
     canvasTransform,
     activeFloorPlanId: String(source.activeFloorPlanId || '').trim() || null,
     floorPlanTransforms,
+    floorPlanExpandedNodeIds,
     selectedNodeIds: Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : [],
   }
 }

@@ -14,8 +14,10 @@ const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 export default function TopBar({
   appVersion = '0.0.0',
   busy,
+  canCollapseAll = false,
   canCollapseRecursively = false,
   canCollapseSelected = false,
+  canExpandAll = false,
   canExpandRecursively = false,
   canExpandSelected = false,
   canvasIsolationMode = 'none',
@@ -372,7 +374,7 @@ export default function TopBar({
             <div className="menu-panel">
               <button
                 className="menu-item"
-                disabled={!tree?.nodes?.length || busy}
+                disabled={!canCollapseAll || busy}
                 onClick={() => {
                   setOpenMenu(null)
                   void setAllNodesCollapsed(true)
@@ -405,7 +407,7 @@ export default function TopBar({
               </button>
               <button
                 className="menu-item"
-                disabled={!tree?.nodes?.length || busy}
+                disabled={!canExpandAll || busy}
                 onClick={() => {
                   setOpenMenu(null)
                   void setAllNodesCollapsed(false)

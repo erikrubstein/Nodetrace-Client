@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 
 import IconButton from '../../components/IconButton'
-import { AddPhotoIcon, FolderIcon, LocationIcon, SearchIcon } from '../../components/icons'
+import { AddPhotoIcon, FolderIcon, LocationIcon, RemoveLocationIcon, SearchIcon } from '../../components/icons'
 import { buildFloorPlanNodeIndex, FLOOR_PLAN_NODE_DRAG_TYPE } from './model'
 
 export default function FloorPlanLocationsPanel({
   activeFloorPlan,
+  busy,
   nodes,
   onBeginPlacement,
+  onRemovePlacement,
   onSelectNode,
   pendingPlacementNodeId,
   selectedNodeId,
@@ -79,18 +81,32 @@ export default function FloorPlanLocationsPanel({
                 <strong>{node.name}</strong>
                 <small>{placed ? 'Placed' : `${nodeIndex.descendantCountById.get(node.id) || 0} nested`}</small>
               </span>
-              <IconButton
-                aria-label={`${placed ? 'Move' : 'Place'} ${node.name}`}
-                className="tool-button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onBeginPlacement(node.id)
-                  onSelectNode(node.id)
-                }}
-                tooltip={placed ? 'Move Location' : 'Place Location'}
-              >
-                <LocationIcon />
-              </IconButton>
+              <span className="floor-plan-location-row__actions">
+                {placed ? (
+                  <IconButton
+                    aria-label={`Remove ${node.name} from floor plan`}
+                    className="tool-button"
+                    disabled={busy}
+                    onClick={() => onRemovePlacement(node.id)}
+                    tooltip="Remove Location"
+                  >
+                    <RemoveLocationIcon />
+                  </IconButton>
+                ) : null}
+                <IconButton
+                  aria-label={`${placed ? 'Move' : 'Place'} ${node.name}`}
+                  className="tool-button"
+                  disabled={busy}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onBeginPlacement(node.id)
+                    onSelectNode(node.id)
+                  }}
+                  tooltip={placed ? 'Move Location' : 'Place Location'}
+                >
+                  <LocationIcon />
+                </IconButton>
+              </span>
             </div>
           )
         })}

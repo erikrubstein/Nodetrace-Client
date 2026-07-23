@@ -40,6 +40,7 @@ export const defaultUserProjectUi = {
   canvasTransform: null,
   activeFloorPlanId: null,
   floorPlanTransforms: {},
+  floorPlanExpandedNodeIds: {},
   selectedNodeIds: [],
   leftSidebarOpen: false,
   rightSidebarOpen: true,

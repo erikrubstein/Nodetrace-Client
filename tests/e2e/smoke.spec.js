@@ -9,6 +9,7 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   const password = 'nodetrace-smoke-pass'
   const projectName = uniqueValue('Smoke Project')
   const nodeName = uniqueValue('Smoke Node')
+  const childNodeName = uniqueValue('Nested Node')
 
   await page.goto('/')
 
@@ -53,6 +54,11 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await expect(inspectorNameInput).not.toBeFocused()
   await inspectorNameInput.click()
   await expect(inspectorNameInput).toBeFocused()
+
+  await page.getByRole('button', { name: 'Add node' }).click()
+  await page.getByPlaceholder('Node name').fill(childNodeName)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.graph-node').filter({ hasText: childNodeName })).toBeVisible()
 
   const treeViewport = page.locator('.canvas-viewport')
   const treeStage = page.locator('.canvas-stage')
@@ -135,6 +141,11 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
     }
     return { incorrectlyColoredPixels, recoloredPixels, transparentPixels }
   })).toEqual({ incorrectlyColoredPixels: 0, recoloredPixels: 3, transparentPixels: 1 })
+  await expect(processedPlan).toHaveClass(/is-ready/)
+  await expect(page.locator('.floor-plan-stage__image--fallback')).toHaveClass(/is-hidden/)
+  await processedPlan.evaluate((canvas) => {
+    window.__nodetraceFloorPlanCanvas = canvas
+  })
 
   const floorPlanStage = page.locator('.floor-plan-stage')
   await expect(floorPlanStage).toHaveClass(/is-transparent/)
@@ -146,23 +157,140 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await page.getByRole('button', { name: 'Locations', exact: true }).click()
   await page.getByRole('button', { name: `Place ${nodeName}` }).click()
   await floorPlanStage.click({ position: { x: 160, y: 120 } })
-  const locationButton = page.getByRole('button', { name: `Open location ${nodeName}` })
+  const locationButton = page.locator('.floor-plan-marker__tree-node.is-root')
   await expect(locationButton).toBeVisible()
-  const locationSummary = page.locator('.floor-plan-marker__summary')
-  await expect(locationSummary).toBeVisible()
-  await expect(locationSummary).toContainText(nodeName)
-  await expect(locationSummary).toContainText('Location')
-  await expect(page.locator('.floor-plan-marker__tree')).toHaveCount(0)
-  const pin = page.locator('.floor-plan-marker__pin')
-  await expect(pin).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-  await expect(pin).toHaveCSS('color', 'rgb(200, 79, 79)')
-  await expect(pin.locator('path')).toHaveCSS('fill', 'rgb(200, 79, 79)')
-  await expect(pin.locator('circle')).toHaveCSS('fill', 'rgb(255, 255, 255)')
-  await locationButton.click()
-  await expect(page.locator('.floor-plan-marker__tree')).toBeVisible()
+  await expect(locationButton).toHaveClass(/graph-node/)
+  await expect(locationButton).toContainText(nodeName)
+  await expect(locationButton.locator('.graph-node__visual')).toBeVisible()
+  await expect.poll(() => locationButton.evaluate((node) => {
+    const styles = getComputedStyle(node, '::before')
+    return {
+      backgroundColor: styles.backgroundColor,
+      height: styles.height,
+      left: styles.left,
+      top: styles.top,
+      width: styles.width,
+    }
+  })).toEqual({
+    backgroundColor: 'rgb(29, 29, 29)',
+    height: '130px',
+    left: '-9px',
+    top: '-9px',
+    width: '130px',
+  })
+  const locationTitle = locationButton.locator('.graph-node__meta span')
+  const readNodeTitleStyle = (title) => title.evaluate((element) => {
+    const styles = getComputedStyle(element)
+    return {
+      backgroundColor: styles.backgroundColor,
+      borderRadius: styles.borderRadius,
+      boxShadow: styles.boxShadow,
+      padding: styles.padding,
+    }
+  })
+  const floorPlanTitleStyle = await readNodeTitleStyle(locationTitle)
+  expect(floorPlanTitleStyle).toEqual({
+    backgroundColor: 'rgb(29, 29, 29)',
+    borderRadius: '4px',
+    boxShadow: 'none',
+    padding: '1px 4px',
+  })
+  await expect(locationButton).toHaveCSS('gap', '14px')
+  await expect(page.getByRole('button', { name: childNodeName, exact: true })).toHaveCount(0)
+  await expect(page.locator('.floor-plan-marker__tree-node.collapsed-node')).toContainText('1 Item')
+  const floorPlanViewport = page.locator('.floor-plan-workspace')
+  const readFloorPlanScale = () => floorPlanStage.evaluate((stage) => {
+    const match = stage.style.transform.match(/scale\(([^)]+)\)/)
+    return Number(match?.[1] || 1)
+  })
+  const initialFloorPlanScale = await readFloorPlanScale()
+  const initialMarkerWidth = await locationButton.evaluate((marker) => marker.getBoundingClientRect().width)
+  await floorPlanViewport.evaluate((viewport) => {
+    viewport.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 240,
+      clientY: 180,
+      deltaX: -240,
+      deltaY: 0,
+      shiftKey: true,
+    }))
+  })
+  await expect.poll(readFloorPlanScale).toBe(initialFloorPlanScale)
+  await expect.poll(() => locationButton.evaluate((marker) => marker.getBoundingClientRect().width)).toBeGreaterThan(initialMarkerWidth)
+  await expect(page.locator('.floor-plan-status')).toContainText(/Nodes 1[1-9]\d%/)
+  await page.getByRole('button', { name: 'Reset node zoom' }).click()
+  await expect.poll(readFloorPlanScale).toBe(initialFloorPlanScale)
+  await expect.poll(() => locationButton.evaluate((marker) => marker.getBoundingClientRect().width)).toBeCloseTo(initialMarkerWidth, 1)
+  const floorPlanStatus = page.locator('.floor-plan-status')
+  await expect(floorPlanStatus).toContainText('Nodes 100%')
+  await expect(floorPlanStatus).toHaveClass(/canvas-caption--right/)
+  const locationAnchor = page.locator('.floor-plan-marker__anchor')
+  await expect(locationAnchor).toHaveClass(/is-horizontal/)
+  await expect(locationAnchor.locator('line')).toHaveAttribute('x2', '28')
+  await expect(locationAnchor.locator('line')).toHaveAttribute('y2', '0')
+  await expect(locationAnchor.locator('line')).toHaveCSS('stroke-width', '2px')
+  await expect(locationAnchor.locator('.floor-plan-marker__anchor-background')).toHaveCSS(
+    'fill',
+    'rgb(29, 29, 29)',
+  )
+  await expect(locationAnchor.locator('.floor-plan-marker__anchor-background')).toHaveAttribute('r', '12')
+  await expect(locationAnchor.locator('.floor-plan-marker__anchor-dot')).toHaveCSS('fill', 'rgb(200, 79, 79)')
+  await expect(locationAnchor.locator('.floor-plan-marker__anchor-dot')).toHaveAttribute('r', '6')
+  await expect(locationButton).toHaveCSS('left', '28px')
+  await expect(locationButton).toHaveCSS('top', '-56px')
+  await locationButton.dblclick()
+  await expect(page.locator('.floor-plan-marker__links line')).toHaveCount(1)
+  const nestedFloorPlanNode = page.getByRole('button', { name: childNodeName, exact: true })
+  await expect(nestedFloorPlanNode).toBeVisible()
+  await expect(nestedFloorPlanNode).toHaveClass(/graph-node/)
+  await nestedFloorPlanNode.click()
+  await expect(nestedFloorPlanNode).toHaveClass(/selected/)
+  await expect.poll(() => locationButton.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('124px')
+  await expect.poll(() => nestedFloorPlanNode.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('130px')
+  await locationButton.dblclick()
+  await expect(nestedFloorPlanNode).toHaveCount(0)
+  await expect(locationButton).toHaveClass(/selected/)
+  await locationButton.dblclick()
+  await expect(page.getByRole('button', { name: childNodeName, exact: true })).toBeVisible()
 
   await workspaceView.getByRole('button', { name: 'Tree view' }).click()
-  await expect(page.locator('.graph-node').filter({ hasText: nodeName })).toBeVisible()
+  await expect(processedPlan).toBeHidden()
+  await expect(processedPlan).toHaveCount(1)
+  const treeNestedNode = page.locator('.canvas-viewport').getByRole('button', { name: childNodeName, exact: true })
+  await expect(treeNestedNode).toBeVisible()
+  const treeLocationTitle = page.locator('.canvas-viewport').getByRole('button', {
+    name: nodeName,
+    exact: true,
+  }).locator('.graph-node__meta span')
+  await expect(treeLocationTitle).toBeVisible()
+  expect(await readNodeTitleStyle(treeLocationTitle)).toEqual(floorPlanTitleStyle)
+  await page.getByRole('button', { name: 'Tree', exact: true }).click()
+  await page.getByRole('button', { name: 'Collapse All', exact: true }).click()
+  await expect(treeNestedNode).toHaveCount(0)
+  await page.getByRole('button', { name: 'Tree', exact: true }).click()
+  await page.getByRole('button', { name: 'Expand All', exact: true }).click()
+  await expect(treeNestedNode).toBeVisible()
+
+  await workspaceView.getByRole('button', { name: 'Floor plan view' }).click()
+  await expect(processedPlan).toBeVisible()
+  expect(await processedPlan.evaluate((canvas) => canvas === window.__nodetraceFloorPlanCanvas)).toBe(true)
+  const floorPlanNestedNode = page.locator('.floor-plan-workspace').getByRole('button', {
+    name: childNodeName,
+    exact: true,
+  })
+  await expect(floorPlanNestedNode).toBeVisible()
+  await floorPlanNestedNode.click()
+  await page.getByRole('button', { name: 'Tree', exact: true }).click()
+  await page.getByRole('button', { name: 'Collapse All', exact: true }).click()
+  await expect(floorPlanNestedNode).toHaveCount(0)
+  await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveClass(/selected/)
+  await workspaceView.getByRole('button', { name: 'Tree view' }).click()
+  await expect(treeNestedNode).toBeVisible()
+  await workspaceView.getByRole('button', { name: 'Floor plan view' }).click()
+  await page.getByRole('button', { name: 'Tree', exact: true }).click()
+  await page.getByRole('button', { name: 'Expand All', exact: true }).click()
+  await expect(floorPlanNestedNode).toBeVisible()
 
   await page.getByRole('button', { name: 'Project Settings' }).click()
   await page.getByLabel('Floor plans').selectOption('disabled')
@@ -171,7 +299,21 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await expect(workspaceView).toBeVisible()
 
   await workspaceView.getByRole('button', { name: 'Floor plan view' }).click()
-  await expect(page.getByRole('button', { name: `Open location ${nodeName}` })).toBeVisible()
+  await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
+  await expect(floorPlanNestedNode).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
+  await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
+  await expect(
+    page.locator('.floor-plan-workspace').getByRole('button', { name: childNodeName, exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Project Settings' }).click()
+  await page.getByLabel('Direction').selectOption('vertical')
+  await expect(locationAnchor).toHaveClass(/is-vertical/)
+  await expect(locationAnchor.locator('line')).toHaveAttribute('x2', '0')
+  await expect(locationAnchor.locator('line')).toHaveAttribute('y2', '28')
+  await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('left', '-56px')
+  await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('top', '28px')
   await expect(page.locator('svg.lucide').first()).toBeVisible()
   await expect(page.locator('i[class*="fa-"]')).toHaveCount(0)
   await expect(page.locator('link[href*="font-awesome"]')).toHaveCount(0)

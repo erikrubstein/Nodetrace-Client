@@ -1,101 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
+import GraphNodeVisual from './GraphNodeVisual'
 import IconButton from './IconButton'
-import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, FolderIcon, GridIcon, PathIcon, RootNodeIcon } from './icons'
-import { defaultImageEdits, normalizeImageEdits, renderImageEditsToCanvas } from '../lib/image'
+import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, GridIcon, PathIcon, RootNodeIcon } from './icons'
 import { NODE_HEIGHT, NODE_WIDTH } from '../lib/constants'
-
-const editedPreviewCache = new Map()
-const defaultImageEditsSignature = JSON.stringify(defaultImageEdits)
-
-function EditedCanvasNodeImage({ alt = '', className = '', edits, imageLoadRevision = 0, onError, onLoad, src }) {
-  const normalizedEdits = useMemo(() => normalizeImageEdits(edits), [edits])
-  const editSignature = useMemo(() => JSON.stringify(normalizedEdits), [normalizedEdits])
-  const requiresEditedPreview = editSignature !== defaultImageEditsSignature
-  const [renderedSrc, setRenderedSrc] = useState(() =>
-    requiresEditedPreview ? editedPreviewCache.get(`${src}::${editSignature}`) || '' : src,
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    if (!src) {
-      setRenderedSrc('')
-      return undefined
-    }
-
-    if (!requiresEditedPreview) {
-      setRenderedSrc(src)
-      return undefined
-    }
-
-    const cacheKey = `${src}::${editSignature}`
-    const cachedPreview = editedPreviewCache.get(cacheKey)
-    if (cachedPreview) {
-      setRenderedSrc(cachedPreview)
-      return undefined
-    }
-
-    setRenderedSrc('')
-
-    async function renderEditedPreview() {
-      try {
-        const response = await fetch(src)
-        if (!response.ok) {
-          throw new Error('Unable to load node preview image.')
-        }
-        const blob = await response.blob()
-        const objectUrl = URL.createObjectURL(blob)
-        try {
-          const image = await new Promise((resolve, reject) => {
-            const img = new Image()
-            img.onload = () => resolve(img)
-            img.onerror = reject
-            img.src = objectUrl
-          })
-          if (cancelled) {
-            return
-          }
-          const canvas = document.createElement('canvas')
-          renderImageEditsToCanvas(canvas, image, normalizedEdits, { maxDimension: 320 })
-          const nextRenderedSrc = canvas.toDataURL('image/jpeg', 0.88)
-          editedPreviewCache.set(cacheKey, nextRenderedSrc)
-          if (!cancelled) {
-            setRenderedSrc(nextRenderedSrc)
-          }
-        } finally {
-          URL.revokeObjectURL(objectUrl)
-        }
-      } catch {
-        if (!cancelled) {
-          onError?.()
-        }
-      }
-    }
-
-    void renderEditedPreview()
-
-    return () => {
-      cancelled = true
-    }
-  }, [editSignature, normalizedEdits, onError, requiresEditedPreview, src])
-
-  if (!renderedSrc) {
-    return null
-  }
-
-  return (
-    <img
-      key={`${renderedSrc}-${imageLoadRevision}`}
-      className={className}
-      src={renderedSrc}
-      alt={alt}
-      draggable="false"
-      onError={onError}
-      onLoad={onLoad}
-    />
-  )
-}
 
 export default function CanvasWorkspace({
   beginNodeDrag,
@@ -478,58 +386,12 @@ export default function CanvasWorkspace({
                 />
               )
             })}
-            <div className="graph-node__visual">
-              {item.node.hiddenSiblingCount ? (
-                <div className="graph-node__sibling-indicator">+{item.node.hiddenSiblingCount}</div>
-              ) : null}
-              {item.node.type === 'collapsed-group' ? (
-                <div className="graph-node__collapsed-grid">
-                  {item.node.previewItems.map((preview) =>
-                    preview.imageUrl ? (
-                      <EditedCanvasNodeImage
-                        key={`${preview.id}-${imageLoadRevision}`}
-                        className="graph-node__collapsed-thumb"
-                        edits={preview.imageEdits}
-                        src={preview.imageUrl}
-                        alt=""
-                        onError={() => markImageLoaded(preview.imageUrl)}
-                        onLoad={() => markImageLoaded(preview.imageUrl)}
-                      />
-                    ) : (
-                      <div key={preview.id} className="graph-node__collapsed-thumb graph-node__collapsed-placeholder">
-                        <FolderIcon />
-                      </div>
-                    ),
-                  )}
-                </div>
-              ) : item.node.previewUrl || item.node.imageUrl ? (
-                <>
-                  {!loadedImages[item.node.previewUrl || item.node.imageUrl] ? (
-                    <div className="graph-node__spinner" aria-hidden="true" />
-                  ) : null}
-                  <EditedCanvasNodeImage
-                    key={`${item.node.previewUrl || item.node.imageUrl}-${imageLoadRevision}`}
-                    className={
-                      loadedImages[item.node.previewUrl || item.node.imageUrl]
-                        ? 'graph-node__image'
-                        : 'graph-node__image graph-node__image--loading'
-                    }
-                    edits={item.node.imageEdits}
-                    src={item.node.previewUrl || item.node.imageUrl}
-                    alt={item.node.name}
-                    onError={() => markImageLoaded(item.node.previewUrl || item.node.imageUrl)}
-                    onLoad={() => markImageLoaded(item.node.previewUrl || item.node.imageUrl)}
-                  />
-                </>
-              ) : (
-                <div className="graph-node__placeholder">
-                  <FolderIcon />
-                </div>
-              )}
-            </div>
-            <div className="graph-node__meta">
-              <span>{item.node.name}</span>
-            </div>
+            <GraphNodeVisual
+              imageLoadRevision={imageLoadRevision}
+              loadedImages={loadedImages}
+              markImageLoaded={markImageLoaded}
+              node={item.node}
+            />
           </button>
           )
         })}

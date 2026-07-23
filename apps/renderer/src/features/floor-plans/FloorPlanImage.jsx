@@ -20,12 +20,15 @@ function parseCanvasColor(value) {
 export default function FloorPlanImage({ alt, appearance: appearanceInput, src, theme }) {
   const canvasRef = useRef(null)
   const [renderFailed, setRenderFailed] = useState(false)
+  const [renderedKey, setRenderedKey] = useState('')
   const appearance = useMemo(() => normalizeFloorPlanAppearance(appearanceInput), [appearanceInput])
   const treatmentEnabled = appearance.transparentWhite || appearance.inkMode !== 'original'
+  const renderKey = useMemo(() => JSON.stringify([src, theme, appearance]), [appearance, src, theme])
 
   useEffect(() => {
     if (!treatmentEnabled || !src) {
       setRenderFailed(false)
+      setRenderedKey('')
       return undefined
     }
 
@@ -106,10 +109,12 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         context.putImageData(imageData, 0, 0)
         if (!cancelled) {
           setRenderFailed(false)
+          setRenderedKey(renderKey)
         }
       } catch {
         if (!cancelled) {
           setRenderFailed(true)
+          setRenderedKey('')
         }
       } finally {
         if (objectUrl) {
@@ -126,18 +131,28 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [appearance, src, theme, treatmentEnabled])
+  }, [appearance, renderKey, src, theme, treatmentEnabled])
 
   if (!treatmentEnabled || renderFailed) {
     return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={src} />
   }
 
+  const renderReady = renderedKey === renderKey
   return (
-    <canvas
-      aria-label={alt}
-      className="floor-plan-stage__image floor-plan-stage__image--processed"
-      ref={canvasRef}
-      role="img"
-    />
+    <>
+      <img
+        alt=""
+        aria-hidden="true"
+        className={`floor-plan-stage__image floor-plan-stage__image--fallback${renderReady ? ' is-hidden' : ''}`}
+        draggable="false"
+        src={src}
+      />
+      <canvas
+        aria-label={alt}
+        className={`floor-plan-stage__image floor-plan-stage__image--processed${renderReady ? ' is-ready' : ''}`}
+        ref={canvasRef}
+        role="img"
+      />
+    </>
   )
 }
