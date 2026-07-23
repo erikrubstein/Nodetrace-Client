@@ -162,6 +162,32 @@ test('user can build a tree and place a node on a floor plan', async ({ page }) 
   await expect(locationButton).toHaveClass(/graph-node/)
   await expect(locationButton).toContainText(nodeName)
   await expect(locationButton.locator('.graph-node__visual')).toBeVisible()
+  await expect(locationButton).not.toHaveAttribute('draggable', 'true')
+  const locationMarker = page.locator('.floor-plan-marker-position')
+  const locationHandle = page.getByRole('button', { name: `Move ${nodeName} location` })
+  await expect(locationHandle).toBeVisible()
+  const readMarkerPosition = () => locationMarker.evaluate((marker) => ({
+    left: marker.style.left,
+    top: marker.style.top,
+  }))
+  const originalMarkerPosition = await readMarkerPosition()
+  const locationHandleBox = await locationHandle.boundingBox()
+  expect(locationHandleBox).not.toBeNull()
+  await page.mouse.move(
+    locationHandleBox.x + locationHandleBox.width / 2,
+    locationHandleBox.y + locationHandleBox.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    locationHandleBox.x + locationHandleBox.width / 2 + 72,
+    locationHandleBox.y + locationHandleBox.height / 2 + 48,
+    { steps: 4 },
+  )
+  const liveMarkerPosition = await readMarkerPosition()
+  expect(liveMarkerPosition).not.toEqual(originalMarkerPosition)
+  await expect(locationMarker).toHaveCount(1)
+  await page.mouse.up()
+  await expect.poll(readMarkerPosition).toEqual(liveMarkerPosition)
   await expect.poll(() => locationButton.evaluate((node) => {
     const styles = getComputedStyle(node, '::before')
     return {

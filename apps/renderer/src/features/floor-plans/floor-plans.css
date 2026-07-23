@@ -169,6 +169,33 @@
   pointer-events: none;
 }
 
+.floor-plan-marker__anchor-handle {
+  position: absolute;
+  z-index: 5;
+  top: -12px;
+  left: -12px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.floor-plan-marker__anchor-handle:hover:not(:disabled),
+.floor-plan-marker__anchor-handle:focus,
+.floor-plan-marker__anchor-handle:focus-visible {
+  background: transparent;
+}
+
+.floor-plan-marker.is-dragging .floor-plan-marker__anchor-handle {
+  cursor: grabbing;
+}
+
 .floor-plan-marker__anchor line,
 .floor-plan-marker__links line {
   stroke: var(--line);

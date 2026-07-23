@@ -5,6 +5,7 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 
 import IconButton from '../../components/IconButton'
@@ -37,12 +38,14 @@ function FloorPlanMarker({
   markImageLoaded,
   node,
   nodeIndex,
+  onBeginPlacementDrag,
   onSelect,
   onToggleNode,
   markerScale,
   placement,
   projectSettings,
   selectedNodeId,
+  placementDragging,
   viewportScale,
 }) {
   const treeLayout = useMemo(
@@ -63,7 +66,7 @@ function FloorPlanMarker({
       style={{ left: `${placement.x * 100}%`, top: `${placement.y * 100}%` }}
     >
       <div
-        className="floor-plan-marker"
+        className={`floor-plan-marker ${placementDragging ? 'is-dragging' : ''}`}
         data-floor-plan-interactive="true"
         style={{ '--floor-plan-marker-scale': markerScale / Math.max(0.12, viewportScale) }}
       >
@@ -75,6 +78,13 @@ function FloorPlanMarker({
           <circle className="floor-plan-marker__anchor-background" cx="0" cy="0" r="12" />
           <circle className="floor-plan-marker__anchor-dot" cx="0" cy="0" r="6" />
         </svg>
+        <button
+          aria-label={`Move ${node.name} location`}
+          className="floor-plan-marker__anchor-handle"
+          onPointerDown={(event) => onBeginPlacementDrag(node.id, placement, event)}
+          title={`Move ${node.name} location`}
+          type="button"
+        />
         <svg className="floor-plan-marker__links" aria-hidden="true">
           {treeLayout.links.map((link) => (
             <line
@@ -99,7 +109,6 @@ function FloorPlanMarker({
                 item.node.hasImage ? 'node-with-photo' : 'node-without-photo'
               } ${collapsedGroup ? 'collapsed-node' : ''}`}
               data-node-id={item.id}
-              draggable={rootNode}
               key={item.id}
               onClick={(event) => {
                 event.stopPropagation()
@@ -114,14 +123,6 @@ function FloorPlanMarker({
                 if (!collapsedGroup && (nodeIndex.childrenById.get(item.id) || []).length) {
                   onToggleNode(item.id)
                 }
-              }}
-              onDragStart={(event) => {
-                if (!rootNode) {
-                  event.preventDefault()
-                  return
-                }
-                event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData(FLOOR_PLAN_NODE_DRAG_TYPE, node.id)
               }}
               style={{
                 left: `${markerTreeOrigin.x + item.x}px`,
@@ -169,7 +170,9 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   const viewportRef = useRef(null)
   const uploadInputRef = useRef(null)
   const panRef = useRef(null)
+  const placementDragRef = useRef(null)
   const initializedSelectionFloorPlanIdRef = useRef(null)
+  const [placementPreview, setPlacementPreview] = useState(null)
 
   const activeFloorPlan = useMemo(
     () => floorPlans.find((floorPlan) => floorPlan.id === activeFloorPlanId) || floorPlans[0] || null,
@@ -277,15 +280,21 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     return () => window.cancelAnimationFrame(frame)
   }, [active, activeFloorPlan, fitToView, transform])
 
-  function positionFromClientPoint(clientX, clientY) {
+  function positionFromClientPoint(clientX, clientY, offset = { x: 0, y: 0 }) {
     const viewport = viewportRef.current
     if (!viewport) {
       return null
     }
     const rect = viewport.getBoundingClientRect()
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left - activeTransform.x) / activeTransform.scale / worldSize.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top - activeTransform.y) / activeTransform.scale / worldSize.height)),
+      x: Math.max(0, Math.min(
+        1,
+        (clientX - rect.left - activeTransform.x) / activeTransform.scale / worldSize.width + offset.x,
+      )),
+      y: Math.max(0, Math.min(
+        1,
+        (clientY - rect.top - activeTransform.y) / activeTransform.scale / worldSize.height + offset.y,
+      )),
     }
   }
 
@@ -300,6 +309,40 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     onPendingPlacementChange(null)
     onSelectNode(nodeId)
     void onSavePlacement(activeFloorPlan.id, nodeId, position)
+  }
+
+  function beginPlacementDrag(nodeId, placement, event) {
+    if (event.button !== 0 || !activeFloorPlan) {
+      return
+    }
+    const pointerPosition = positionFromClientPoint(event.clientX, event.clientY)
+    if (!pointerPosition) {
+      return
+    }
+    const currentPlacement = placementPreview?.nodeId === nodeId ? placementPreview : placement
+    event.preventDefault()
+    event.stopPropagation()
+    onPendingPlacementChange(null)
+    onSelectNode(nodeId)
+    placementDragRef.current = {
+      nodeId,
+      offset: {
+        x: currentPlacement.x - pointerPosition.x,
+        y: currentPlacement.y - pointerPosition.y,
+      },
+      pointerId: event.pointerId,
+      position: {
+        x: currentPlacement.x,
+        y: currentPlacement.y,
+      },
+    }
+    setPlacementPreview({
+      dragging: true,
+      nodeId,
+      x: currentPlacement.x,
+      y: currentPlacement.y,
+    })
+    viewportRef.current?.setPointerCapture(event.pointerId)
   }
 
   function beginPan(event) {
@@ -322,6 +365,23 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   }
 
   function movePan(event) {
+    const placementDrag = placementDragRef.current
+    if (placementDrag?.pointerId === event.pointerId) {
+      const position = positionFromClientPoint(
+        event.clientX,
+        event.clientY,
+        placementDrag.offset,
+      )
+      if (position) {
+        placementDrag.position = position
+        setPlacementPreview({
+          dragging: true,
+          nodeId: placementDrag.nodeId,
+          ...position,
+        })
+      }
+      return
+    }
     const pan = panRef.current
     if (!pan || pan.pointerId !== event.pointerId) {
       return
@@ -333,7 +393,29 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     })
   }
 
-  function endPan(event) {
+  function endPointerInteraction(event) {
+    const placementDrag = placementDragRef.current
+    if (placementDrag?.pointerId === event.pointerId) {
+      placementDragRef.current = null
+      viewportRef.current?.releasePointerCapture(event.pointerId)
+      setPlacementPreview((current) =>
+        current?.nodeId === placementDrag.nodeId
+          ? { ...current, dragging: false }
+          : current,
+      )
+      if (activeFloorPlan) {
+        void Promise.resolve(
+          onSavePlacement(activeFloorPlan.id, placementDrag.nodeId, placementDrag.position),
+        ).finally(() => {
+          setPlacementPreview((current) =>
+            current?.nodeId === placementDrag.nodeId ? null : current,
+          )
+        })
+      } else {
+        setPlacementPreview(null)
+      }
+      return
+    }
     if (!panRef.current || panRef.current.pointerId !== event.pointerId) {
       return
     }
@@ -435,8 +517,8 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
       onDrop={handleDrop}
       onPointerDown={beginPan}
       onPointerMove={movePan}
-      onPointerUp={endPan}
-      onPointerCancel={endPan}
+      onPointerUp={endPointerInteraction}
+      onPointerCancel={endPointerInteraction}
       onWheel={handleWheel}
       ref={viewportRef}
     >
@@ -479,6 +561,9 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
           if (!node) {
             return null
           }
+          const displayedPlacement = placementPreview?.nodeId === placement.nodeId
+            ? { ...placement, x: placementPreview.x, y: placementPreview.y }
+            : placement
           return (
             <FloorPlanMarker
               expandedNodeIds={expandedTreeNodeIds}
@@ -488,9 +573,13 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
               markImageLoaded={markImageLoaded}
               node={node}
               nodeIndex={nodeIndex}
+              onBeginPlacementDrag={beginPlacementDrag}
               onSelect={onSelectNode}
               onToggleNode={toggleFloorPlanTreeNode}
-              placement={placement}
+              placement={displayedPlacement}
+              placementDragging={
+                placementPreview?.nodeId === node.id && placementPreview.dragging
+              }
               markerScale={markerScale}
               projectSettings={projectSettings}
               selectedNodeId={selectedNodeId}
