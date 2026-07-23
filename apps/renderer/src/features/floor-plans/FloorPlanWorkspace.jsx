@@ -535,7 +535,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
         <IconButton
           aria-label="Reset node zoom"
           className="canvas-tool-button"
-          disabled={busy || Math.abs(markerScale - 1) < 0.001}
+          disabled={busy}
           onClick={resetMarkerZoom}
           tooltip="Reset Node Zoom"
         >
@@ -589,8 +589,8 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
         })}
       </div>
       <div className="canvas-caption canvas-caption--right floor-plan-status">
-        Plan {Math.round(activeTransform.scale * 100)}% · Nodes {Math.round(markerScale * 100)}% ·{' '}
-        {activeFloorPlan.placements?.length || 0} placed
+        {Math.round(activeTransform.scale * 100)}% · {Math.round(markerScale * 100)}% ·{' '}
+        {activeFloorPlan.placements?.length || 0} placed nodes
       </div>
     </section>
   )
