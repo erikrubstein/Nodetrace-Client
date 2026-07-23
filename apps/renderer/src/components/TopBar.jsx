@@ -84,11 +84,17 @@ export default function TopBar({
   useNativeDesktopMenu = false,
 }) {
   const projectLoadPercent = Math.max(0, Math.min(100, Math.round(projectLoadProgress * 100)))
+  const desktopTopbar = showDesktopControls || useNativeDesktopMenu
   return (
-    <header className={`topbar ${showDesktopControls ? 'topbar--desktop' : ''} ${useNativeDesktopMenu ? 'topbar--native-menu' : ''}`.trim()} style={style}>
-      <div className="topbar__left topbar__no-drag">
-        <img alt="Nodetrace" className="topbar__logo" src={brandLogoUrl} />
-        <div className="menu-wrap">
+    <header
+      className={`topbar ${desktopTopbar ? 'topbar--desktop' : ''} ${
+        useNativeDesktopMenu ? 'topbar--native-menu' : ''
+      }`.trim()}
+      style={style}
+    >
+      <div className="topbar__left">
+        <img alt="Nodetrace" className="topbar__logo" draggable="false" src={brandLogoUrl} />
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'file' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'file' ? null : 'file'))}
@@ -191,7 +197,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'edit' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'edit' ? null : 'edit'))}
@@ -271,7 +277,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'select' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'select' ? null : 'select'))}
@@ -362,7 +368,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'tree' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'tree' ? null : 'tree'))}
@@ -442,7 +448,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'view' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'view' ? null : 'view'))}
@@ -499,7 +505,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'settings' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'settings' ? null : 'settings'))}
@@ -591,7 +597,7 @@ export default function TopBar({
           ) : null}
         </div>
 
-        <div className="menu-wrap">
+        <div className="menu-wrap topbar__no-drag">
           <button
             className={`menu-trigger ${openMenu === 'help' ? 'active' : ''}`}
             onClick={() => setOpenMenu((current) => (current === 'help' ? null : 'help'))}
@@ -623,7 +629,7 @@ export default function TopBar({
         <div className={`project-chip ${projectLoading ? 'project-chip--loading' : ''}`.trim()}>
           <span className="project-chip__label">{projectName || 'No project'}</span>
           {projectLoading ? (
-            <span className="icon-button-wrap project-chip__loading-wrap">
+            <span className="icon-button-wrap project-chip__loading-wrap topbar__no-drag">
               <span aria-hidden="true" className="project-chip__loading-indicator">
                 <span
                   className="project-chip__loading-bar"
