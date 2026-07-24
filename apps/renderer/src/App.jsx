@@ -198,6 +198,10 @@ function MainApp() {
   const [floorPlanExpandedNodeIds, setFloorPlanExpandedNodeIds] = useState(
     defaultUserProjectUi.floorPlanExpandedNodeIds,
   )
+  const [
+    floorPlanSelectedPlacementRootIds,
+    setFloorPlanSelectedPlacementRootIds,
+  ] = useState(defaultUserProjectUi.floorPlanSelectedPlacementRootIds)
   const [pendingFloorPlanNodeId, setPendingFloorPlanNodeId] = useState(null)
   const [previewTransform, setPreviewTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false)
@@ -361,6 +365,9 @@ function MainApp() {
     setActiveFloorPlanId(defaultUserProjectUi.activeFloorPlanId)
     setFloorPlanTransforms(defaultUserProjectUi.floorPlanTransforms)
     setFloorPlanExpandedNodeIds(defaultUserProjectUi.floorPlanExpandedNodeIds)
+    setFloorPlanSelectedPlacementRootIds(
+      defaultUserProjectUi.floorPlanSelectedPlacementRootIds,
+    )
     setPendingFloorPlanNodeId(null)
     setProjectUiReady(false)
     setMobileConnectionCount(0)
@@ -378,6 +385,9 @@ function MainApp() {
     activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
     setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
     setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
+    setFloorPlanSelectedPlacementRootIds(
+      defaultUserProjectUi.floorPlanSelectedPlacementRootIds,
+    )
     setProjectUiReady(false)
     setMobileConnectionCount(0)
     setManualProjectSelectionRequired(true)
@@ -395,6 +405,9 @@ function MainApp() {
     activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
     setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
     setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
+    setFloorPlanSelectedPlacementRootIds(
+      defaultUserProjectUi.floorPlanSelectedPlacementRootIds,
+    )
     setProjectUiReady(false)
     setMobileConnectionCount(0)
     setManualProjectSelectionRequired(true)
@@ -981,12 +994,14 @@ function MainApp() {
         activeFloorPlanId: resolvedActiveFloorPlanId,
         floorPlanTransforms,
         floorPlanExpandedNodeIds,
+        floorPlanSelectedPlacementRootIds,
         selectedNodeIds: effectiveSelectedNodeIds,
         treeSelectedNodeIds,
         floorPlanSelectedNodeIds,
       }),
     [
       floorPlanSelectedNodeIds,
+      floorPlanSelectedPlacementRootIds,
       floorPlanTransforms,
       floorPlanExpandedNodeIds,
       effectiveSelectedNodeIds,
@@ -1104,6 +1119,8 @@ function MainApp() {
       activeFloorPlanId: overrides.activeFloorPlanId ?? resolvedActiveFloorPlanId,
       floorPlanTransforms: overrides.floorPlanTransforms ?? floorPlanTransforms,
       floorPlanExpandedNodeIds: overrides.floorPlanExpandedNodeIds ?? floorPlanExpandedNodeIds,
+      floorPlanSelectedPlacementRootIds:
+        overrides.floorPlanSelectedPlacementRootIds ?? floorPlanSelectedPlacementRootIds,
       selectedNodeIds: overrides.selectedNodeIds ?? effectiveSelectedNodeIds,
       treeSelectedNodeIds: overrides.treeSelectedNodeIds ?? treeSelectedNodeIds,
       floorPlanSelectedNodeIds: overrides.floorPlanSelectedNodeIds ?? floorPlanSelectedNodeIds,
@@ -1112,6 +1129,7 @@ function MainApp() {
   }, [
     effectiveSelectedNodeIds,
     floorPlanSelectedNodeIds,
+    floorPlanSelectedPlacementRootIds,
     floorPlanExpandedNodeIds,
     floorPlanTransforms,
     resolvedActiveFloorPlanId,
@@ -1205,6 +1223,33 @@ function MainApp() {
       return nextExpandedNodeIds
     })
   }, [markPendingUiSignature])
+  const setFloorPlanSelectedPlacementRootPreference = useCallback(
+    (floorPlanId, rootNodeId) => {
+      const normalizedFloorPlanId = String(floorPlanId || '').trim()
+      if (!normalizedFloorPlanId) {
+        return
+      }
+      const normalizedRootNodeId = String(rootNodeId || '').trim()
+      setFloorPlanSelectedPlacementRootIds((current) => {
+        if (
+          (current[normalizedFloorPlanId] || '') === normalizedRootNodeId
+        ) {
+          return current
+        }
+        const nextRootIds = { ...current }
+        if (normalizedRootNodeId) {
+          nextRootIds[normalizedFloorPlanId] = normalizedRootNodeId
+        } else {
+          delete nextRootIds[normalizedFloorPlanId]
+        }
+        markPendingUiSignature({
+          floorPlanSelectedPlacementRootIds: nextRootIds,
+        })
+        return nextRootIds
+      })
+    },
+    [markPendingUiSignature],
+  )
   const setCanvasTransform = useCallback((nextTransformOrUpdater) => {
     setTransform((current) => {
       const nextTransform =
@@ -1216,6 +1261,7 @@ function MainApp() {
         activeFloorPlanId: resolvedActiveFloorPlanId,
         floorPlanTransforms,
         floorPlanExpandedNodeIds,
+        floorPlanSelectedPlacementRootIds,
         selectedNodeIds: effectiveSelectedNodeIds,
         treeSelectedNodeIds,
         floorPlanSelectedNodeIds,
@@ -1225,6 +1271,7 @@ function MainApp() {
   }, [
     effectiveSelectedNodeIds,
     floorPlanSelectedNodeIds,
+    floorPlanSelectedPlacementRootIds,
     floorPlanTransforms,
     floorPlanExpandedNodeIds,
     resolvedActiveFloorPlanId,
@@ -1739,6 +1786,7 @@ function MainApp() {
     setActiveFloorPlanId(nextUi.activeFloorPlanId)
     setFloorPlanTransforms(nextUi.floorPlanTransforms)
     setFloorPlanExpandedNodeIds(nextUi.floorPlanExpandedNodeIds)
+    setFloorPlanSelectedPlacementRootIds(nextUi.floorPlanSelectedPlacementRootIds)
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
     const availableNodeIds = new Set((tree?.nodes || []).map((node) => node.id))
     const nextTreeSelectionIds = nextUi.treeSelectedNodeIds.filter((nodeId) => availableNodeIds.has(nodeId))
@@ -1767,7 +1815,7 @@ function MainApp() {
     setFloorPlanSelectedNodeIds(nextFloorPlanSelectionIds)
     setEffectiveSelection(nextSelectionIds, nextSelectionIds[0] || null)
     setProjectUiReady(true)
-  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanExpandedNodeIds, projectUi.floorPlanSelectedNodeIds, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.treeSelectedNodeIds, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project, tree?.root?.id])
+  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanExpandedNodeIds, projectUi.floorPlanSelectedNodeIds, projectUi.floorPlanSelectedPlacementRootIds, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.treeSelectedNodeIds, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project, tree?.root?.id])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -1783,6 +1831,9 @@ function MainApp() {
     activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
     setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
     setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
+    setFloorPlanSelectedPlacementRootIds(
+      defaultUserProjectUi.floorPlanSelectedPlacementRootIds,
+    )
     setMobileConnectionCount(0)
     setAccountStatus('')
     setAccountDialog(null)
@@ -4727,9 +4778,19 @@ function MainApp() {
     uploadFiles,
   })
 
-  const selectFloorPlanNode = useCallback((nodeId) => {
+  const selectFloorPlanNode = useCallback((nodeId, placementRootNodeId = null) => {
+    if (resolvedActiveFloorPlanId && placementRootNodeId) {
+      setFloorPlanSelectedPlacementRootPreference(
+        resolvedActiveFloorPlanId,
+        placementRootNodeId,
+      )
+    }
     setEffectiveSelection([nodeId], nodeId)
-  }, [setEffectiveSelection])
+  }, [
+    resolvedActiveFloorPlanId,
+    setEffectiveSelection,
+    setFloorPlanSelectedPlacementRootPreference,
+  ])
 
   useEffect(() => {
     if (floorPlanEnabled || workspaceMode === 'tree') {
@@ -5674,6 +5735,9 @@ function MainApp() {
             onExpandedNodeIdsChange={(nextNodeIds) =>
               setFloorPlanExpandedNodeIdsPreference(resolvedActiveFloorPlanId, nextNodeIds)
             }
+            onSelectedPlacementRootNodeIdChange={
+              setFloorPlanSelectedPlacementRootPreference
+            }
             onPendingPlacementChange={setPendingFloorPlanNodeId}
             onSavePlacement={handleSaveFloorPlanPlacement}
             onSelectNode={selectFloorPlanNode}
@@ -5686,6 +5750,11 @@ function MainApp() {
             ref={floorPlanWorkspaceRef}
             selectedNodePath={selectedNodePath}
             selectedNodeId={selectedNodeId}
+            selectedPlacementRootNodeId={
+              resolvedActiveFloorPlanId
+                ? floorPlanSelectedPlacementRootIds[resolvedActiveFloorPlanId] || null
+                : null
+            }
             selectNodeFromPath={selectFloorPlanNode}
             theme={theme}
             transform={resolvedActiveFloorPlanId ? floorPlanTransforms[resolvedActiveFloorPlanId] || null : null}

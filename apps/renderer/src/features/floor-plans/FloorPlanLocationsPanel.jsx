@@ -64,7 +64,7 @@ export default function FloorPlanLocationsPanel({
               className={`floor-plan-location-row ${selectedNodeId === node.id ? 'is-selected' : ''}`}
               draggable
               key={node.id}
-              onClick={() => onSelectNode(node.id)}
+              onClick={() => onSelectNode(node.id, placed ? node.id : null)}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = placed ? 'move' : 'copy'
                 event.dataTransfer.setData(FLOOR_PLAN_NODE_DRAG_TYPE, node.id)
@@ -100,7 +100,7 @@ export default function FloorPlanLocationsPanel({
                   onClick={(event) => {
                     event.stopPropagation()
                     onBeginPlacement(node.id)
-                    onSelectNode(node.id)
+                    onSelectNode(node.id, placed ? node.id : null)
                   }}
                   tooltip={placed ? 'Move Location' : 'Place Location'}
                 >

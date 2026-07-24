@@ -367,6 +367,9 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await nestedFloorPlanNode.click()
   await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await expect(nestedFloorPlanNode).toHaveClass(/selected/)
+  await expect(nestedFloorPlanNode).toHaveCSS('z-index', '20')
+  await expect(locationMarker).toHaveClass(/has-selected-node/)
+  await expect(locationMarker).toHaveCSS('z-index', '20')
   await expect.poll(() => locationButton.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('124px')
   await expect.poll(() => nestedFloorPlanNode.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('130px')
   await locationButton.dblclick()
@@ -461,6 +464,62 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationAnchor.locator('line')).toHaveAttribute('y2', '28')
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('left', '-56px')
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('top', '28px')
+
+  await page.getByRole('button', { name: 'Locations', exact: true }).click()
+  await page.getByRole('button', { name: `Place ${childNodeName}` }).click()
+  await floorPlanStage.click({ position: { x: 360, y: 260 } })
+  await expect(
+    floorPlanStage.getByRole('button', { name: childNodeName, exact: true }),
+  ).toHaveCount(2)
+
+  const placedParentRoot = floorPlanStage
+    .locator('.floor-plan-marker__tree-node.is-root')
+    .filter({ hasText: nodeName })
+  const parentPlacementMarker = placedParentRoot.locator(
+    'xpath=ancestor::div[contains(@class, "floor-plan-marker-position")]',
+  )
+  const nestedChildOccurrence = parentPlacementMarker.getByRole('button', {
+    name: childNodeName,
+    exact: true,
+  })
+  const directChildOccurrence = floorPlanStage
+    .locator('.floor-plan-marker__tree-node.is-root')
+    .filter({ hasText: childNodeName })
+  const directChildPlacementMarker = directChildOccurrence.locator(
+    'xpath=ancestor::div[contains(@class, "floor-plan-marker-position")]',
+  )
+
+  await nestedChildOccurrence.click()
+  await expect(nestedChildOccurrence).toHaveClass(/selected/)
+  await expect(directChildOccurrence).not.toHaveClass(/selected/)
+  await expect(parentPlacementMarker).toHaveClass(/has-selected-node/)
+  await expect(directChildPlacementMarker).not.toHaveClass(/has-selected-node/)
+  await expect(
+    floorPlanStage.locator('.floor-plan-marker-position.has-selected-node'),
+  ).toHaveCount(1)
+
+  await directChildOccurrence.click()
+  await expect(directChildOccurrence).toHaveClass(/selected/)
+  await expect(nestedChildOccurrence).not.toHaveClass(/selected/)
+  await expect(directChildPlacementMarker).toHaveClass(/has-selected-node/)
+  await expect(parentPlacementMarker).not.toHaveClass(/has-selected-node/)
+
+  await nestedChildOccurrence.click()
+  await page.reload()
+  await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
+  const reloadedParentPlacementMarker = page
+    .locator('.floor-plan-marker__tree-node.is-root')
+    .filter({ hasText: nodeName })
+    .locator('xpath=ancestor::div[contains(@class, "floor-plan-marker-position")]')
+  const reloadedNestedChildOccurrence = reloadedParentPlacementMarker.getByRole('button', {
+    name: childNodeName,
+    exact: true,
+  })
+  const reloadedDirectChildOccurrence = page
+    .locator('.floor-plan-marker__tree-node.is-root')
+    .filter({ hasText: childNodeName })
+  await expect(reloadedNestedChildOccurrence).toHaveClass(/selected/)
+  await expect(reloadedDirectChildOccurrence).not.toHaveClass(/selected/)
   await expect(page.locator('svg.lucide').first()).toBeVisible()
   await expect(page.locator('i[class*="fa-"]')).toHaveCount(0)
   await expect(page.locator('link[href*="font-awesome"]')).toHaveCount(0)

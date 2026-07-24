@@ -41,6 +41,7 @@ export const defaultUserProjectUi = {
   activeFloorPlanId: null,
   floorPlanTransforms: {},
   floorPlanExpandedNodeIds: {},
+  floorPlanSelectedPlacementRootIds: {},
   selectedNodeIds: [],
   treeSelectedNodeIds: [],
   floorPlanSelectedNodeIds: [],

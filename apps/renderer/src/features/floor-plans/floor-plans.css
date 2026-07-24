@@ -146,6 +146,10 @@
   z-index: 12;
 }
 
+.floor-plan-marker-position.has-selected-node {
+  z-index: 20;
+}
+
 .floor-plan-marker {
   position: relative;
   width: 0;
@@ -254,6 +258,10 @@
 
 .floor-plan-marker__tree-node.is-root {
   z-index: 4;
+}
+
+.floor-plan-marker__tree-node.selected {
+  z-index: 20;
 }
 
 .floor-plan-locations-panel {

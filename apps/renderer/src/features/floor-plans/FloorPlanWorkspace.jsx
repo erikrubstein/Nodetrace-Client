@@ -32,6 +32,20 @@ const MAX_MARKER_SCALE = 3
 const MARKER_TREE_GAP = 28
 const MARKER_NODE_HALF_SIZE = 56
 
+function placementContainsNode(rootNodeId, nodeId, nodeIndex) {
+  let currentNode = nodeIndex.byId.get(nodeId)
+  const visited = new Set()
+  while (currentNode && !visited.has(currentNode.id)) {
+    if (currentNode.id === rootNodeId) {
+      return true
+    }
+    visited.add(currentNode.id)
+    currentNode =
+      currentNode.parent_id == null ? null : nodeIndex.byId.get(currentNode.parent_id)
+  }
+  return false
+}
+
 function FloorPlanMarker({
   expandedNodeIds,
   imageLoadRevision,
@@ -46,6 +60,7 @@ function FloorPlanMarker({
   placement,
   projectSettings,
   selectedNodeId,
+  selectedPlacementRootNodeId,
   placementDragging,
   viewportScale,
 }) {
@@ -56,6 +71,9 @@ function FloorPlanMarker({
   const markerExpanded = treeLayout.nodes.some(
     (item) => item.node.type !== 'collapsed-group' && expandedNodeIds.has(item.id),
   )
+  const selectedOccurrenceInMarker = selectedPlacementRootNodeId === node.id
+  const markerSelected =
+    selectedOccurrenceInMarker && treeLayout.nodes.some((item) => item.id === selectedNodeId)
   const verticalLayout = projectSettings.orientation === 'vertical'
   const markerTreeOrigin = verticalLayout
     ? { x: -MARKER_NODE_HALF_SIZE, y: MARKER_TREE_GAP }
@@ -63,7 +81,9 @@ function FloorPlanMarker({
 
   return (
     <div
-      className={`floor-plan-marker-position ${markerExpanded ? 'is-expanded' : ''}`}
+      className={`floor-plan-marker-position ${markerExpanded ? 'is-expanded' : ''} ${
+        markerSelected ? 'has-selected-node' : ''
+      }`}
       style={{ left: `${placement.x * 100}%`, top: `${placement.y * 100}%` }}
     >
       <div
@@ -89,7 +109,9 @@ function FloorPlanMarker({
         <svg className="floor-plan-marker__links" aria-hidden="true">
           {treeLayout.links.map((link) => (
             <line
-              className={link.sourceId === selectedNodeId ? 'is-selected' : ''}
+              className={
+                selectedOccurrenceInMarker && link.sourceId === selectedNodeId ? 'is-selected' : ''
+              }
               key={link.key}
               x1={markerTreeOrigin.x + link.x1}
               x2={markerTreeOrigin.x + link.x2}
@@ -105,7 +127,7 @@ function FloorPlanMarker({
             <button
               aria-label={item.node.name}
               className={`graph-node floor-plan-marker__tree-node ${rootNode ? 'is-root' : ''} ${
-                selectedNodeId === item.id ? 'selected' : ''
+                selectedOccurrenceInMarker && selectedNodeId === item.id ? 'selected' : ''
               } ${projectSettings.imageMode === 'square' ? 'image-square' : 'image-original'} ${
                 item.node.hasImage ? 'node-with-photo' : 'node-without-photo'
               } ${collapsedGroup ? 'collapsed-node' : ''}`}
@@ -116,7 +138,7 @@ function FloorPlanMarker({
                 if (collapsedGroup) {
                   return
                 }
-                onSelect(item.id)
+                onSelect(item.id, node.id)
               }}
               onDoubleClick={(event) => {
                 event.preventDefault()
@@ -158,6 +180,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   onActiveFloorPlanChange,
   onPendingPlacementChange,
   onExpandedNodeIdsChange,
+  onSelectedPlacementRootNodeIdChange,
   onSavePlacement,
   onSelectNode,
   onTransformChange,
@@ -166,6 +189,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   projectSettings,
   selectedNodePath,
   selectedNodeId,
+  selectedPlacementRootNodeId,
   selectNodeFromPath,
   theme,
   transform,
@@ -174,7 +198,6 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   const uploadInputRef = useRef(null)
   const panRef = useRef(null)
   const placementDragRef = useRef(null)
-  const initializedSelectionFloorPlanIdRef = useRef(null)
   const [placementPreview, setPlacementPreview] = useState(null)
 
   const activeFloorPlan = useMemo(
@@ -192,18 +215,36 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     () => new Set((activeFloorPlan?.placements || []).map((placement) => placement.nodeId)),
     [activeFloorPlan?.placements],
   )
-  const selectedPlacementRootId = useMemo(() => {
-    let currentNode = nodeIndex.byId.get(selectedNodeId)
-    const visited = new Set()
-    while (currentNode && !visited.has(currentNode.id)) {
-      if (placedRootIds.has(currentNode.id)) {
-        return currentNode.id
+  const resolvedSelectedPlacementRootId = useMemo(() => {
+    if (!selectedNodeId) {
+      return null
+    }
+    if (
+      selectedPlacementRootNodeId &&
+      placedRootIds.has(selectedPlacementRootNodeId) &&
+      placementContainsNode(selectedPlacementRootNodeId, selectedNodeId, nodeIndex)
+    ) {
+      return selectedPlacementRootNodeId
+    }
+    if (placedRootIds.has(selectedNodeId)) {
+      return selectedNodeId
+    }
+    for (const placement of activeFloorPlan?.placements || []) {
+      if (
+        nodeIndex.byId.has(placement.nodeId) &&
+        placementContainsNode(placement.nodeId, selectedNodeId, nodeIndex)
+      ) {
+        return placement.nodeId
       }
-      visited.add(currentNode.id)
-      currentNode = currentNode.parent_id == null ? null : nodeIndex.byId.get(currentNode.parent_id)
     }
     return null
-  }, [nodeIndex.byId, placedRootIds, selectedNodeId])
+  }, [
+    activeFloorPlan?.placements,
+    nodeIndex,
+    placedRootIds,
+    selectedNodeId,
+    selectedPlacementRootNodeId,
+  ])
   const expandedTreeNodeIds = useMemo(
     () => new Set(expandedNodeIds || []),
     [expandedNodeIds],
@@ -218,32 +259,50 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     if (!active || !nodes.length) {
       return
     }
-    const currentFloorPlanId = activeFloorPlan?.id || null
-    if (currentFloorPlanId && initializedSelectionFloorPlanIdRef.current !== currentFloorPlanId) {
-      initializedSelectionFloorPlanIdRef.current = currentFloorPlanId
-      if (selectedPlacementRootId) {
-        return
-      }
-      const initialPlacedRootId =
-        (activeFloorPlan?.placements || []).find((placement) => nodeIndex.byId.has(placement.nodeId))?.nodeId ||
-        null
-      if (initialPlacedRootId && selectedNodeId !== initialPlacedRootId) {
-        onSelectNode(initialPlacedRootId)
-        return
-      }
-    }
-    if (selectedPlacementRootId) {
+    const currentFloorPlanId = activeFloorPlan?.id
+    if (!currentFloorPlanId) {
       return
     }
-    if (!placedRootIds.size && selectedNodeId && nodeIndex.byId.has(selectedNodeId)) {
+    if (resolvedSelectedPlacementRootId) {
+      if (selectedPlacementRootNodeId !== resolvedSelectedPlacementRootId) {
+        onSelectedPlacementRootNodeIdChange(
+          currentFloorPlanId,
+          resolvedSelectedPlacementRootId,
+        )
+      }
       return
     }
-    const fallbackNodeId =
+    if (!placedRootIds.size) {
+      if (selectedPlacementRootNodeId) {
+        onSelectedPlacementRootNodeIdChange(currentFloorPlanId, null)
+      }
+      if (selectedNodeId && nodeIndex.byId.has(selectedNodeId)) {
+        return
+      }
+      const fallbackNodeId =
+        nodes.find((candidate) => candidate.parent_id == null)?.id || nodes[0].id
+      onSelectNode(fallbackNodeId)
+      return
+    }
+    const fallbackPlacementRootId =
       (activeFloorPlan?.placements || []).find((placement) => nodeIndex.byId.has(placement.nodeId))?.nodeId ||
-      nodes.find((candidate) => candidate.parent_id == null)?.id ||
-      nodes[0].id
-    onSelectNode(fallbackNodeId)
-  }, [active, activeFloorPlan?.id, activeFloorPlan?.placements, nodeIndex.byId, nodes, onSelectNode, placedRootIds.size, selectedNodeId, selectedPlacementRootId])
+      null
+    if (fallbackPlacementRootId) {
+      onSelectNode(fallbackPlacementRootId, fallbackPlacementRootId)
+    }
+  }, [
+    active,
+    activeFloorPlan?.id,
+    activeFloorPlan?.placements,
+    nodeIndex,
+    nodes,
+    onSelectedPlacementRootNodeIdChange,
+    onSelectNode,
+    placedRootIds.size,
+    resolvedSelectedPlacementRootId,
+    selectedNodeId,
+    selectedPlacementRootNodeId,
+  ])
 
   function toggleFloorPlanTreeNode(nodeId) {
     if (!activeFloorPlan?.id) {
@@ -312,7 +371,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
       return
     }
     onPendingPlacementChange(null)
-    onSelectNode(nodeId)
+    onSelectNode(nodeId, nodeId)
     void onSavePlacement(activeFloorPlan.id, nodeId, position)
   }
 
@@ -328,7 +387,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     event.preventDefault()
     event.stopPropagation()
     onPendingPlacementChange(null)
-    onSelectNode(nodeId)
+    onSelectNode(nodeId, nodeId)
     placementDragRef.current = {
       nodeId,
       offset: {
@@ -592,6 +651,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
               markerScale={markerScale}
               projectSettings={projectSettings}
               selectedNodeId={selectedNodeId}
+              selectedPlacementRootNodeId={resolvedSelectedPlacementRootId}
               viewportScale={activeTransform.scale}
             />
           )

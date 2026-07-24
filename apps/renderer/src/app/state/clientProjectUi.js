@@ -82,6 +82,22 @@ export function normalizeClientProjectUi(value) {
     }
   }
 
+  const floorPlanSelectedPlacementRootIds = {}
+  if (
+    source.floorPlanSelectedPlacementRootIds &&
+    typeof source.floorPlanSelectedPlacementRootIds === 'object'
+  ) {
+    for (const [requestedFloorPlanId, requestedRootNodeId] of Object.entries(
+      source.floorPlanSelectedPlacementRootIds,
+    )) {
+      const floorPlanId = String(requestedFloorPlanId || '').trim()
+      const rootNodeId = String(requestedRootNodeId || '').trim()
+      if (floorPlanId && rootNodeId) {
+        floorPlanSelectedPlacementRootIds[floorPlanId] = rootNodeId
+      }
+    }
+  }
+
   return {
     workspaceMode,
     showGrid: source.showGrid == null ? defaultUserProjectUi.showGrid : Boolean(source.showGrid),
@@ -89,6 +105,7 @@ export function normalizeClientProjectUi(value) {
     activeFloorPlanId: String(source.activeFloorPlanId || '').trim() || null,
     floorPlanTransforms,
     floorPlanExpandedNodeIds,
+    floorPlanSelectedPlacementRootIds,
     selectedNodeIds,
     treeSelectedNodeIds,
     floorPlanSelectedNodeIds,
