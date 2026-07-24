@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useMemo } from 'react'
 
+import CanvasNodePathCaption from './CanvasNodePathCaption'
 import GraphNodeVisual from './GraphNodeVisual'
 import IconButton from './IconButton'
 import { AddFolderIcon, AddPhotoIcon, AddVariantIcon, EyeLowVisionIcon, FitViewIcon, FocusNodeIcon, GridIcon, PathIcon, RootNodeIcon } from './icons'
@@ -72,8 +73,6 @@ export default function CanvasWorkspace({
     }
     return null
   }, [canvasIsolationMode, searchResultNodeIds, selectedNodePathIds])
-  const pathScrollRef = useRef(null)
-  const pathScrollTargetRef = useRef(0)
   const treeBounds = useMemo(() => {
     const visibleNodes = Array.isArray(layout.nodes) && layout.nodes.length ? layout.nodes : null
     if (!visibleNodes) {
@@ -95,52 +94,6 @@ export default function CanvasWorkspace({
   }, [layout.height, layout.nodes, layout.width])
   const centeredPanX = Math.round(transform.x + treeBounds.centerX * transform.scale - ((viewportSize?.width || 0) / 2))
   const centeredPanY = Math.round(transform.y + treeBounds.centerY * transform.scale - ((viewportSize?.height || 0) / 2))
-
-  useLayoutEffect(() => {
-    const element = pathScrollRef.current
-    if (!element) {
-      return
-    }
-    const nextScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
-    pathScrollTargetRef.current = nextScrollLeft
-    element.scrollLeft = nextScrollLeft
-  }, [selectedNodeId, selectedNodePath])
-
-  useEffect(() => {
-    const element = pathScrollRef.current
-    if (!element) {
-      return undefined
-    }
-
-    const wheelListener = (event) => {
-      const canScrollHorizontally = element.scrollWidth > element.clientWidth
-      if (!canScrollHorizontally) {
-        return
-      }
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation?.()
-
-      const delta = event.deltaX || event.deltaY
-      const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
-      const currentScrollLeft =
-        Number.isFinite(pathScrollTargetRef.current) && pathScrollTargetRef.current > 0
-          ? pathScrollTargetRef.current
-          : element.scrollLeft
-      const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, currentScrollLeft + delta))
-      pathScrollTargetRef.current = nextScrollLeft
-      element.scrollTo({
-        left: nextScrollLeft,
-        behavior: 'smooth',
-      })
-    }
-
-    element.addEventListener('wheel', wheelListener, { passive: false, capture: true })
-    return () => {
-      element.removeEventListener('wheel', wheelListener, true)
-    }
-  }, [])
 
   function blurActiveTextInput() {
     const activeElement = document.activeElement
@@ -414,41 +367,10 @@ export default function CanvasWorkspace({
           {tree?.nodes.find((node) => node.id === dragPreview.nodeId)?.name || 'Moving'}
         </div>
       ) : null}
-      <div className="canvas-caption canvas-caption--left">
-        {selectedNodePath?.length ? (
-            <div
-              ref={pathScrollRef}
-              className="canvas-caption__path"
-              role="navigation"
-              aria-label="Selected node path"
-            >
-              <div className="canvas-caption__path-track">
-                {selectedNodePath.map((entry, index) => (
-                <span key={entry.id} className="canvas-caption__segment">
-                    {index > 0 ? <span className="canvas-caption__separator">{'>'}</span> : null}
-                  <button
-                    className={`canvas-caption__node ${entry.id === selectedNodePath[selectedNodePath.length - 1]?.id ? 'is-selected' : ''}`}
-                    onPointerDown={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      void selectNodeFromPath(entry.id)
-                    }}
-                    type="button"
-                  >
-                    {entry.name}
-                  </button>
-                </span>
-                ))}
-              </div>
-            </div>
-        ) : (
-          'No node selected'
-        )}
-      </div>
+      <CanvasNodePathCaption
+        onSelectNode={selectNodeFromPath}
+        selectedNodePath={selectedNodePath}
+      />
       <div className="canvas-caption canvas-caption--right">
         {Math.round(transform.scale * 100)}% | X {centeredPanX} | Y {centeredPanY} | {tree?.nodes?.length ?? 0}{' '}
         nodes

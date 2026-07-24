@@ -8,8 +8,9 @@ import {
   useState,
 } from 'react'
 
-import IconButton from '../../components/IconButton'
+import CanvasNodePathCaption from '../../components/CanvasNodePathCaption'
 import GraphNodeVisual from '../../components/GraphNodeVisual'
+import IconButton from '../../components/IconButton'
 import {
   FitViewIcon,
   MapOverviewIcon,
@@ -163,7 +164,9 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   onUploadFloorPlan,
   pendingPlacementNodeId,
   projectSettings,
+  selectedNodePath,
   selectedNodeId,
+  selectNodeFromPath,
   theme,
   transform,
 }, ref) {
@@ -218,8 +221,10 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     const currentFloorPlanId = activeFloorPlan?.id || null
     if (currentFloorPlanId && initializedSelectionFloorPlanIdRef.current !== currentFloorPlanId) {
       initializedSelectionFloorPlanIdRef.current = currentFloorPlanId
+      if (selectedPlacementRootId) {
+        return
+      }
       const initialPlacedRootId =
-        selectedPlacementRootId ||
         (activeFloorPlan?.placements || []).find((placement) => nodeIndex.byId.has(placement.nodeId))?.nodeId ||
         null
       if (initialPlacedRootId && selectedNodeId !== initialPlacedRootId) {
@@ -505,6 +510,10 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
             Upload plan
           </button>
         </div>
+        <CanvasNodePathCaption
+          onSelectNode={selectNodeFromPath}
+          selectedNodePath={selectedNodePath}
+        />
       </section>
     )
   }
@@ -588,6 +597,10 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
           )
         })}
       </div>
+      <CanvasNodePathCaption
+        onSelectNode={selectNodeFromPath}
+        selectedNodePath={selectedNodePath}
+      />
       <div className="canvas-caption canvas-caption--right floor-plan-status">
         {Math.round(activeTransform.scale * 100)}% · {Math.round(markerScale * 100)}% ·{' '}
         {activeFloorPlan.placements?.length || 0} placed nodes

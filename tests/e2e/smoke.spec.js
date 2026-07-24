@@ -100,6 +100,9 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   const workspaceView = page.getByRole('group', { name: 'Workspace view' })
   await expect(workspaceView).toBeVisible()
   await workspaceView.getByRole('button', { name: 'Plan View' }).click()
+  const selectedNodePathNavigation = page.getByRole('navigation', { name: 'Selected node path' })
+  await expect(selectedNodePathNavigation).toBeVisible()
+  await expect(selectedNodePathNavigation).toContainText(nodeName)
   await expect(page.getByLabel('Plans')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Add a plan' })).toBeVisible()
 
@@ -310,7 +313,7 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
     padding: '1px 4px',
   })
   await expect(locationButton).toHaveCSS('gap', '14px')
-  await expect(page.getByRole('button', { name: childNodeName, exact: true })).toHaveCount(0)
+  await expect(floorPlanStage.getByRole('button', { name: childNodeName, exact: true })).toHaveCount(0)
   await expect(page.locator('.floor-plan-marker__tree-node.collapsed-node')).toContainText('1 Item')
   const floorPlanViewport = page.locator('.floor-plan-workspace')
   const readFloorPlanScale = () => floorPlanStage.evaluate((stage) => {
@@ -358,10 +361,11 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationButton).toHaveCSS('top', '-56px')
   await locationButton.dblclick()
   await expect(page.locator('.floor-plan-marker__links line')).toHaveCount(1)
-  const nestedFloorPlanNode = page.getByRole('button', { name: childNodeName, exact: true })
+  const nestedFloorPlanNode = floorPlanStage.getByRole('button', { name: childNodeName, exact: true })
   await expect(nestedFloorPlanNode).toBeVisible()
   await expect(nestedFloorPlanNode).toHaveClass(/graph-node/)
   await nestedFloorPlanNode.click()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await expect(nestedFloorPlanNode).toHaveClass(/selected/)
   await expect.poll(() => locationButton.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('124px')
   await expect.poll(() => nestedFloorPlanNode.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('130px')
@@ -369,17 +373,22 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(nestedFloorPlanNode).toHaveCount(0)
   await expect(locationButton).toHaveClass(/selected/)
   await locationButton.dblclick()
-  await expect(page.getByRole('button', { name: childNodeName, exact: true })).toBeVisible()
+  await expect(floorPlanStage.getByRole('button', { name: childNodeName, exact: true })).toBeVisible()
+  await nestedFloorPlanNode.click()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
 
   await page.getByRole('button', { name: 'Plan', exact: true }).click()
   await expect(appearancePanel).toBeVisible()
   await workspaceView.getByRole('button', { name: 'Tree View' }).click()
+  await expect(selectedNodePathNavigation).toBeVisible()
+  await expect(selectedNodePathNavigation).toContainText(nodeName)
+  await expect(selectedNodePathNavigation).not.toContainText(childNodeName)
   await expect(appearancePanel).toBeVisible()
   await expect(processedPlan).toBeHidden()
   await expect(processedPlan).toHaveCount(1)
-  const treeNestedNode = page.locator('.canvas-viewport').getByRole('button', { name: childNodeName, exact: true })
+  const treeNestedNode = page.locator('.canvas-stage').getByRole('button', { name: childNodeName, exact: true })
   await expect(treeNestedNode).toBeVisible()
-  const treeLocationTitle = page.locator('.canvas-viewport').getByRole('button', {
+  const treeLocationTitle = page.locator('.canvas-stage').getByRole('button', {
     name: nodeName,
     exact: true,
   }).locator('.graph-node__meta span')
@@ -393,11 +402,13 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(treeNestedNode).toBeVisible()
 
   await workspaceView.getByRole('button', { name: 'Plan View' }).click()
+  await expect(selectedNodePathNavigation).toBeVisible()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await expect(appearancePanel).toBeVisible()
   await expect(page.getByLabel('Search locations')).toHaveCount(0)
   await expect(processedPlan).toBeVisible()
   expect(await processedPlan.evaluate((canvas) => canvas === window.__nodetraceFloorPlanCanvas)).toBe(true)
-  const floorPlanNestedNode = page.locator('.floor-plan-workspace').getByRole('button', {
+  const floorPlanNestedNode = floorPlanStage.getByRole('button', {
     name: childNodeName,
     exact: true,
   })
@@ -423,14 +434,22 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await workspaceView.getByRole('button', { name: 'Plan View' }).click()
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
   await expect(floorPlanNestedNode).toBeVisible()
+  await floorPlanNestedNode.click()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await page.reload()
   await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
   await expect(page.locator('.floor-plan-stage > img.floor-plan-stage__image')).toHaveCount(0)
   await expect(processedPlan).toHaveClass(/is-ready/)
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
   await expect(
-    page.locator('.floor-plan-workspace').getByRole('button', { name: childNodeName, exact: true }),
+    floorPlanStage.getByRole('button', { name: childNodeName, exact: true }),
   ).toBeVisible()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
+  await workspaceView.getByRole('button', { name: 'Tree View' }).click()
+  await expect(selectedNodePathNavigation).toContainText(projectName)
+  await expect(selectedNodePathNavigation).not.toContainText(childNodeName)
+  await workspaceView.getByRole('button', { name: 'Plan View' }).click()
+  await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await page.getByRole('button', { name: 'Plan', exact: true }).click()
   await expect(
     page.getByRole('slider', { name: 'Plan brightness', exact: true }),

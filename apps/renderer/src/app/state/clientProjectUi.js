@@ -21,6 +21,20 @@ export function writeStoredClientTheme(theme) {
 
 export function normalizeClientProjectUi(value) {
   const source = value && typeof value === 'object' ? value : {}
+  const workspaceMode = source.workspaceMode === 'floor-plan' ? 'floor-plan' : 'tree'
+  const selectedNodeIds = Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : []
+  const hasTreeSelection = Array.isArray(source.treeSelectedNodeIds)
+  const hasFloorPlanSelection = Array.isArray(source.floorPlanSelectedNodeIds)
+  const treeSelectedNodeIds = hasTreeSelection
+    ? source.treeSelectedNodeIds.filter(Boolean)
+    : workspaceMode === 'tree'
+      ? selectedNodeIds
+      : []
+  const floorPlanSelectedNodeIds = hasFloorPlanSelection
+    ? source.floorPlanSelectedNodeIds.filter(Boolean)
+    : workspaceMode === 'floor-plan'
+      ? selectedNodeIds
+      : []
 
   const canvasTransform =
     source.canvasTransform &&
@@ -69,13 +83,15 @@ export function normalizeClientProjectUi(value) {
   }
 
   return {
-    workspaceMode: source.workspaceMode === 'floor-plan' ? 'floor-plan' : 'tree',
+    workspaceMode,
     showGrid: source.showGrid == null ? defaultUserProjectUi.showGrid : Boolean(source.showGrid),
     canvasTransform,
     activeFloorPlanId: String(source.activeFloorPlanId || '').trim() || null,
     floorPlanTransforms,
     floorPlanExpandedNodeIds,
-    selectedNodeIds: Array.isArray(source.selectedNodeIds) ? source.selectedNodeIds.filter(Boolean) : [],
+    selectedNodeIds,
+    treeSelectedNodeIds,
+    floorPlanSelectedNodeIds,
   }
 }
 

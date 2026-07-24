@@ -42,6 +42,8 @@ export const defaultUserProjectUi = {
   floorPlanTransforms: {},
   floorPlanExpandedNodeIds: {},
   selectedNodeIds: [],
+  treeSelectedNodeIds: [],
+  floorPlanSelectedNodeIds: [],
   leftSidebarOpen: false,
   rightSidebarOpen: true,
   leftSidebarWidth: 340,

@@ -187,6 +187,12 @@ function MainApp() {
   const [dragPreview, setDragPreview] = useState(null)
   const [transform, setTransform] = useState({ x: 80, y: 80, scale: 1 })
   const [workspaceMode, setWorkspaceMode] = useState(defaultUserProjectUi.workspaceMode)
+  const [treeSelectedNodeIds, setTreeSelectedNodeIds] = useState(
+    defaultUserProjectUi.treeSelectedNodeIds,
+  )
+  const [floorPlanSelectedNodeIds, setFloorPlanSelectedNodeIds] = useState(
+    defaultUserProjectUi.floorPlanSelectedNodeIds,
+  )
   const [activeFloorPlanId, setActiveFloorPlanId] = useState(defaultUserProjectUi.activeFloorPlanId)
   const [floorPlanTransforms, setFloorPlanTransforms] = useState(defaultUserProjectUi.floorPlanTransforms)
   const [floorPlanExpandedNodeIds, setFloorPlanExpandedNodeIds] = useState(
@@ -256,6 +262,7 @@ function MainApp() {
   const currentUserRef = useRef(null)
   const selectedProjectIdRef = useRef(null)
   const selectedNodeIdRef = useRef(null)
+  const activeWorkspaceModeRef = useRef(defaultUserProjectUi.workspaceMode)
   const loadedImagesRef = useRef({})
   const nodeImageEditSequenceRef = useRef(new Map())
   const loadedUiSignatureRef = useRef('')
@@ -347,7 +354,10 @@ function MainApp() {
     setMultiSelectedNodeIds([])
     setShowGrid(defaultUserProjectUi.showGrid)
     setTransform(defaultUserProjectUi.canvasTransform || { x: 80, y: 80, scale: 1 })
+    activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
     setWorkspaceMode(defaultUserProjectUi.workspaceMode)
+    setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
+    setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
     setActiveFloorPlanId(defaultUserProjectUi.activeFloorPlanId)
     setFloorPlanTransforms(defaultUserProjectUi.floorPlanTransforms)
     setFloorPlanExpandedNodeIds(defaultUserProjectUi.floorPlanExpandedNodeIds)
@@ -365,6 +375,9 @@ function MainApp() {
     setSelectedProjectId(null)
     setTree(null)
     setSelectedNodeId(null)
+    activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
+    setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
+    setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
     setProjectUiReady(false)
     setMobileConnectionCount(0)
     setManualProjectSelectionRequired(true)
@@ -379,6 +392,9 @@ function MainApp() {
     setSelectedProjectId(null)
     setTree(null)
     setSelectedNodeId(null)
+    activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
+    setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
+    setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
     setProjectUiReady(false)
     setMobileConnectionCount(0)
     setManualProjectSelectionRequired(true)
@@ -896,6 +912,23 @@ function MainApp() {
     () => [selectedNodeId, ...multiSelectedNodeIds].filter(Boolean),
     [multiSelectedNodeIds, selectedNodeId],
   )
+  const setEffectiveSelection = useCallback((nodeIds, preferredPrimaryId = null) => {
+    const validIds = Array.from(new Set((nodeIds || []).filter(Boolean))).filter(
+      (nodeId) => !tree?.nodes || tree.nodes.some((node) => node.id === nodeId),
+    )
+    const nextPrimaryId =
+      preferredPrimaryId && validIds.includes(preferredPrimaryId)
+        ? preferredPrimaryId
+        : validIds[0] || null
+    selectedNodeIdRef.current = nextPrimaryId
+    setSelectedNodeId(nextPrimaryId)
+    setMultiSelectedNodeIds(validIds.filter((nodeId) => nodeId !== nextPrimaryId))
+    if (activeWorkspaceModeRef.current === 'floor-plan') {
+      setFloorPlanSelectedNodeIds(validIds)
+    } else {
+      setTreeSelectedNodeIds(validIds)
+    }
+  }, [tree?.nodes])
   const explicitSelectedNodes = useMemo(
     () => effectiveSelectedNodeIds.map((nodeId) => tree?.nodes.find((node) => node.id === nodeId)).filter(Boolean),
     [effectiveSelectedNodeIds, tree?.nodes],
@@ -949,14 +982,18 @@ function MainApp() {
         floorPlanTransforms,
         floorPlanExpandedNodeIds,
         selectedNodeIds: effectiveSelectedNodeIds,
+        treeSelectedNodeIds,
+        floorPlanSelectedNodeIds,
       }),
     [
+      floorPlanSelectedNodeIds,
       floorPlanTransforms,
       floorPlanExpandedNodeIds,
       effectiveSelectedNodeIds,
       resolvedActiveFloorPlanId,
       showGrid,
       transform,
+      treeSelectedNodeIds,
       workspaceMode,
     ],
   )
@@ -1068,25 +1105,65 @@ function MainApp() {
       floorPlanTransforms: overrides.floorPlanTransforms ?? floorPlanTransforms,
       floorPlanExpandedNodeIds: overrides.floorPlanExpandedNodeIds ?? floorPlanExpandedNodeIds,
       selectedNodeIds: overrides.selectedNodeIds ?? effectiveSelectedNodeIds,
+      treeSelectedNodeIds: overrides.treeSelectedNodeIds ?? treeSelectedNodeIds,
+      floorPlanSelectedNodeIds: overrides.floorPlanSelectedNodeIds ?? floorPlanSelectedNodeIds,
     }
     pendingUiSignatureRef.current = JSON.stringify(normalizeClientProjectUi(nextUi))
   }, [
     effectiveSelectedNodeIds,
+    floorPlanSelectedNodeIds,
     floorPlanExpandedNodeIds,
     floorPlanTransforms,
     resolvedActiveFloorPlanId,
     showGrid,
     transform,
+    treeSelectedNodeIds,
     workspaceMode,
   ])
-  function setWorkspaceModePreference(nextMode) {
+  const setWorkspaceModePreference = useCallback((nextMode) => {
     const normalizedMode = nextMode === 'floor-plan' && floorPlanEnabled ? 'floor-plan' : 'tree'
-    markPendingUiSignature({ workspaceMode: normalizedMode })
+    const currentMode = activeWorkspaceModeRef.current
+    if (normalizedMode === currentMode) {
+      setWorkspaceMode(normalizedMode)
+      return
+    }
+
+    const currentSelectionIds = effectiveSelectedNodeIds
+    const nextTreeSelectionIds =
+      currentMode === 'tree' ? currentSelectionIds : treeSelectedNodeIds
+    const nextFloorPlanSelectionIds =
+      currentMode === 'floor-plan' ? currentSelectionIds : floorPlanSelectedNodeIds
+    const storedTargetSelectionIds =
+      normalizedMode === 'tree' ? nextTreeSelectionIds : nextFloorPlanSelectionIds
+    const targetSelectionIds =
+      storedTargetSelectionIds.length ? storedTargetSelectionIds : currentSelectionIds
+    const updatedTreeSelectionIds =
+      normalizedMode === 'tree' ? targetSelectionIds : nextTreeSelectionIds
+    const updatedFloorPlanSelectionIds =
+      normalizedMode === 'floor-plan' ? targetSelectionIds : nextFloorPlanSelectionIds
+
+    activeWorkspaceModeRef.current = normalizedMode
+    setTreeSelectedNodeIds(updatedTreeSelectionIds)
+    setFloorPlanSelectedNodeIds(updatedFloorPlanSelectionIds)
+    markPendingUiSignature({
+      workspaceMode: normalizedMode,
+      selectedNodeIds: targetSelectionIds,
+      treeSelectedNodeIds: updatedTreeSelectionIds,
+      floorPlanSelectedNodeIds: updatedFloorPlanSelectionIds,
+    })
     setWorkspaceMode(normalizedMode)
+    setEffectiveSelection(targetSelectionIds, targetSelectionIds[0] || null)
     if (normalizedMode === 'tree') {
       setPendingFloorPlanNodeId(null)
     }
-  }
+  }, [
+    effectiveSelectedNodeIds,
+    floorPlanEnabled,
+    floorPlanSelectedNodeIds,
+    markPendingUiSignature,
+    setEffectiveSelection,
+    treeSelectedNodeIds,
+  ])
   function setActiveFloorPlanPreference(floorPlanId) {
     const normalizedId = String(floorPlanId || '').trim() || null
     markPendingUiSignature({ activeFloorPlanId: normalizedId })
@@ -1140,29 +1217,37 @@ function MainApp() {
         floorPlanTransforms,
         floorPlanExpandedNodeIds,
         selectedNodeIds: effectiveSelectedNodeIds,
+        treeSelectedNodeIds,
+        floorPlanSelectedNodeIds,
       })
       return nextTransform
     })
   }, [
     effectiveSelectedNodeIds,
+    floorPlanSelectedNodeIds,
     floorPlanTransforms,
     floorPlanExpandedNodeIds,
     resolvedActiveFloorPlanId,
     showGrid,
+    treeSelectedNodeIds,
     workspaceMode,
   ])
-  const setEffectiveSelection = useCallback((nodeIds, preferredPrimaryId = null) => {
-    const validIds = Array.from(new Set((nodeIds || []).filter(Boolean))).filter(
-      (nodeId) => !tree?.nodes || tree.nodes.some((node) => node.id === nodeId),
-    )
-    const nextPrimaryId =
-      preferredPrimaryId && validIds.includes(preferredPrimaryId)
-        ? preferredPrimaryId
-        : validIds[0] || null
-    selectedNodeIdRef.current = nextPrimaryId
-    setSelectedNodeId(nextPrimaryId)
-    setMultiSelectedNodeIds(validIds.filter((nodeId) => nodeId !== nextPrimaryId))
-  }, [tree?.nodes])
+  useEffect(() => {
+    const updateSelection = (setter) => {
+      setter((current) =>
+        current.length === effectiveSelectedNodeIds.length &&
+        current.every((nodeId, index) => nodeId === effectiveSelectedNodeIds[index])
+          ? current
+          : effectiveSelectedNodeIds,
+      )
+    }
+
+    if (activeWorkspaceModeRef.current === 'floor-plan') {
+      updateSelection(setFloorPlanSelectedNodeIds)
+    } else {
+      updateSelection(setTreeSelectedNodeIds)
+    }
+  }, [effectiveSelectedNodeIds])
   const addToEffectiveSelection = useCallback((nodeIds, preferredPrimaryId = null) => {
     const mergedIds = Array.from(new Set([...effectiveSelectedNodeIds, ...(nodeIds || []).filter(Boolean)]))
     const nextPrimaryId =
@@ -1649,19 +1734,40 @@ function MainApp() {
     }
     setShowGrid(nextUi.showGrid)
     setTransform(nextUi.canvasTransform || { x: 80, y: 80, scale: 1 })
+    activeWorkspaceModeRef.current = nextUi.workspaceMode
     setWorkspaceMode(nextUi.workspaceMode)
     setActiveFloorPlanId(nextUi.activeFloorPlanId)
     setFloorPlanTransforms(nextUi.floorPlanTransforms)
     setFloorPlanExpandedNodeIds(nextUi.floorPlanExpandedNodeIds)
     pendingInitialCanvasFitRef.current = !nextUi.canvasTransform
-    const nextSelectionIds = Array.isArray(nextUi.selectedNodeIds)
-      ? nextUi.selectedNodeIds.filter((nodeId) => (tree?.nodes || []).some((node) => node.id === nodeId))
-      : []
-    if (nextSelectionIds.length) {
-      setEffectiveSelection(nextSelectionIds, nextSelectionIds[0])
-    }
+    const availableNodeIds = new Set((tree?.nodes || []).map((node) => node.id))
+    const nextTreeSelectionIds = nextUi.treeSelectedNodeIds.filter((nodeId) => availableNodeIds.has(nodeId))
+    const nextFloorPlanSelectionIds = nextUi.floorPlanSelectedNodeIds.filter((nodeId) => availableNodeIds.has(nodeId))
+    const legacySelectionIds = nextUi.selectedNodeIds.filter((nodeId) => availableNodeIds.has(nodeId))
+    const storedSelectionIds =
+      nextUi.workspaceMode === 'floor-plan'
+        ? nextFloorPlanSelectionIds.length
+          ? nextFloorPlanSelectionIds
+          : legacySelectionIds
+        : nextTreeSelectionIds.length
+          ? nextTreeSelectionIds
+          : legacySelectionIds
+    const fallbackNodeId =
+      selectedNodeIdRef.current && availableNodeIds.has(selectedNodeIdRef.current)
+        ? selectedNodeIdRef.current
+        : tree?.root?.id && availableNodeIds.has(tree.root.id)
+          ? tree.root.id
+          : null
+    const nextSelectionIds = storedSelectionIds.length
+      ? storedSelectionIds
+      : fallbackNodeId
+        ? [fallbackNodeId]
+        : []
+    setTreeSelectedNodeIds(nextTreeSelectionIds)
+    setFloorPlanSelectedNodeIds(nextFloorPlanSelectionIds)
+    setEffectiveSelection(nextSelectionIds, nextSelectionIds[0] || null)
     setProjectUiReady(true)
-  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanExpandedNodeIds, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project])
+  }, [isPanelWindow, projectUi, projectUi.activeFloorPlanId, projectUi.canvasTransform, projectUi.floorPlanExpandedNodeIds, projectUi.floorPlanSelectedNodeIds, projectUi.floorPlanTransforms, projectUi.selectedNodeIds, projectUi.showGrid, projectUi.treeSelectedNodeIds, projectUi.workspaceMode, selectedProjectId, setEffectiveSelection, tree?.nodes, tree?.project, tree?.root?.id])
 
   const handleAuthLost = useCallback(() => {
     initializedAuthProfileIdRef.current = null
@@ -1674,6 +1780,9 @@ function MainApp() {
     setSelectedProjectId(null)
     setTree(null)
     setSelectedNodeId(null)
+    activeWorkspaceModeRef.current = defaultUserProjectUi.workspaceMode
+    setTreeSelectedNodeIds(defaultUserProjectUi.treeSelectedNodeIds)
+    setFloorPlanSelectedNodeIds(defaultUserProjectUi.floorPlanSelectedNodeIds)
     setMobileConnectionCount(0)
     setAccountStatus('')
     setAccountDialog(null)
@@ -2390,7 +2499,7 @@ function MainApp() {
     setBusy,
     setError,
     setTree,
-    setWorkspaceMode,
+    setWorkspaceMode: setWorkspaceModePreference,
   })
 
   const {
@@ -4626,9 +4735,8 @@ function MainApp() {
     if (floorPlanEnabled || workspaceMode === 'tree') {
       return
     }
-    setWorkspaceMode('tree')
-    setPendingFloorPlanNodeId(null)
-  }, [floorPlanEnabled, workspaceMode])
+    setWorkspaceModePreference('tree')
+  }, [floorPlanEnabled, setWorkspaceModePreference, workspaceMode])
 
   const fitActiveWorkspaceToView = useCallback(() => {
     if (effectiveWorkspaceMode === 'floor-plan') {
@@ -5576,7 +5684,9 @@ function MainApp() {
             pendingPlacementNodeId={pendingFloorPlanNodeId}
             projectSettings={projectSettings}
             ref={floorPlanWorkspaceRef}
+            selectedNodePath={selectedNodePath}
             selectedNodeId={selectedNodeId}
+            selectNodeFromPath={selectFloorPlanNode}
             theme={theme}
             transform={resolvedActiveFloorPlanId ? floorPlanTransforms[resolvedActiveFloorPlanId] || null : null}
           />
