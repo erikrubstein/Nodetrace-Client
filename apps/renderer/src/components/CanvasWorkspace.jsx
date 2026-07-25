@@ -12,17 +12,13 @@ export default function CanvasWorkspace({
   busy,
   canvasIsolationMode,
   canvasMarqueeRect,
-  contextMenu,
-  contextMenuNode,
   dragActive,
   dragHoverNodeId,
   dragPreview,
   editForm,
   editTargetNode,
-  fileInputRef,
   focusSelectedNode,
   fitCanvasToView,
-  focusPathMode,
   handleCanvasContextMenu,
   handleCanvasPointerMove,
   imageLoadRevision = 0,
@@ -41,13 +37,8 @@ export default function CanvasWorkspace({
   saveNodeDraft,
   selectedNode,
   selectedNodeId,
-  setCollapsed,
   setContextMenu,
-  setMergePhotoConfirmation,
-  setDeleteNodeOpen,
   setDragActive,
-  setPendingUploadMode,
-  setPendingUploadParentId,
   setEffectiveSelection,
   showGrid,
   stopPanning,
@@ -286,6 +277,7 @@ export default function CanvasWorkspace({
               const rect = viewportRef.current?.getBoundingClientRect()
               setContextMenu({
                 nodeId: item.id,
+                workspaceMode: 'tree',
                 x: event.clientX - (rect?.left || 0),
                 y: event.clientY - (rect?.top || 0),
               })
@@ -375,112 +367,6 @@ export default function CanvasWorkspace({
         {Math.round(transform.scale * 100)}% | X {centeredPanX} | Y {centeredPanY} | {tree?.nodes?.length ?? 0}{' '}
         nodes
       </div>
-      {contextMenu ? (
-        <div
-          className="node-context-menu"
-          onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-        >
-          <button
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={() => {
-              setContextMenu(null)
-              openNewNodeDialog(contextMenu.nodeId)
-            }}
-            type="button"
-          >
-            Add Node
-          </button>
-          <button
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={() => {
-              setPendingUploadParentId(contextMenu.nodeId)
-              setPendingUploadMode('photo_node')
-              setContextMenu(null)
-              fileInputRef.current?.click()
-            }}
-            type="button"
-          >
-            Add Photo Node
-          </button>
-          <button
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={() => {
-              setPendingUploadParentId(contextMenu.nodeId)
-              setPendingUploadMode('additional_photo')
-              setContextMenu(null)
-              fileInputRef.current?.click()
-            }}
-            type="button"
-          >
-            Add Photo
-          </button>
-          {!focusPathMode &&
-          (contextMenuNode?.children?.length || contextMenuNode?.collapsed) ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                setContextMenu(null)
-                void setCollapsed(contextMenu.nodeId, !contextMenuNode?.collapsed)
-              }}
-              type="button"
-            >
-              {contextMenuNode?.collapsed ? 'Expand' : 'Collapse'}
-            </button>
-          ) : null}
-          {contextMenuNode?.parent_id != null && !contextMenuNode?.children?.length && contextMenuNode?.hasImage ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={() => {
-                const parentNode = tree?.nodes.find((node) => node.id === contextMenuNode.parent_id)
-                setContextMenu(null)
-                setMergePhotoConfirmation?.({
-                  sourceNodeId: contextMenuNode.id,
-                  sourceNodeName: contextMenuNode.name,
-                  targetNodeId: contextMenuNode.parent_id,
-                  targetNodeName: parentNode?.name || 'the parent node',
-                })
-              }}
-              type="button"
-            >
-              Convert To Photo
-            </button>
-          ) : null}
-          <button
-            className="danger-text"
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={() => {
-              setContextMenu(null)
-              setEffectiveSelection([contextMenu.nodeId], contextMenu.nodeId)
-              setDeleteNodeOpen(true)
-            }}
-            type="button"
-          >
-            Delete
-          </button>
-        </div>
-      ) : null}
     </section>
   )
 }

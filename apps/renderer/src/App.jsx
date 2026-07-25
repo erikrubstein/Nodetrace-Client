@@ -88,6 +88,7 @@ import {
   collectFloorPlanVisibleNodeIds,
   getFloorPlanTreeCommandTargetIds,
 } from './features/floor-plans/model'
+import NodeContextMenu from './features/node-editing/NodeContextMenu'
 import { buildTemplateFormState } from './features/node-editing/templateFormState'
 import {
   CameraIcon,
@@ -875,7 +876,10 @@ function MainApp() {
   const projectUi = tree?.project?.ui || defaultUserProjectUi
   const floorPlanEnabled = Boolean(projectSettings.floorPlanEnabled)
   const effectiveWorkspaceMode = floorPlanEnabled ? workspaceMode : 'tree'
-  const floorPlans = tree?.project?.floorPlans || []
+  const floorPlans = useMemo(
+    () => tree?.project?.floorPlans || [],
+    [tree?.project?.floorPlans],
+  )
   const resolvedActiveFloorPlanId = floorPlans.some((floorPlan) => floorPlan.id === activeFloorPlanId)
     ? activeFloorPlanId
     : floorPlans[0]?.id || null
@@ -1182,12 +1186,12 @@ function MainApp() {
     setEffectiveSelection,
     treeSelectedNodeIds,
   ])
-  function setActiveFloorPlanPreference(floorPlanId) {
+  const setActiveFloorPlanPreference = useCallback((floorPlanId) => {
     const normalizedId = String(floorPlanId || '').trim() || null
     markPendingUiSignature({ activeFloorPlanId: normalizedId })
     setActiveFloorPlanId(normalizedId)
     setPendingFloorPlanNodeId(null)
-  }
+  }, [markPendingUiSignature])
   function setFloorPlanTransformPreference(floorPlanId, nextTransform) {
     const normalizedId = String(floorPlanId || '').trim()
     if (!normalizedId) {
@@ -4791,6 +4795,166 @@ function MainApp() {
     setEffectiveSelection,
     setFloorPlanSelectedPlacementRootPreference,
   ])
+  const contextMenuPlanPlacement = useMemo(() => {
+    if (
+      contextMenu?.workspaceMode !== 'tree' ||
+      !contextMenuNode?.id
+    ) {
+      return null
+    }
+    const orderedFloorPlans = activeFloorPlan
+      ? [
+          activeFloorPlan,
+          ...floorPlans.filter((floorPlan) => floorPlan.id !== activeFloorPlan.id),
+        ]
+      : floorPlans
+    const floorPlan = orderedFloorPlans.find((candidate) =>
+      (candidate.placements || []).some(
+        (placement) => placement.nodeId === contextMenuNode.id,
+      ),
+    )
+    return floorPlan
+      ? { floorPlanId: floorPlan.id, nodeId: contextMenuNode.id }
+      : null
+  }, [
+    activeFloorPlan,
+    contextMenu?.workspaceMode,
+    contextMenuNode?.id,
+    floorPlans,
+  ])
+  const placeContextMenuNodeOnPlan = useCallback(() => {
+    if (!contextMenuNode?.id) {
+      return
+    }
+    const nodeId = contextMenuNode.id
+    setContextMenu(null)
+    setPendingFloorPlanNodeId(nodeId)
+    setWorkspaceModePreference('floor-plan')
+    setEffectiveSelection([nodeId], nodeId)
+  }, [contextMenuNode?.id, setEffectiveSelection, setWorkspaceModePreference])
+  const showContextMenuNodeOnPlan = useCallback(() => {
+    if (!contextMenuPlanPlacement) {
+      return
+    }
+    const { floorPlanId, nodeId } = contextMenuPlanPlacement
+    setContextMenu(null)
+    setActiveFloorPlanPreference(floorPlanId)
+    setFloorPlanSelectedPlacementRootPreference(floorPlanId, nodeId)
+    setWorkspaceModePreference('floor-plan')
+    setEffectiveSelection([nodeId], nodeId)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        floorPlanWorkspaceRef.current?.focusPlacementRoot(nodeId)
+      })
+    })
+  }, [
+    contextMenuPlanPlacement,
+    setActiveFloorPlanPreference,
+    setEffectiveSelection,
+    setFloorPlanSelectedPlacementRootPreference,
+    setWorkspaceModePreference,
+  ])
+  const showContextMenuNodeInTree = useCallback(() => {
+    if (!contextMenuNode?.id) {
+      return
+    }
+    const nodeId = contextMenuNode.id
+    setContextMenu(null)
+    setWorkspaceModePreference('tree')
+    void selectNodeAndFocus(nodeId)
+  }, [contextMenuNode?.id, selectNodeAndFocus, setWorkspaceModePreference])
+  const contextMenuNodePlacedOnActivePlan = Boolean(
+    contextMenuNode?.id &&
+      (activeFloorPlan?.placements || []).some(
+        (placement) => placement.nodeId === contextMenuNode.id,
+      ),
+  )
+  const contextMenuWorkspaceActions = useMemo(() => {
+    if (!contextMenuNode) {
+      return []
+    }
+    if (contextMenu?.workspaceMode === 'floor-plan') {
+      return [
+        {
+          label: contextMenuNodePlacedOnActivePlan
+            ? 'Move Location'
+            : 'Place on Plan',
+          onClick: placeContextMenuNodeOnPlan,
+        },
+        {
+          label: 'Show in Tree',
+          onClick: showContextMenuNodeInTree,
+        },
+      ]
+    }
+    if (
+      contextMenu?.workspaceMode !== 'tree' ||
+      !floorPlanEnabled ||
+      contextMenuNode.parent_id == null
+    ) {
+      return []
+    }
+    return [
+      contextMenuPlanPlacement
+        ? {
+            label: 'Show on Plan',
+            onClick: showContextMenuNodeOnPlan,
+          }
+        : {
+            label: 'Place on Plan',
+            onClick: placeContextMenuNodeOnPlan,
+          },
+    ]
+  }, [
+    contextMenu?.workspaceMode,
+    contextMenuNode,
+    contextMenuNodePlacedOnActivePlan,
+    contextMenuPlanPlacement,
+    floorPlanEnabled,
+    placeContextMenuNodeOnPlan,
+    showContextMenuNodeInTree,
+    showContextMenuNodeOnPlan,
+  ])
+  const contextMenuUsesFloorPlanExpansion =
+    contextMenu?.workspaceMode === 'floor-plan'
+  const contextMenuCanToggleCollapsed = Boolean(
+    contextMenuNode &&
+      (contextMenuUsesFloorPlanExpansion
+        ? contextMenuNode.children?.length
+        : !focusPathMode &&
+          (contextMenuNode.children?.length || contextMenuNode.collapsed)),
+  )
+  const contextMenuNodeCollapsed = contextMenuUsesFloorPlanExpansion
+    ? !activeFloorPlanExpandedNodeIds.has(contextMenuNode?.id)
+    : Boolean(contextMenuNode?.collapsed)
+  const toggleContextMenuNodeCollapsed = useCallback(() => {
+    if (!contextMenuNode) {
+      return
+    }
+    setContextMenu(null)
+    if (contextMenu?.workspaceMode === 'floor-plan') {
+      setFloorPlanExpandedNodeIdsPreference(
+        resolvedActiveFloorPlanId,
+        (currentNodeIds) => {
+          const nextNodeIds = new Set(currentNodeIds)
+          if (nextNodeIds.has(contextMenuNode.id)) {
+            nextNodeIds.delete(contextMenuNode.id)
+          } else {
+            nextNodeIds.add(contextMenuNode.id)
+          }
+          return Array.from(nextNodeIds)
+        },
+      )
+      return
+    }
+    void setCollapsed(contextMenuNode.id, !contextMenuNode.collapsed)
+  }, [
+    contextMenu?.workspaceMode,
+    contextMenuNode,
+    resolvedActiveFloorPlanId,
+    setCollapsed,
+    setFloorPlanExpandedNodeIdsPreference,
+  ])
 
   useEffect(() => {
     if (floorPlanEnabled || workspaceMode === 'tree') {
@@ -5735,6 +5899,7 @@ function MainApp() {
             onExpandedNodeIdsChange={(nextNodeIds) =>
               setFloorPlanExpandedNodeIdsPreference(resolvedActiveFloorPlanId, nextNodeIds)
             }
+            onOpenNodeContextMenu={setContextMenu}
             onSelectedPlacementRootNodeIdChange={
               setFloorPlanSelectedPlacementRootPreference
             }
@@ -5767,17 +5932,13 @@ function MainApp() {
           busy={busy}
           canvasIsolationMode={canvasIsolationMode}
           canvasMarqueeRect={canvasMarqueeRect}
-          contextMenu={contextMenu}
-          contextMenuNode={contextMenuNode}
           dragActive={dragActive}
           dragHoverNodeId={dragHoverNodeId}
           dragPreview={dragPreview}
           editForm={editForm}
           editTargetNode={editTargetNode}
-          fileInputRef={fileInputRef}
           focusSelectedNode={focusSelectedNode}
           fitCanvasToView={fitCanvasToView}
-          focusPathMode={focusPathMode}
           handleCanvasContextMenu={handleCanvasContextMenu}
           handleCanvasPointerMove={handleCanvasPointerMove}
           layout={layout}
@@ -5799,13 +5960,8 @@ function MainApp() {
           saveNodeDraft={saveNodeDraft}
           selectedNode={selectedNode}
           selectedNodeId={selectedNodeId}
-          setCollapsed={setCollapsed}
           setContextMenu={setContextMenu}
-          setMergePhotoConfirmation={setMergePhotoConfirmation}
-          setDeleteNodeOpen={setDeleteNodeOpen}
           setDragActive={setDragActive}
-          setPendingUploadMode={setPendingUploadMode}
-          setPendingUploadParentId={setPendingUploadParentId}
           setEffectiveSelection={setEffectiveSelection}
           showGrid={showGrid}
           stopPanning={stopPanning}
@@ -5824,6 +5980,23 @@ function MainApp() {
           viewportRef={viewportRef}
           />
           ) : null}
+          <NodeContextMenu
+            canToggleCollapsed={contextMenuCanToggleCollapsed}
+            collapsed={contextMenuNodeCollapsed}
+            contextMenu={contextMenu}
+            contextMenuNode={contextMenuNode}
+            fileInputRef={fileInputRef}
+            onToggleCollapsed={toggleContextMenuNodeCollapsed}
+            openNewNodeDialog={openNewNodeDialog}
+            setContextMenu={setContextMenu}
+            setDeleteNodeOpen={setDeleteNodeOpen}
+            setEffectiveSelection={setEffectiveSelection}
+            setMergePhotoConfirmation={setMergePhotoConfirmation}
+            setPendingUploadMode={setPendingUploadMode}
+            setPendingUploadParentId={setPendingUploadParentId}
+            tree={tree}
+            workspaceActions={contextMenuWorkspaceActions}
+          />
         </div>
         <DockedSidebar
           activePanel={activeRightPanel}

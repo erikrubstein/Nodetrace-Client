@@ -54,6 +54,7 @@ function FloorPlanMarker({
   node,
   nodeIndex,
   onBeginPlacementDrag,
+  onOpenContextMenu,
   onSelect,
   onToggleNode,
   markerScale,
@@ -133,6 +134,14 @@ function FloorPlanMarker({
               } ${collapsedGroup ? 'collapsed-node' : ''}`}
               data-node-id={item.id}
               key={item.id}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (collapsedGroup) {
+                  return
+                }
+                onOpenContextMenu(item.id, node.id, event)
+              }}
               onClick={(event) => {
                 event.stopPropagation()
                 if (collapsedGroup) {
@@ -180,6 +189,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   onActiveFloorPlanChange,
   onPendingPlacementChange,
   onExpandedNodeIdsChange,
+  onOpenNodeContextMenu,
   onSelectedPlacementRootNodeIdChange,
   onSavePlacement,
   onSelectNode,
@@ -317,6 +327,17 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     onExpandedNodeIdsChange(Array.from(nextExpandedIds))
   }
 
+  function openNodeContextMenu(nodeId, placementRootNodeId, event) {
+    const rect = viewportRef.current?.getBoundingClientRect()
+    onSelectNode(nodeId, placementRootNodeId)
+    onOpenNodeContextMenu({
+      nodeId,
+      workspaceMode: 'floor-plan',
+      x: event.clientX - (rect?.left || 0),
+      y: event.clientY - (rect?.top || 0),
+    })
+  }
+
   const fitToView = useCallback(() => {
     const viewport = viewportRef.current
     if (!viewport || !activeFloorPlan) {
@@ -334,7 +355,44 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     })
   }, [activeFloorPlan, markerScale, onTransformChange, worldSize.height, worldSize.width])
 
-  useImperativeHandle(ref, () => ({ fitToView }), [fitToView])
+  const focusPlacementRoot = useCallback((placementRootNodeId) => {
+    const viewport = viewportRef.current
+    const placement = (activeFloorPlan?.placements || []).find(
+      (candidate) => candidate.nodeId === placementRootNodeId,
+    )
+    if (!viewport || !placement) {
+      return
+    }
+    const rect = viewport.getBoundingClientRect()
+    const verticalLayout = projectSettings.orientation === 'vertical'
+    const nodeCenterOffset = (MARKER_TREE_GAP + MARKER_NODE_HALF_SIZE) * markerScale
+    onTransformChange({
+      ...activeTransform,
+      markerScale,
+      x:
+        rect.width / 2 -
+        placement.x * worldSize.width * activeTransform.scale -
+        (verticalLayout ? 0 : nodeCenterOffset),
+      y:
+        rect.height / 2 -
+        placement.y * worldSize.height * activeTransform.scale -
+        (verticalLayout ? nodeCenterOffset : 0),
+    })
+  }, [
+    activeFloorPlan?.placements,
+    activeTransform,
+    markerScale,
+    onTransformChange,
+    projectSettings.orientation,
+    worldSize.height,
+    worldSize.width,
+  ])
+
+  useImperativeHandle(
+    ref,
+    () => ({ fitToView, focusPlacementRoot }),
+    [fitToView, focusPlacementRoot],
+  )
 
   useEffect(() => {
     if (!active || !activeFloorPlan || transform) {
@@ -581,6 +639,12 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
     <section
       className={`floor-plan-workspace ${pendingPlacementNodeId ? 'is-placing' : ''}`}
       hidden={!active}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        if (!event.target.closest('.graph-node')) {
+          onOpenNodeContextMenu(null)
+        }
+      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
       onPointerDown={beginPan}
@@ -642,6 +706,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
               node={node}
               nodeIndex={nodeIndex}
               onBeginPlacementDrag={beginPlacementDrag}
+              onOpenContextMenu={openNodeContextMenu}
               onSelect={onSelectNode}
               onToggleNode={toggleFloorPlanTreeNode}
               placement={displayedPlacement}

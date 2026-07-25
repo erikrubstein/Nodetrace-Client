@@ -359,11 +359,59 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationAnchor.locator('.floor-plan-marker__anchor-dot')).toHaveAttribute('r', '6')
   await expect(locationButton).toHaveCSS('left', '28px')
   await expect(locationButton).toHaveCSS('top', '-56px')
+  await locationButton.click({ button: 'right' })
+  const nodeContextMenu = page.locator('.node-context-menu')
+  await expect(nodeContextMenu).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button').first()).toHaveText('Add Node')
+  await expect(nodeContextMenu.getByRole('button', { name: 'Add Node', exact: true })).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button', { name: 'Add Photo Node', exact: true })).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button', { name: 'Add Photo', exact: true })).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button', { name: 'Move Location', exact: true })).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button', { name: 'Show in Tree', exact: true })).toBeVisible()
+  await expect(nodeContextMenu.getByRole('button', { name: 'Delete', exact: true })).toBeVisible()
+  await nodeContextMenu.getByRole('button', { name: 'Expand', exact: true }).click()
+  await expect(
+    floorPlanStage.getByRole('button', { name: childNodeName, exact: true }),
+  ).toBeVisible()
+  await locationButton.click({ button: 'right' })
+  await nodeContextMenu.getByRole('button', { name: 'Collapse', exact: true }).click()
+  await expect(
+    floorPlanStage.getByRole('button', { name: childNodeName, exact: true }),
+  ).toHaveCount(0)
+  await locationButton.click({ button: 'right' })
+  await nodeContextMenu.getByRole('button', { name: 'Show in Tree', exact: true }).click()
+  await expect(workspaceView.getByRole('button', { name: 'Tree View' })).toHaveClass(/is-active/)
+  const contextTreeNode = page.locator('.canvas-stage').getByRole('button', {
+    name: nodeName,
+    exact: true,
+  })
+  const contextTreeChildNode = page.locator('.canvas-stage').getByRole('button', {
+    name: childNodeName,
+    exact: true,
+  })
+  await expect(contextTreeNode).toHaveClass(/selected/)
+  await contextTreeChildNode.click({ button: 'right' })
+  await nodeContextMenu.getByRole('button', { name: 'Place on Plan', exact: true }).click()
+  await expect(workspaceView.getByRole('button', { name: 'Plan View' })).toHaveClass(/is-active/)
+  await expect(floorPlanViewport).toHaveClass(/is-placing/)
+  await workspaceView.getByRole('button', { name: 'Tree View' }).click()
+  await contextTreeNode.click({ button: 'right' })
+  await nodeContextMenu.getByRole('button', { name: 'Show on Plan', exact: true }).click()
+  await expect(workspaceView.getByRole('button', { name: 'Plan View' })).toHaveClass(/is-active/)
+  await expect(locationButton).toHaveClass(/selected/)
   await locationButton.dblclick()
   await expect(page.locator('.floor-plan-marker__links line')).toHaveCount(1)
   const nestedFloorPlanNode = floorPlanStage.getByRole('button', { name: childNodeName, exact: true })
   await expect(nestedFloorPlanNode).toBeVisible()
   await expect(nestedFloorPlanNode).toHaveClass(/graph-node/)
+  await nestedFloorPlanNode.click({ button: 'right' })
+  await expect(nodeContextMenu.getByRole('button').first()).toHaveText('Add Node')
+  await expect(
+    nodeContextMenu.getByRole('button', { name: 'Place on Plan', exact: true }),
+  ).toBeVisible()
+  await expect(
+    nodeContextMenu.getByRole('button', { name: 'Move Location', exact: true }),
+  ).toHaveCount(0)
   await nestedFloorPlanNode.click()
   await expect(selectedNodePathNavigation).toContainText(childNodeName)
   await expect(nestedFloorPlanNode).toHaveClass(/selected/)
