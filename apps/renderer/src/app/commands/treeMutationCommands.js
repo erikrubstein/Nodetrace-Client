@@ -69,7 +69,9 @@ export function useTreeMutationCommands({
   }, [selectedProjectId, setProjects])
 
   const applyProjectUpdate = useCallback((updatedProject) => {
-    setTree((current) => (current ? { ...current, project: updatedProject } : current))
+    setTree((current) =>
+      current ? buildClientTree(updatedProject, current.nodes) : current,
+    )
     setProjects((current) =>
       current.map((project) => (project.id === updatedProject.id ? { ...project, ...updatedProject } : project)),
     )

@@ -483,6 +483,7 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(workspaceView).toBeVisible()
 
   await workspaceView.getByRole('button', { name: 'Plan View' }).click()
+  await expect(processedPlan).toHaveClass(/is-ready/)
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toContainText(nodeName)
   await expect(floorPlanNestedNode).toBeVisible()
   await floorPlanNestedNode.click()

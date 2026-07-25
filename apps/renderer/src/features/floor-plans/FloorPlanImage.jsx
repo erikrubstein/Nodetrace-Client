@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { resolveApiUrl } from '../../lib/api'
 import { normalizeFloorPlanAppearance } from './model'
 
 const MAX_RENDER_DIMENSION = 4096
@@ -21,6 +22,7 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
   const canvasRef = useRef(null)
   const [renderFailed, setRenderFailed] = useState(false)
   const [renderedSource, setRenderedSource] = useState('')
+  const resolvedSrc = useMemo(() => resolveApiUrl(src), [src])
   const appearance = useMemo(() => normalizeFloorPlanAppearance(appearanceInput), [appearanceInput])
   const pixelAppearance = useMemo(() => ({
     backgroundColor: appearance.backgroundColor,
@@ -37,15 +39,15 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
   ])
   const treatmentEnabled = pixelAppearance.transparentWhite || pixelAppearance.inkMode !== 'original'
   const renderKey = useMemo(
-    () => JSON.stringify([src, theme, pixelAppearance]),
-    [pixelAppearance, src, theme],
+    () => JSON.stringify([resolvedSrc, theme, pixelAppearance]),
+    [pixelAppearance, resolvedSrc, theme],
   )
   const planBrightness = appearance.transparentWhite && appearance.inkMode === 'theme'
     ? appearance.themeBrightness / 100
     : 1
 
   useEffect(() => {
-    if (!treatmentEnabled || !src) {
+    if (!treatmentEnabled || !resolvedSrc) {
       setRenderFailed(false)
       setRenderedSource('')
       return undefined
@@ -56,7 +58,7 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
 
     async function renderPlan() {
       try {
-        const response = await fetch(src, { credentials: 'same-origin' })
+        const response = await fetch(resolvedSrc, { credentials: 'same-origin' })
         if (!response.ok) {
           throw new Error('Unable to load plan image')
         }
@@ -137,7 +139,7 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         nextContext.clearRect(0, 0, width, height)
         nextContext.drawImage(renderCanvas, 0, 0)
         setRenderFailed(false)
-        setRenderedSource(src)
+        setRenderedSource(resolvedSrc)
       } catch {
         if (!cancelled) {
           setRenderFailed(true)
@@ -158,15 +160,15 @@ export default function FloorPlanImage({ alt, appearance: appearanceInput, src, 
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [pixelAppearance, renderKey, src, theme, treatmentEnabled])
+  }, [pixelAppearance, renderKey, resolvedSrc, theme, treatmentEnabled])
 
   if (!treatmentEnabled) {
-    return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={src} />
+    return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={resolvedSrc} />
   }
 
-  const renderReady = renderedSource === src
+  const renderReady = renderedSource === resolvedSrc
   if (renderFailed && !renderReady) {
-    return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={src} />
+    return <img alt={alt} className="floor-plan-stage__image" draggable="false" src={resolvedSrc} />
   }
 
   return (
