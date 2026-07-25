@@ -214,6 +214,7 @@
 
 .floor-plan-marker__links {
   position: absolute;
+  z-index: 2;
   inset: 0;
   width: 1px;
   height: 1px;
@@ -230,25 +231,22 @@
   gap: 14px;
 }
 
-.floor-plan-marker__tree-node::before {
-  content: '';
+.floor-plan-marker__node-background {
   position: absolute;
-  z-index: 0;
-  top: -6px;
-  left: -6px;
-  width: calc(100% + 12px);
+  z-index: 1;
+  width: 124px;
   height: 124px;
   border-radius: 12px;
   background: var(--canvas);
+  transform: translate(-6px, -6px);
   pointer-events: none;
 }
 
-.floor-plan-marker__tree-node.selected::before {
-  top: -9px;
-  left: -9px;
-  width: calc(100% + 18px);
+.floor-plan-marker__node-background.selected {
+  width: 130px;
   height: 130px;
   border-radius: 15px;
+  transform: translate(-9px, -9px);
 }
 
 .floor-plan-marker__tree-node > * {

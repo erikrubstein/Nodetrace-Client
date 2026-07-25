@@ -255,6 +255,10 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationButton.locator('.graph-node__visual')).toBeVisible()
   await expect(locationButton).not.toHaveAttribute('draggable', 'true')
   const locationMarker = page.locator('.floor-plan-marker-position')
+  const locationNodeId = await locationButton.getAttribute('data-node-id')
+  const locationBackground = locationMarker.locator(
+    `[data-node-background-id="${locationNodeId}"]`,
+  )
   const locationHandle = page.getByRole('button', { name: `Move ${nodeName} location` })
   await expect(locationHandle).toBeVisible()
   const readMarkerPosition = () => locationMarker.evaluate((marker) => ({
@@ -279,21 +283,21 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationMarker).toHaveCount(1)
   await page.mouse.up()
   await expect.poll(readMarkerPosition).toEqual(liveMarkerPosition)
-  await expect.poll(() => locationButton.evaluate((node) => {
-    const styles = getComputedStyle(node, '::before')
+  await expect.poll(() => locationBackground.evaluate((background) => {
+    const styles = getComputedStyle(background)
     return {
       backgroundColor: styles.backgroundColor,
       height: styles.height,
-      left: styles.left,
-      top: styles.top,
+      transform: styles.transform,
       width: styles.width,
+      zIndex: styles.zIndex,
     }
   })).toEqual({
     backgroundColor: 'rgb(29, 29, 29)',
     height: '130px',
-    left: '-9px',
-    top: '-9px',
+    transform: 'matrix(1, 0, 0, 1, -9, -9)',
     width: '130px',
+    zIndex: '1',
   })
   const locationTitle = locationButton.locator('.graph-node__meta span')
   const readNodeTitleStyle = (title) => title.evaluate((element) => {
@@ -350,6 +354,11 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(locationAnchor.locator('line')).toHaveAttribute('x2', '28')
   await expect(locationAnchor.locator('line')).toHaveAttribute('y2', '0')
   await expect(locationAnchor.locator('line')).toHaveCSS('stroke-width', '2px')
+  const anchorLayers = locationAnchor.locator(':scope > *')
+  await expect(anchorLayers.nth(0)).toHaveClass(/floor-plan-marker__anchor-background/)
+  await expect(anchorLayers.nth(1)).toHaveJSProperty('tagName', 'line')
+  await expect(anchorLayers.nth(2)).toHaveClass(/floor-plan-marker__anchor-dot/)
+  await expect(page.locator('.floor-plan-marker__links')).toHaveCSS('z-index', '2')
   await expect(locationAnchor.locator('.floor-plan-marker__anchor-background')).toHaveCSS(
     'fill',
     'rgb(29, 29, 29)',
@@ -418,8 +427,12 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(nestedFloorPlanNode).toHaveCSS('z-index', '20')
   await expect(locationMarker).toHaveClass(/has-selected-node/)
   await expect(locationMarker).toHaveCSS('z-index', '20')
-  await expect.poll(() => locationButton.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('124px')
-  await expect.poll(() => nestedFloorPlanNode.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('130px')
+  const nestedNodeId = await nestedFloorPlanNode.getAttribute('data-node-id')
+  const nestedBackground = locationMarker.locator(
+    `[data-node-background-id="${nestedNodeId}"]`,
+  )
+  await expect(locationBackground).toHaveCSS('width', '124px')
+  await expect(nestedBackground).toHaveCSS('width', '130px')
   await locationButton.dblclick()
   await expect(nestedFloorPlanNode).toHaveCount(0)
   await expect(locationButton).toHaveClass(/selected/)

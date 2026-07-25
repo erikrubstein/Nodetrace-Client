@@ -96,8 +96,8 @@ function FloorPlanMarker({
           className={`floor-plan-marker__anchor ${verticalLayout ? 'is-vertical' : 'is-horizontal'}`}
           aria-hidden="true"
         >
-          <line x1="0" x2={verticalLayout ? 0 : MARKER_TREE_GAP} y1="0" y2={verticalLayout ? MARKER_TREE_GAP : 0} />
           <circle className="floor-plan-marker__anchor-background" cx="0" cy="0" r="12" />
+          <line x1="0" x2={verticalLayout ? 0 : MARKER_TREE_GAP} y1="0" y2={verticalLayout ? MARKER_TREE_GAP : 0} />
           <circle className="floor-plan-marker__anchor-dot" cx="0" cy="0" r="6" />
         </svg>
         <button
@@ -107,6 +107,24 @@ function FloorPlanMarker({
           title={`Move ${node.name} location`}
           type="button"
         />
+        {treeLayout.nodes.map((item) => {
+          const selected =
+            selectedOccurrenceInMarker && selectedNodeId === item.id
+          return (
+            <span
+              aria-hidden="true"
+              className={`floor-plan-marker__node-background ${
+                selected ? 'selected' : ''
+              }`}
+              data-node-background-id={item.id}
+              key={`background-${item.id}`}
+              style={{
+                left: `${markerTreeOrigin.x + item.x}px`,
+                top: `${markerTreeOrigin.y + item.y}px`,
+              }}
+            />
+          )
+        })}
         <svg className="floor-plan-marker__links" aria-hidden="true">
           {treeLayout.links.map((link) => (
             <line
