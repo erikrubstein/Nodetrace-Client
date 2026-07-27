@@ -8,13 +8,13 @@
   Collaborative visual documentation for hierarchical photo trees.
 </p>
 
-Nodetrace Client is the front end for building, reviewing, and collaborating on structured photo trees. It ships as both a browser app and an Electron desktop app, and connects to a running Nodetrace Server for authentication, project storage, media, and collaboration.
+Nodetrace Client is the front end for building, reviewing, and collaborating on structured photo trees. It ships as both a browser app and an Electron desktop app. The desktop app includes private Local Projects storage and can also connect to standalone Nodetrace Servers for collaboration.
 
 ## Highlights
 
 - hierarchical project and node model built for real documentation workflows
 - opt-in spatial plan workspace with location and appearance panels
-- desktop and web clients backed by the same server
+- local and remote projects backed by the same server runtime and data model
 - collaborative editing with presence indicators and shared project access
 - non-destructive image review tools in the preview panel
 - structured identification templates with optional AI-assisted field filling
@@ -30,7 +30,7 @@ Desktop users should install a packaged release from GitHub Releases:
 - Windows: download and run the latest `Nodetrace Setup *.exe`
 - macOS: download the latest `.dmg` and drag Nodetrace into `Applications`
 
-The desktop app can store multiple server profiles and switch between them.
+The desktop app always includes a fixed **Local Projects** profile. Its SQLite database and media are stored in the operating system's Nodetrace application-data directory. While Nodetrace is running, its bundled server listens on all network interfaces so mobile capture devices on the same network can connect. It does not advertise or discover projects. The app can also store multiple remote server profiles and switch between them.
 
 ### Web App
 
@@ -40,7 +40,8 @@ The browser client is served by a Nodetrace Server deployment. End users do not 
 
 - Node.js 22 or newer recommended
 - npm 10 or newer recommended
-- a running [Nodetrace Server](../Nodetrace-Server/README.md)
+- a sibling [Nodetrace Server](../Nodetrace-Server/README.md) checkout for desktop development and packaging
+- a running Nodetrace Server only when developing the web client or testing remote profiles
 
 ## Quick Start
 
@@ -50,7 +51,7 @@ The browser client is served by a Nodetrace Server deployment. End users do not 
 npm install
 ```
 
-2. In a separate terminal, start the server from the server repo:
+2. For web development or remote-profile testing, start the server in a separate terminal:
 
 ```bash
 cd ../Nodetrace-Server
@@ -72,6 +73,8 @@ Desktop:
 npm run dev:desktop
 ```
 
+The desktop command prepares the server runtime from `../Nodetrace-Server`, rebuilds native SQLite support for Electron, and starts Local Projects automatically. If the server checkout is elsewhere, set `NODETRACE_SERVER_SOURCE_DIR` to its absolute path.
+
 Default local URLs:
 
 - renderer dev server: `http://127.0.0.1:5173`
@@ -91,7 +94,7 @@ Shell environment variables override values from this file. Restart the client a
 
 Typical workflow:
 
-1. Sign in or create an account on a Nodetrace Server.
+1. Choose Local Projects or sign in to a remote Nodetrace Server.
 2. Create a project or open an existing one.
 3. Build the node tree and attach photos where needed.
 4. Enable plans in Project Settings when a project needs spatial documentation.
@@ -105,7 +108,7 @@ Typical workflow:
 - `npm run dev`
   Starts the web renderer in development mode.
 - `npm run dev:desktop`
-  Starts the renderer plus Electron desktop shell.
+  Prepares the bundled local server, then starts the renderer plus Electron desktop shell.
 - `npm run dev:desktop:mac-ui`
   Runs the desktop app with the mac-specific renderer UI override for local testing on non-macOS hosts.
 - `npm run dev:desktop:win-ui`
@@ -122,6 +125,10 @@ Typical workflow:
   Builds the Windows NSIS installer.
 - `npm run dist:mac`
   Builds the signed and notarized macOS DMG package. Must be run on macOS with Apple signing credentials for real release validation.
+- `npm run prepare:local-server`
+  Copies the runtime source from the sibling server checkout into the generated desktop bundle input.
+- `npm run prepare:desktop-runtime`
+  Prepares the server source and rebuilds native dependencies for Electron development.
 - `npm run lint`
   Lints the whole client repo.
 - `npm run test:e2e`
@@ -155,6 +162,8 @@ npm run dist:mac
 
 Generated desktop installers are written to `release/`.
 The hosted web bundle zip is written to `release/web/`.
+
+Desktop packaging requires the server repository at `../Nodetrace-Server` by default. Set `NODETRACE_SERVER_SOURCE_DIR` when CI or a local checkout uses a different layout.
 
 ### macOS Signing And Notarization
 

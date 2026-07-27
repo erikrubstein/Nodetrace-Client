@@ -11,6 +11,8 @@ function shouldSuppressDesktopConnectionError(error) {
 
 export default function useProjectSync({
   captureSessionId,
+  captureShowGrid,
+  captureTheme,
   clearHistory,
   currentUser,
   desktopEnvironment = false,
@@ -268,6 +270,8 @@ export default function useProjectSync({
           body: JSON.stringify({
             projectId: selectedProjectId,
             selectedNodeId: selectedNode.id,
+            showGrid: captureShowGrid,
+            theme: captureTheme,
           }),
         })
         if (!cancelled) {
@@ -291,7 +295,7 @@ export default function useProjectSync({
       cancelled = true
       window.clearInterval(heartbeat)
     }
-  }, [captureSessionId, desktopProfileConnected, onAuthLost, selectedNode?.id, selectedProjectId, setError, setMobileConnectionCount, treeProjectId])
+  }, [captureSessionId, captureShowGrid, captureTheme, desktopProfileConnected, onAuthLost, selectedNode?.id, selectedProjectId, setError, setMobileConnectionCount, treeProjectId])
 
   useEffect(() => {
     if (!captureSessionId || !selectedProjectId || !desktopProfileConnected) {

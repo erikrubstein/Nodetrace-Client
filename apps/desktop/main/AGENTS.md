@@ -6,6 +6,7 @@ This folder holds Electron main-process helper modules extracted from the main d
 ## Current Modules
 - `icons.js`: icon asset resolution
 - `ipcHandlers.js`: Electron IPC registration and desktop bridge wiring
+- `localServerProcess.js`: bundled Local Projects service lifecycle and all-interface listener
 - `menu.js`: native application menu construction
 - `splash.js`: splash-window construction
 - `workspacePersistence.js`: desktop workspace snapshot persistence helpers
@@ -17,6 +18,8 @@ Additional helpers should move here as the desktop shell is decomposed:
 - panel window management
 - proxy handling
 - server profile/auth logic
+
+The Local Projects service binds to all interfaces so phones on the same network can use mobile capture. The desktop must continue routing through loopback, and the service must not advertise or discover projects unless that is introduced as a separate feature.
 
 ## Invariants
 - These modules should stay focused and composable.

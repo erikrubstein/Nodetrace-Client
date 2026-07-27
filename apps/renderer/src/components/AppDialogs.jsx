@@ -52,6 +52,8 @@ export default function AppDialogs({
   identificationTemplateRemovalCount,
   identificationTemplateRemovalNodes,
   mergePhotoConfirmation,
+  mobileCaptureIsLocal = false,
+  mobileCaptureUrls = [],
   mobileConnectionCount,
   newNodeDialog,
   newNodeName,
@@ -126,6 +128,8 @@ export default function AppDialogs({
         desktopClientId={desktopClientId}
         handleDialogEnter={handleDialogEnter}
         handleServerDisconnectDismiss={handleServerDisconnectDismiss}
+        mobileCaptureIsLocal={mobileCaptureIsLocal}
+        mobileCaptureUrls={mobileCaptureUrls}
         mobileConnectionCount={mobileConnectionCount}
         onCheckForUpdates={onCheckForUpdates}
         onConfirmClearCache={onConfirmClearCache}

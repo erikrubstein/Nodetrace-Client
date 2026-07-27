@@ -219,6 +219,7 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
   selectedNodeId,
   selectedPlacementRootNodeId,
   selectNodeFromPath,
+  showGrid,
   theme,
   transform,
 }, ref) {
@@ -617,7 +618,12 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
 
   if (!activeFloorPlan) {
     return (
-      <section className="floor-plan-workspace floor-plan-workspace--empty" hidden={!active}>
+      <section
+        className={`floor-plan-workspace floor-plan-workspace--empty ${
+          showGrid ? '' : 'floor-plan-workspace--no-grid'
+        }`}
+        hidden={!active}
+      >
         <input
           accept="image/jpeg,image/png,image/webp"
           aria-label="Upload plan image"
@@ -655,7 +661,9 @@ const FloorPlanWorkspace = forwardRef(function FloorPlanWorkspace({
 
   return (
     <section
-      className={`floor-plan-workspace ${pendingPlacementNodeId ? 'is-placing' : ''}`}
+      className={`floor-plan-workspace ${pendingPlacementNodeId ? 'is-placing' : ''} ${
+        showGrid ? '' : 'floor-plan-workspace--no-grid'
+      }`}
       hidden={!active}
       onContextMenu={(event) => {
         event.preventDefault()

@@ -13,6 +13,23 @@ import { resolvePublicAssetUrl } from '../../lib/runtimePaths'
 
 const nodetraceLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
 
+function getProfileName(profile) {
+  return profile?.displayName || profile?.username || profile?.baseUrl || 'Server Profile'
+}
+
+function sortProfiles(left, right) {
+  if (left?.kind === 'local' && right?.kind !== 'local') {
+    return -1
+  }
+  if (right?.kind === 'local' && left?.kind !== 'local') {
+    return 1
+  }
+  return getProfileName(left).localeCompare(getProfileName(right), undefined, {
+    sensitivity: 'base',
+    numeric: true,
+  })
+}
+
 export default function ProjectDialogs({
   busy,
   canCloseProjectDialog = false,
@@ -82,12 +99,7 @@ export default function ProjectDialogs({
   )
   const normalizedProjectSearch = String(openProjectSearch || '').trim().toLowerCase()
   const visibleDesktopAccounts = [...desktopServerProfiles]
-    .sort((left, right) =>
-      String(left?.username || left?.baseUrl || '').localeCompare(String(right?.username || right?.baseUrl || ''), undefined, {
-        sensitivity: 'base',
-        numeric: true,
-      }),
-    )
+    .sort(sortProfiles)
     .filter((profile) => (connectedAccountFilter ? profile.connectionStatus === 'connected' : true))
   const visibleProjects = sortedProjects.filter((project) => {
     const owned = Boolean(project?.ownerUserId && project.ownerUserId === openProjectUserId)
@@ -127,11 +139,11 @@ export default function ProjectDialogs({
           <div className="inspector__notice">
             {selectedDesktopServerProfile?.connectionStatus === 'invalid_login' ? (
               <>
-                <strong>{selectedDesktopServerProfile?.username || 'This server profile'}</strong> has invalid login credentials. Re-authenticate or fix it before opening projects.
+                <strong>{getProfileName(selectedDesktopServerProfile)}</strong> has invalid login credentials. Re-authenticate or fix it before opening projects.
               </>
             ) : (
               <>
-                <strong>{selectedDesktopServerProfile?.username || 'This server profile'}</strong> is disconnected. Reconnect the server to view its projects.
+                <strong>{getProfileName(selectedDesktopServerProfile)}</strong> is disconnected. Reconnect it to view its projects.
               </>
             )}
           </div>
@@ -150,7 +162,7 @@ export default function ProjectDialogs({
           <div className="project-picker__loading-state project-picker__loading-state--centered">
             <div className="project-picker__loading-spinner" aria-hidden="true" />
             <div className="project-picker__loading-label">
-              Connecting to <strong>{selectedDesktopServerProfile?.username || 'server profile'}</strong>...
+              Connecting to <strong>{getProfileName(selectedDesktopServerProfile)}</strong>...
             </div>
           </div>
         </div>
@@ -367,8 +379,8 @@ export default function ProjectDialogs({
                               type="button"
                             >
                               <span className="project-row__account-meta">
-                                <span>{profile.username || profile.baseUrl || 'Server Profile'}</span>
-                                <small>{profile.baseUrl}</small>
+                                <span>{getProfileName(profile)}</span>
+                                <small>{profile.kind === 'local' ? profile.description || 'Stored on this device' : profile.baseUrl}</small>
                               </span>
                               {hasWarning ? (
                                 <span className={`project-row__warning-inline ${warningClass}`} aria-hidden="true">

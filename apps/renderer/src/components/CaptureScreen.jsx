@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, resolveApiUrl } from '../lib/api'
 import { createPreviewFile } from '../lib/image'
 import { resolvePublicAssetUrl } from '../lib/runtimePaths'
+import MobileFloorPlanPlacement from '../features/floor-plans/MobileFloorPlanPlacement'
 import { AddPhotoIcon } from './icons'
 
 const brandLogoUrl = resolvePublicAssetUrl('nodetrace.svg')
@@ -22,8 +23,11 @@ export default function CaptureScreen() {
   )
   const [statusIsError, setStatusIsError] = useState(false)
   const [uploadEnabled, setUploadEnabled] = useState(false)
+  const [pendingPlanPlacement, setPendingPlanPlacement] = useState(null)
+  const [planPlacementBusy, setPlanPlacementBusy] = useState(false)
   const fileInputRef = useRef(null)
   const pollHandleRef = useRef(null)
+  const lastPlanLocationRef = useRef(null)
   const connectionIdRef = useRef(
     (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 12)).toLowerCase(),
   )
@@ -41,6 +45,10 @@ export default function CaptureScreen() {
       document.body.classList.remove('capture-route')
     }
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = sessionInfo?.theme === 'light' ? 'light' : 'dark'
+  }, [sessionInfo?.theme])
 
   useEffect(() => {
     sessionInputRef.current = sessionInput
@@ -101,11 +109,13 @@ export default function CaptureScreen() {
         throw new Error(nextSessionInfo.error || 'Session is not active')
       }
       await heartbeatConnection(sessionId, nextSessionInfo)
+      sessionInfoRef.current = nextSessionInfo
       setSessionInfo(nextSessionInfo)
       setHasConnectedSession(true)
       setUploadEnabled(true)
       updateUrlParams(sessionId)
       setStatusMessage('')
+      return nextSessionInfo
     } catch (error) {
       setSessionInfo(null)
       setUploadEnabled(false)
@@ -131,6 +141,7 @@ export default function CaptureScreen() {
     setHasConnectedSession(false)
     setSessionInput('')
     setUploadEnabled(false)
+    setPendingPlanPlacement(null)
     updateUrlParams('')
     setStatusMessage('Enter a session code.')
   }, [setStatusMessage, updateUrlParams])
@@ -194,6 +205,7 @@ export default function CaptureScreen() {
     setStatusMessage('Uploading...')
 
     try {
+      let createdPhotoNode = null
       for (const file of nextFiles) {
         const previewFile = await createPreviewFile(file)
         const formData = new FormData()
@@ -209,21 +221,108 @@ export default function CaptureScreen() {
           formData.append('preview', previewFile)
         }
 
-        await api(`/api/sessions/${sessionInfoRef.current.id}/photos`, {
+        const uploadResult = await api(`/api/sessions/${sessionInfoRef.current.id}/photos`, {
           method: 'POST',
           body: formData,
         })
+        if (uploadResult?.mode === 'photo_node' && uploadResult.createdNodeId) {
+          createdPhotoNode = {
+            id: uploadResult.createdNodeId,
+            name: uploadResult.node?.name || 'New photo node',
+          }
+        }
       }
 
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
-      await refreshSession()
+      const nextSessionInfo = await refreshSession()
+      if (createdPhotoNode && nextSessionInfo?.floorPlanEnabled) {
+        const floorPlans = await api(`/api/sessions/${nextSessionInfo.id}/floor-plans`)
+        if (floorPlans.length) {
+          setPendingPlanPlacement({
+            defaultLocation: lastPlanLocationRef.current,
+            floorPlans,
+            nodeId: createdPhotoNode.id,
+            nodeName: createdPhotoNode.name,
+            showGrid: nextSessionInfo.showGrid !== false,
+            theme: nextSessionInfo.theme === 'light' ? 'light' : 'dark',
+          })
+          setStatusMessage('')
+          return
+        }
+      }
       setStatusMessage(`Uploaded to ${sessionInfoRef.current?.selectedNodeName || 'selected node'}.`)
     } catch (error) {
       setStatusMessage(error.message, true)
     }
   }, [refreshSession, setStatusMessage])
+
+  const placeCreatedNode = useCallback(async (floorPlanId, position) => {
+    const sessionId = sessionInputRef.current.trim().toLowerCase()
+    if (!sessionId || !pendingPlanPlacement?.nodeId || planPlacementBusy) {
+      return
+    }
+
+    setPlanPlacementBusy(true)
+    setStatusMessage('Saving plan location...')
+    try {
+      await api(
+        `/api/sessions/${sessionId}/floor-plans/${floorPlanId}/placements/${pendingPlanPlacement.nodeId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(position),
+        },
+      )
+      const floorPlanName =
+        pendingPlanPlacement.floorPlans.find((floorPlan) => floorPlan.id === floorPlanId)?.name || 'plan'
+      const nodeName = pendingPlanPlacement.nodeName
+      lastPlanLocationRef.current = {
+        floorPlanId,
+        nodeId: pendingPlanPlacement.nodeId,
+      }
+      setPendingPlanPlacement(null)
+      setStatusMessage(`Placed ${nodeName} on ${floorPlanName}.`)
+    } catch (error) {
+      setStatusMessage(error.message, true)
+    } finally {
+      setPlanPlacementBusy(false)
+    }
+  }, [pendingPlanPlacement, planPlacementBusy, setStatusMessage])
+
+  const attachCreatedNode = useCallback(async (floorPlanId, parentNodeId) => {
+    const sessionId = sessionInputRef.current.trim().toLowerCase()
+    if (!sessionId || !pendingPlanPlacement?.nodeId || planPlacementBusy) {
+      return
+    }
+
+    setPlanPlacementBusy(true)
+    setStatusMessage('Adding node to location...')
+    try {
+      const result = await api(
+        `/api/sessions/${sessionId}/floor-plans/${floorPlanId}/placements/${parentNodeId}/children/${pendingPlanPlacement.nodeId}`,
+        { method: 'POST' },
+      )
+      const nodeName = pendingPlanPlacement.nodeName
+      lastPlanLocationRef.current = { floorPlanId, nodeId: parentNodeId }
+      setPendingPlanPlacement(null)
+      setStatusMessage(`Added ${nodeName} beneath ${result.parentNodeName || 'location'}.`)
+    } catch (error) {
+      setStatusMessage(error.message, true)
+    } finally {
+      setPlanPlacementBusy(false)
+    }
+  }, [pendingPlanPlacement, planPlacementBusy, setStatusMessage])
+
+  const skipPlanPlacement = useCallback(() => {
+    if (!pendingPlanPlacement || planPlacementBusy) {
+      return
+    }
+    const nodeName = pendingPlanPlacement.nodeName
+    setPendingPlanPlacement(null)
+    setStatusMessage(`Left ${nodeName} unplaced.`)
+  }, [pendingPlanPlacement, planPlacementBusy, setStatusMessage])
 
   function openPicker(nextMode, captureFromCamera) {
     uploadModeRef.current = nextMode
@@ -242,6 +341,25 @@ export default function CaptureScreen() {
         input.setAttribute('capture', 'environment')
       }, 0)
     }
+  }
+
+  if (pendingPlanPlacement) {
+    return (
+      <div className="capture-screen">
+        <MobileFloorPlanPlacement
+          busy={planPlacementBusy}
+          defaultLocation={pendingPlanPlacement.defaultLocation}
+          floorPlans={pendingPlanPlacement.floorPlans}
+          onAttach={attachCreatedNode}
+          onPlace={placeCreatedNode}
+          onSkip={skipPlanPlacement}
+          showGrid={pendingPlanPlacement.showGrid}
+          status={status}
+          statusIsError={statusIsError}
+          theme={pendingPlanPlacement.theme}
+        />
+      </div>
+    )
   }
 
   return (

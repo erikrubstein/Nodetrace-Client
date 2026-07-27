@@ -3,8 +3,9 @@ import process from 'node:process'
 import fs from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
+import { networkInterfaces } from 'node:os'
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, safeStorage, session } from 'electron'
 import { getPanelInitialWidth, getPanelMinWidth } from '../../packages/shared/src/panelSizing.js'
@@ -12,6 +13,7 @@ import { resolveDesktopIconPaths } from './main/icons.js'
 import { buildApplicationMenu } from './main/menu.js'
 import { createSplashWindow } from './main/splash.js'
 import { registerIpcHandlers } from './main/ipcHandlers.js'
+import { createLocalServerController } from './main/localServerProcess.js'
 import {
   clearPersistedWorkspaceState,
   getPersistedWorkspaceState,
@@ -23,7 +25,9 @@ import { attachWindowStateListeners, buildWindowOptions } from './main/windowing
 const desktopDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRootDir = path.resolve(desktopDir, '../..')
 const preloadPath = path.join(desktopDir, 'preload.cjs')
-const desktopLogPath = path.join(repoRootDir, 'logs', 'desktop.log')
+const desktopLogPath = app.isPackaged
+  ? path.join(app.getPath('userData'), 'logs', 'desktop.log')
+  : path.join(repoRootDir, 'logs', 'desktop.log')
 const desktopStatePath = path.join(app.getPath('userData'), 'desktop-state.json')
 const rendererEntryPath = path.join(repoRootDir, 'dist', 'index.html')
 const rendererDevUrl = process.argv.find((arg) => arg.startsWith('--dev-url='))?.slice('--dev-url='.length) || ''
@@ -35,6 +39,9 @@ const rendererAdditionalArguments =
   devDesktopPlatformOverride === 'darwin' || devDesktopPlatformOverride === 'win32'
     ? [`--nodetrace-dev-platform=${devDesktopPlatformOverride}`]
     : []
+const LOCAL_PROJECTS_PROFILE_ID = 'local-projects'
+const LOCAL_PROJECTS_FALLBACK_URL = 'http://127.0.0.1:1'
+const localServerBootstrapToken = randomBytes(32).toString('hex')
 
 const mainWindows = new Set()
 const pendingSplashWindows = new Map()
@@ -45,6 +52,7 @@ let desktopProxyBaseUrl = ''
 let profileStatusPollTimer = null
 let profileStatusPollInFlight = false
 let lastBroadcastDesktopServerStateSignature = ''
+let localServerController = null
 let desktopState = {
   profiles: [],
   selectedProfileId: null,
@@ -147,6 +155,101 @@ function normalizeServerProfile(profile, fallbackId = randomUUID()) {
   }
 }
 
+function isLocalProjectsProfile(profileOrId) {
+  const profileId = typeof profileOrId === 'string' ? profileOrId : profileOrId?.id
+  return String(profileId || '') === LOCAL_PROJECTS_PROFILE_ID
+}
+
+function getLocalCaptureUrls(baseUrl) {
+  let port = ''
+  try {
+    port = new URL(baseUrl).port
+  } catch {
+    return []
+  }
+  if (!port) {
+    return []
+  }
+
+  const addresses = new Map()
+  for (const [interfaceName, entries] of Object.entries(networkInterfaces())) {
+    const interfacePriority = /^(?:utun|tun|tap|bridge|docker|veth|vmnet|virbr|tailscale|zt|vEthernet)/i
+      .test(interfaceName)
+      ? 1
+      : 0
+    for (const entry of entries || []) {
+      const isIpv4 = entry.family === 'IPv4' || entry.family === 4
+      if (!isIpv4 || entry.internal || !entry.address || entry.address.startsWith('169.254.')) {
+        continue
+      }
+      addresses.set(
+        entry.address,
+        Math.min(interfacePriority, addresses.get(entry.address) ?? interfacePriority),
+      )
+    }
+  }
+
+  return Array.from(addresses.entries())
+    .sort(([leftAddress, leftPriority], [rightAddress, rightPriority]) =>
+      leftPriority - rightPriority ||
+      leftAddress.localeCompare(rightAddress, undefined, { numeric: true }))
+    .map(([address]) => `http://${address}:${port}/capture`)
+}
+
+function installLocalProjectsProfile(baseUrl) {
+  const remoteProfiles = desktopState.profiles.filter((profile) => !isLocalProjectsProfile(profile))
+  desktopState.profiles = [
+    {
+      id: LOCAL_PROJECTS_PROFILE_ID,
+      kind: 'local',
+      displayName: 'Local Projects',
+      description: 'Stored on this device',
+      baseUrl: String(baseUrl || LOCAL_PROJECTS_FALLBACK_URL),
+      username: 'local',
+      passwordEncrypted: '',
+    },
+    ...remoteProfiles,
+  ]
+  if (
+    !desktopState.selectedProfileId ||
+    !desktopState.profiles.some((profile) => profile.id === desktopState.selectedProfileId)
+  ) {
+    desktopState.selectedProfileId = LOCAL_PROJECTS_PROFILE_ID
+  }
+  writeDesktopState()
+}
+
+function getOrCreateLocalServerSecret() {
+  const localProjectsDir = path.join(app.getPath('userData'), 'local-projects')
+  const secretPath = path.join(localProjectsDir, '.server-secret')
+  try {
+    const storedSecret = fs.readFileSync(secretPath, 'utf8').trim()
+    if (storedSecret) {
+      return storedSecret
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error
+    }
+  }
+
+  const secret = randomBytes(32).toString('hex')
+  fs.mkdirSync(localProjectsDir, { recursive: true })
+  try {
+    fs.writeFileSync(secretPath, `${secret}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+    return secret
+  } catch (error) {
+    if (error?.code !== 'EEXIST') {
+      throw error
+    }
+    const storedSecret = fs.readFileSync(secretPath, 'utf8').trim()
+    if (!storedSecret) {
+      throw new Error('The Local Projects server secret file is empty')
+    }
+    return storedSecret
+  }
+}
+
 function readDesktopState() {
   try {
     if (!fs.existsSync(desktopStatePath)) {
@@ -156,11 +259,16 @@ function readDesktopState() {
     const parsed = JSON.parse(fs.readFileSync(desktopStatePath, 'utf8'))
     const profiles = Array.isArray(parsed?.profiles)
       ? parsed.profiles
+          .filter((profile) => !isLocalProjectsProfile(profile))
           .map((profile) => normalizeServerProfile(profile, profile?.id || randomUUID()))
           .filter(Boolean)
       : []
+    const requestedSelectedProfileId = String(parsed?.selectedProfileId || '')
     const selectedProfileId =
-      profiles.some((profile) => profile.id === parsed?.selectedProfileId) ? parsed.selectedProfileId : profiles[0]?.id || null
+      requestedSelectedProfileId === LOCAL_PROJECTS_PROFILE_ID ||
+      profiles.some((profile) => profile.id === requestedSelectedProfileId)
+        ? requestedSelectedProfileId
+        : LOCAL_PROJECTS_PROFILE_ID
 
     desktopState = {
       profiles,
@@ -186,7 +294,7 @@ function writeDesktopState() {
       desktopStatePath,
       JSON.stringify(
         {
-          profiles: desktopState.profiles,
+          profiles: desktopState.profiles.filter((profile) => !isLocalProjectsProfile(profile)),
           selectedProfileId: desktopState.selectedProfileId,
           sessionCookiesByProfileId: desktopState.sessionCookiesByProfileId,
           lastClosedWorkspaceByScopeKey: desktopState.lastClosedWorkspaceByScopeKey,
@@ -222,6 +330,7 @@ function getDesktopServerState() {
       return {
         ...profile,
         ...authState,
+        ...(isLocalProjectsProfile(profile) ? { captureUrls: getLocalCaptureUrls(profile.baseUrl) } : {}),
         username: authState.username || profile.username || '',
       }
     }),
@@ -301,6 +410,16 @@ function updateStoredProfile(profileId, updates = {}) {
   const profileIndex = desktopState.profiles.findIndex((profile) => profile.id === profileId)
   if (profileIndex < 0) {
     return null
+  }
+  if (isLocalProjectsProfile(profileId)) {
+    desktopState.profiles[profileIndex] = {
+      ...desktopState.profiles[profileIndex],
+      username: String(updates?.username || desktopState.profiles[profileIndex].username || 'local')
+        .trim()
+        .toLowerCase(),
+    }
+    writeDesktopState()
+    return desktopState.profiles[profileIndex]
   }
   const nextProfile = normalizeServerProfile(
     {
@@ -410,6 +529,32 @@ async function fetchProfileAuthState(profile) {
       return {
         ...baseState,
         error: `HTTP ${response.statusCode}`,
+      }
+    }
+
+    if (isLocalProjectsProfile(profile)) {
+      const bootstrapResponse = await requestJson(new URL('/api/local/bootstrap', `${profile.baseUrl}/`), {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${localServerBootstrapToken}`,
+        },
+      })
+      if (!bootstrapResponse.ok || bootstrapResponse.payload?.ok === false) {
+        return {
+          ...baseState,
+          error: String(bootstrapResponse.payload?.error || `HTTP ${bootstrapResponse.statusCode}`),
+        }
+      }
+
+      captureSessionCookie(profile.id, bootstrapResponse.headers['set-cookie'], false)
+      return {
+        authenticated: true,
+        userId: String(bootstrapResponse.payload?.id || ''),
+        username: String(bootstrapResponse.payload?.username || 'local'),
+        captureSessionId: String(bootstrapResponse.payload?.captureSessionId || ''),
+        connectionStatus: 'connected',
+        error: '',
       }
     }
 
@@ -847,6 +992,9 @@ function openPanelWindow(options = {}) {
 }
 
 async function upsertServerProfile(id, payload) {
+  if (isLocalProjectsProfile(id)) {
+    throw new Error('Local Projects is managed by Nodetrace and cannot be edited')
+  }
   const existingProfile = id ? desktopState.profiles.find((profile) => profile.id === id) || null : null
   const mergedProfile = {
     ...(existingProfile || {}),
@@ -925,11 +1073,14 @@ async function upsertServerProfile(id, payload) {
 }
 
 async function deleteServerProfile(id) {
+  if (isLocalProjectsProfile(id)) {
+    throw new Error('Local Projects cannot be removed')
+  }
   desktopState.profiles = desktopState.profiles.filter((profile) => profile.id !== id)
   delete desktopState.sessionCookiesByProfileId[id]
   delete desktopProfileAuthStateById[id]
   if (desktopState.selectedProfileId === id) {
-    desktopState.selectedProfileId = desktopState.profiles[0]?.id || null
+    desktopState.selectedProfileId = LOCAL_PROJECTS_PROFILE_ID
   }
   writeDesktopState()
   broadcastDesktopServerState()
@@ -1045,6 +1196,9 @@ async function patchProfileAccountUsername(profileId, username) {
   if (!profile) {
     throw new Error('Server profile not found')
   }
+  if (isLocalProjectsProfile(profile)) {
+    throw new Error('The Local Projects identity is managed by Nodetrace')
+  }
 
   const response = await requestJson(new URL('/api/account/username', `${profile.baseUrl}/`), {
     method: 'PATCH',
@@ -1081,6 +1235,9 @@ async function patchProfileAccountPassword(profileId, currentPassword, newPasswo
   if (!profile) {
     throw new Error('Server profile not found')
   }
+  if (isLocalProjectsProfile(profile)) {
+    throw new Error('The Local Projects identity is managed by Nodetrace')
+  }
 
   const response = await requestJson(new URL('/api/account/password', `${profile.baseUrl}/`), {
     method: 'PATCH',
@@ -1112,6 +1269,9 @@ async function deleteProfileAccount(profileId, username, activeProfileId = '') {
   const profile = desktopState.profiles.find((entry) => entry.id === profileId)
   if (!profile) {
     throw new Error('Server profile not found')
+  }
+  if (isLocalProjectsProfile(profile)) {
+    throw new Error('The Local Projects identity cannot be deleted')
   }
 
   const savedPassword = getStoredPassword(profile)
@@ -1217,6 +1377,7 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   stopProfileStatusPolling()
   desktopProxyServer?.close()
+  localServerController?.stop()
 })
 
 await app.whenReady()
@@ -1237,6 +1398,22 @@ if (isMac) {
   }
 }
 readDesktopState()
+localServerController = createLocalServerController({
+  app,
+  bootstrapToken: localServerBootstrapToken,
+  dataDir: path.join(app.getPath('userData'), 'local-projects'),
+  log: logDesktop,
+  runtimeRootDir: repoRootDir,
+  secretKey: getOrCreateLocalServerSecret(),
+  webDistDir: path.join(repoRootDir, 'dist'),
+})
+let localServerBaseUrl = LOCAL_PROJECTS_FALLBACK_URL
+try {
+  localServerBaseUrl = (await localServerController.start()).baseUrl
+} catch (error) {
+  logDesktop(`Unable to start Local Projects service: ${error.message}`)
+}
+installLocalProjectsProfile(localServerBaseUrl)
 await startDesktopProxy()
 logDesktop(`Desktop shell starting${rendererDevUrl ? ` with renderer ${rendererDevUrl}` : ''}`)
 createMainWindow({ showSplash: true })

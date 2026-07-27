@@ -17,6 +17,8 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
       is_release: ${{ steps.meta.outputs.is_release }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      server_ref: ${{ steps.meta.outputs.server_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -33,6 +35,14 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           tag="v${version}"
           is_release="false"
+          is_prerelease="false"
+          server_ref="main"
+          if [[ "$version" == *-* ]]; then
+            is_prerelease="true"
+          fi
+          if [[ "$version" == *-plan-preview.* ]]; then
+            server_ref="feature/plan-view-preview"
+          fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             if [[ "${GITHUB_REF_NAME}" != "${tag}" ]]; then
               echo "Tag ${GITHUB_REF_NAME} does not match package version ${tag}" >&2
@@ -43,6 +53,8 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "is_release=${is_release}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
+          echo "server_ref=${server_ref}" >> "$GITHUB_OUTPUT"
 
   build-web:
     name: Build web bundle
@@ -99,6 +111,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Checkout bundled server
+        uses: actions/checkout@v6
+        with:
+          repository: erikrubstein/Nodetrace-Server
+          ref: ${{ needs.validate.outputs.server_ref }}
+          path: .server-runtime-source
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -165,7 +184,8 @@ jobs:
           CSC_LINK: ${{ runner.os == 'macOS' && (secrets.MACOS_CERTIFICATE_BASE64 || secrets.MAC_CSC_LINK) || '' }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && (secrets.MACOS_CERTIFICATE_PASSWORD || secrets.MAC_CSC_KEY_PASSWORD) || '' }}
           CSC_NAME: ${{ runner.os == 'macOS' && secrets.CODE_SIGN_IDENTITY || '' }}
-        run: npm run build:web && ${{ matrix.build_command }}
+          NODETRACE_SERVER_SOURCE_DIR: ${{ github.workspace }}/.server-runtime-source
+        run: npm run prepare:local-server && npm run build:web && ${{ matrix.build_command }}
 
       - name: Normalize artifact filename
         run: |
@@ -257,9 +277,14 @@ jobs:
         shell: bash
         run: |
           if ! gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            prerelease_args=()
+            if [[ "${{ needs.validate.outputs.is_prerelease }}" == "true" ]]; then
+              prerelease_args+=(--prerelease)
+            fi
             gh release create "$RELEASE_TAG" \
               --repo "$RELEASE_REPO" \
               --title "Nodetrace $RELEASE_TAG" \
-              --generate-notes
+              --generate-notes \
+              "${prerelease_args[@]}"
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --repo "$RELEASE_REPO" --clobber

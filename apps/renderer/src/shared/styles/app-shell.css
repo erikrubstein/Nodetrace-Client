@@ -23,10 +23,15 @@
 
 .topbar--native-menu {
   padding-left: 84px;
+  padding-right: 10px;
 }
 
 .topbar--native-menu .topbar__left {
   gap: 8px;
+}
+
+.topbar--native-menu .topbar__right {
+  margin-right: 0;
 }
 
 .topbar__no-drag,

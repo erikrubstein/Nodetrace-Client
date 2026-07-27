@@ -49,15 +49,38 @@ function getConnectionLabel(profile) {
 
 function getConnectionDescription(profile) {
   if (profile?.connectionStatus === 'connecting') {
-    return 'Trying to reach the server and validate the saved credentials.'
+    return profile?.kind === 'local'
+      ? 'Starting the Local Projects service on this device.'
+      : 'Trying to reach the server and validate the saved credentials.'
   }
   if (profile?.connectionStatus === 'connected') {
-    return 'The server is reachable and the saved credentials are valid.'
+    return profile?.kind === 'local'
+      ? 'Projects are stored privately on this device.'
+      : 'The server is reachable and the saved credentials are valid.'
   }
   if (profile?.connectionStatus === 'invalid_login') {
     return 'The server is reachable, but the saved username or password is not valid.'
   }
-  return 'The server could not be reached from this desktop client.'
+  return profile?.kind === 'local'
+    ? 'The Local Projects service could not be started.'
+    : 'The server could not be reached from this desktop client.'
+}
+
+function getProfileName(profile) {
+  return profile?.displayName || profile?.username || profile?.baseUrl || 'Server Profile'
+}
+
+function sortProfiles(left, right) {
+  if (left?.kind === 'local' && right?.kind !== 'local') {
+    return -1
+  }
+  if (right?.kind === 'local' && left?.kind !== 'local') {
+    return 1
+  }
+  return getProfileName(left).localeCompare(getProfileName(right), undefined, {
+    sensitivity: 'base',
+    numeric: true,
+  })
 }
 
 function resolveInitialProfileId(profiles, focusProfileId, selectedProfileId) {
@@ -99,13 +122,7 @@ export default function DesktopServerManager({
   )
   const [urlPromptState, setUrlPromptState] = useState({ profileId: null, value: '', open: false })
   const sortedProfiles = useMemo(
-    () =>
-      [...profiles].sort((left, right) =>
-        String(left?.username || left?.baseUrl || '').localeCompare(String(right?.username || right?.baseUrl || ''), undefined, {
-          sensitivity: 'base',
-          numeric: true,
-        }),
-      ),
+    () => [...profiles].sort(sortProfiles),
     [profiles],
   )
   const inspectedProfileId =
@@ -131,7 +148,7 @@ export default function DesktopServerManager({
   }
 
   function openEditMode(profile) {
-    if (!profile) {
+    if (!profile || profile.kind === 'local') {
       return
     }
     setEditor({
@@ -364,8 +381,8 @@ export default function DesktopServerManager({
                         type="button"
                       >
                         <span className="project-row__account-meta">
-                          <span>{profile.username || profile.baseUrl || 'Account'}</span>
-                          <small>{profile.baseUrl}</small>
+                          <span>{getProfileName(profile)}</span>
+                          <small>{profile.kind === 'local' ? profile.description || 'Stored on this device' : profile.baseUrl}</small>
                         </span>
                         {warning ? (
                           <span className={warningClass} aria-hidden="true">
@@ -393,7 +410,7 @@ export default function DesktopServerManager({
                     ? (editor.id ? 'Edit Server Profile' : 'Add Server Profile')
                     : 'Server Profile Details'}
                 </div>
-              {hasProfiles ? (
+              {hasProfiles && inspectedProfile?.kind !== 'local' ? (
                 <IconButton
                   className="tool-button"
                   disabled={busy || !inspectedProfile}
@@ -517,8 +534,12 @@ export default function DesktopServerManager({
               ) : inspectedProfile ? (
                 <div className="desktop-account-manager__detail-card desktop-account-manager__panel">
                   <div className="desktop-account-manager__identity">
-                    <strong>{inspectedProfile.username || inspectedProfile.baseUrl || 'Server Profile'}</strong>
-                    <div className="desktop-account-manager__meta">{inspectedProfile.baseUrl}</div>
+                    <strong>{getProfileName(inspectedProfile)}</strong>
+                    <div className="desktop-account-manager__meta">
+                      {inspectedProfile.kind === 'local'
+                        ? inspectedProfile.description || 'Stored on this device'
+                        : inspectedProfile.baseUrl}
+                    </div>
                   </div>
 
                   <section className="desktop-account-manager__section">
@@ -531,93 +552,104 @@ export default function DesktopServerManager({
                     </div>
                   </section>
 
-                  <section className="desktop-account-manager__section">
-                    <div className="desktop-account-manager__section-heading">
-                      <div className="desktop-account-manager__section-title">Server</div>
-                      <IconButton
-                        className="tool-button desktop-account-manager__server-edit-button"
-                        disabled={busy}
-                        onClick={openUrlPrompt}
-                        tooltip="Edit Server URL"
-                      >
-                        <PencilIcon />
-                      </IconButton>
-                    </div>
-                    <div className="desktop-account-manager__value">{inspectedProfile.baseUrl}</div>
-                    {serverUrlPromptOpen ? (
-                      <div className="desktop-account-manager__prompt">
-                        <input
-                          autoCapitalize="none"
-                          autoCorrect="off"
-                          autoFocus
-                          disabled={busy}
-                          onChange={(event) =>
-                            setUrlPromptState((current) => ({
-                              ...current,
-                              value: event.target.value,
-                            }))
-                          }
-                          value={serverUrlDraft}
-                        />
-                        <div className="desktop-account-manager__prompt-actions">
-                          <button className="ghost-button" disabled={busy} onClick={closeUrlPrompt} type="button">
-                            Cancel
-                          </button>
+                  {inspectedProfile.kind === 'local' ? (
+                    <section className="desktop-account-manager__section">
+                      <div className="desktop-account-manager__section-title">Storage</div>
+                      <div className="desktop-account-manager__value">
+                        Nodetrace manages this profile and its local sign-in automatically.
+                      </div>
+                    </section>
+                  ) : (
+                    <>
+                      <section className="desktop-account-manager__section">
+                        <div className="desktop-account-manager__section-heading">
+                          <div className="desktop-account-manager__section-title">Server</div>
+                          <IconButton
+                            className="tool-button desktop-account-manager__server-edit-button"
+                            disabled={busy}
+                            onClick={openUrlPrompt}
+                            tooltip="Edit Server URL"
+                          >
+                            <PencilIcon />
+                          </IconButton>
+                        </div>
+                        <div className="desktop-account-manager__value">{inspectedProfile.baseUrl}</div>
+                        {serverUrlPromptOpen ? (
+                          <div className="desktop-account-manager__prompt">
+                            <input
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              autoFocus
+                              disabled={busy}
+                              onChange={(event) =>
+                                setUrlPromptState((current) => ({
+                                  ...current,
+                                  value: event.target.value,
+                                }))
+                              }
+                              value={serverUrlDraft}
+                            />
+                            <div className="desktop-account-manager__prompt-actions">
+                              <button className="ghost-button" disabled={busy} onClick={closeUrlPrompt} type="button">
+                                Cancel
+                              </button>
+                              <button
+                                className="ghost-button"
+                                disabled={busy || !serverUrlChanged || !normalizeBaseUrlInput(serverUrlDraft)}
+                                onClick={() => void saveServerUrl()}
+                                type="button"
+                              >
+                                Save URL
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <section className="desktop-account-manager__section">
+                        <div className="desktop-account-manager__section-title">Account</div>
+                        <div className="desktop-account-manager__value">{inspectedProfile.username || 'Unknown'}</div>
+                        <div className="desktop-account-manager__account-primary">
                           <button
-                            className="ghost-button"
-                            disabled={busy || !serverUrlChanged || !normalizeBaseUrlInput(serverUrlDraft)}
-                            onClick={() => void saveServerUrl()}
+                            className="ghost-button wide"
+                            disabled={busy}
+                            onClick={() => openEditMode(inspectedProfile)}
                             type="button"
                           >
-                            Save URL
+                            Re-authenticate
                           </button>
                         </div>
-                      </div>
-                    ) : null}
-                  </section>
-
-                  <section className="desktop-account-manager__section">
-                    <div className="desktop-account-manager__section-title">Account</div>
-                    <div className="desktop-account-manager__value">{inspectedProfile.username || 'Unknown'}</div>
-                    <div className="desktop-account-manager__account-primary">
-                      <button
-                        className="ghost-button wide"
-                        disabled={busy}
-                        onClick={() => openEditMode(inspectedProfile)}
-                        type="button"
-                      >
-                        Re-authenticate
-                      </button>
-                    </div>
-                    {inspectedProfile.connectionStatus === 'connected' ? (
-                      <div className="desktop-account-manager__account-secondary">
-                        <button
-                          className="ghost-button"
-                          disabled={busy}
-                          onClick={() => onOpenAccountDialog?.('username', inspectedProfile.id)}
-                          type="button"
-                        >
-                          Change Username
-                        </button>
-                        <button
-                          className="ghost-button"
-                          disabled={busy}
-                          onClick={() => onOpenAccountDialog?.('password', inspectedProfile.id)}
-                          type="button"
-                        >
-                          Change Password
-                        </button>
-                        <button
-                          className="danger-button"
-                          disabled={busy}
-                          onClick={() => onOpenAccountDialog?.('delete-account', inspectedProfile.id)}
-                          type="button"
-                        >
-                          Delete Account
-                        </button>
-                      </div>
-                    ) : null}
-                  </section>
+                        {inspectedProfile.connectionStatus === 'connected' ? (
+                          <div className="desktop-account-manager__account-secondary">
+                            <button
+                              className="ghost-button"
+                              disabled={busy}
+                              onClick={() => onOpenAccountDialog?.('username', inspectedProfile.id)}
+                              type="button"
+                            >
+                              Change Username
+                            </button>
+                            <button
+                              className="ghost-button"
+                              disabled={busy}
+                              onClick={() => onOpenAccountDialog?.('password', inspectedProfile.id)}
+                              type="button"
+                            >
+                              Change Password
+                            </button>
+                            <button
+                              className="danger-button"
+                              disabled={busy}
+                              onClick={() => onOpenAccountDialog?.('delete-account', inspectedProfile.id)}
+                              type="button"
+                            >
+                              Delete Account
+                            </button>
+                          </div>
+                        ) : null}
+                      </section>
+                    </>
+                  )}
 
                   {error ? <div className="inspector__notice error">{error}</div> : null}
                 </div>

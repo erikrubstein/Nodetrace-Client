@@ -14,6 +14,7 @@ dist-ssr
 *.local
 .env
 data/
+.local-server-runtime/
 
 # Editor directories and files
 .vscode/*

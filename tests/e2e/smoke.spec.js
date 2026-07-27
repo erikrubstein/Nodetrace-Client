@@ -27,6 +27,16 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
 
   await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
 
+  await expect(page.getByRole('button', { name: 'Locations', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show mobile capture session' }).click()
+  const mobileCaptureDialog = page.locator('.dialog--mobile-capture')
+  await expect(mobileCaptureDialog).toBeVisible()
+  await expect(mobileCaptureDialog.getByLabel('Mobile capture addresses')).toContainText(
+    'http://127.0.0.1:4173/capture',
+  )
+  await expect(mobileCaptureDialog.getByLabel('Session code')).toHaveText(/\S+/)
+  await mobileCaptureDialog.getByRole('button', { name: 'Close' }).click()
+
   await page.getByRole('button', { name: 'Add node' }).click()
   await page.getByPlaceholder('Node name').fill(nodeName)
   await page.getByRole('button', { name: 'Create' }).click()
@@ -104,7 +114,9 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(selectedNodePathNavigation).toBeVisible()
   await expect(selectedNodePathNavigation).toContainText(nodeName)
   await expect(page.getByLabel('Plans')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Add a plan' })).toBeVisible()
+  const emptyPlanState = page.locator('.floor-plan-empty-state')
+  await expect(emptyPlanState.getByRole('heading', { name: 'Add a plan' })).toBeVisible()
+  await expect(emptyPlanState).toHaveCSS('box-shadow', 'none')
 
   await page.getByLabel('Upload plan image').setInputFiles({
     name: 'main-floor.png',
@@ -245,8 +257,9 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
     return `${styles.backgroundColor}|${styles.boxShadow}`
   })).toBe('rgba(0, 0, 0, 0)|none')
 
-  await page.getByRole('button', { name: 'Locations', exact: true }).click()
-  await page.getByRole('button', { name: `Place ${nodeName}` }).click()
+  await workspaceView.getByRole('button', { name: 'Tree View' }).click()
+  await createdNode.click({ button: 'right' })
+  await page.getByRole('button', { name: 'Place on Plan' }).click()
   await floorPlanStage.click({ position: { x: 160, y: 120 } })
   const locationButton = page.locator('.floor-plan-marker__tree-node.is-root')
   await expect(locationButton).toBeVisible()
@@ -441,7 +454,6 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await nestedFloorPlanNode.click()
   await expect(selectedNodePathNavigation).toContainText(childNodeName)
 
-  await page.getByRole('button', { name: 'Plan', exact: true }).click()
   await expect(appearancePanel).toBeVisible()
   await workspaceView.getByRole('button', { name: 'Tree View' }).click()
   await expect(selectedNodePathNavigation).toBeVisible()
@@ -527,8 +539,8 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('left', '-56px')
   await expect(page.locator('.floor-plan-marker__tree-node.is-root')).toHaveCSS('top', '28px')
 
-  await page.getByRole('button', { name: 'Locations', exact: true }).click()
-  await page.getByRole('button', { name: `Place ${childNodeName}` }).click()
+  await floorPlanNestedNode.click({ button: 'right' })
+  await page.getByRole('button', { name: 'Place on Plan' }).click()
   await floorPlanStage.click({ position: { x: 360, y: 260 } })
   await expect(
     floorPlanStage.getByRole('button', { name: childNodeName, exact: true }),
@@ -585,4 +597,198 @@ test('user can build a tree and place a node on a plan', async ({ page }) => {
   await expect(page.locator('svg.lucide').first()).toBeVisible()
   await expect(page.locator('i[class*="fa-"]')).toHaveCount(0)
   await expect(page.locator('link[href*="font-awesome"]')).toHaveCount(0)
+})
+
+test('mobile photo nodes can be placed on a project plan or left unplaced', async ({ page }) => {
+  const username = uniqueValue('mobplan')
+  const password = 'nodetrace-mobile-plan-pass'
+  const projectName = uniqueValue('Mobile Plan Project')
+  const planImage = {
+    name: 'mobile-plan.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP48OHDCSMjBqOUEwwMDAAzMAVbjHgdWQAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  }
+  const photoImage = {
+    name: 'mobile-photo.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP48OHDCSMjBqOUEwwMDAAzMAVbjHgdWQAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  }
+
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Register' }).click()
+  await page.getByRole('textbox', { name: 'Username' }).fill(username)
+  await page.getByRole('textbox', { name: 'Password' }).fill(password)
+  await page.getByRole('button', { name: 'Create Account' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
+  await page.getByPlaceholder('Project name').fill(projectName)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await expect(page.getByRole('banner').getByText(projectName)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Project Settings' }).click()
+  await page.getByLabel('Plans').selectOption('enabled')
+  await page.getByRole('group', { name: 'Workspace view' })
+    .getByRole('button', { name: 'Plan View' })
+    .click()
+  await page.getByLabel('Upload plan image').setInputFiles(planImage)
+  await expect(page.getByRole('img', { name: 'mobile-plan' })).toBeVisible()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply Theme', exact: true }).hover()
+  await page.getByRole('button', { name: 'Light', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+
+  await page.getByRole('button', { name: 'Show mobile capture session' }).click()
+  const mobileCaptureDialog = page.locator('.dialog--mobile-capture')
+  const sessionId = (await mobileCaptureDialog.getByLabel('Session code').textContent()).trim()
+  await mobileCaptureDialog.getByRole('button', { name: 'Close' }).click()
+  await expect.poll(() => page.evaluate(async (captureSessionId) => {
+    const response = await fetch(`/api/sessions/${captureSessionId}`)
+    return response.json()
+  }, sessionId)).toMatchObject({
+    showGrid: true,
+    theme: 'light',
+  })
+
+  const mobilePage = await page.context().newPage()
+  await mobilePage.setViewportSize({ width: 390, height: 844 })
+  await mobilePage.goto(`/capture?session=${sessionId}`)
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+  await expect(mobilePage.locator('html')).toHaveAttribute('data-theme', 'light')
+
+  await mobilePage.locator('.capture-native-input').setInputFiles(photoImage)
+  await expect(mobilePage.getByText('Choose a location', { exact: true })).toBeVisible()
+  await expect(mobilePage.getByRole('img', { name: 'mobile-plan' })).toBeVisible()
+  const planFrame = mobilePage.locator('.mobile-plan-placement__frame')
+  await expect(planFrame).toHaveCSS('background-image', /radial-gradient/)
+  const mobilePlan = mobilePage.getByRole('button', {
+    name: 'Create a new location on mobile-plan',
+  })
+  const mobilePlanBox = await mobilePlan.boundingBox()
+  expect(mobilePlanBox).not.toBeNull()
+  await mobilePlan.click({
+    position: {
+      x: mobilePlanBox.width * 0.75,
+      y: mobilePlanBox.height * 0.25,
+    },
+  })
+  const newLocationMarker = mobilePage.locator('.mobile-plan-placement__new-marker')
+  await expect(newLocationMarker).toBeVisible()
+  await expect(newLocationMarker.locator('svg.lucide-plus')).toBeVisible()
+  await expect(newLocationMarker).toHaveCSS('color', 'rgb(200, 79, 79)')
+  const [placementResponse] = await Promise.all([
+    mobilePage.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      response.url().includes('/placements/')),
+    mobilePage.getByRole('button', { name: 'Place Here' }).click(),
+  ])
+  const placementResponseBody = await placementResponse.text()
+  expect(
+    placementResponse.status(),
+    placementResponseBody,
+  ).toBe(200)
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+  await expect(mobilePage.locator('.capture-status').filter({ hasText: /^Placed / })).toBeVisible()
+  await page.getByRole('group', { name: 'Workspace view' })
+    .getByRole('button', { name: 'Tree View' })
+    .click()
+  await page.locator('.canvas-stage')
+    .getByRole('button', { name: projectName, exact: true })
+    .click()
+  await expect.poll(() => page.evaluate(async (captureSessionId) => {
+    const response = await fetch(`/api/sessions/${captureSessionId}`)
+    return (await response.json()).selectedNodeName
+  }, sessionId)).toBe(projectName)
+
+  await mobilePage.locator('.capture-native-input').setInputFiles(photoImage)
+  await expect(mobilePage.getByText('Choose a location', { exact: true })).toBeVisible()
+  const selectedLocationDot = mobilePage.locator(
+    '.mobile-plan-placement__existing-marker[aria-pressed="true"]',
+  )
+  await expect(selectedLocationDot).toHaveCount(1)
+  await expect(selectedLocationDot).toHaveCSS('box-shadow', 'none')
+  await expect(selectedLocationDot.locator('span')).toHaveCSS('box-shadow', 'none')
+  await expect(selectedLocationDot.locator('span')).toHaveCSS('background-color', 'rgb(200, 79, 79)')
+  await mobilePage.getByRole('button', { name: 'Add to Location' }).click()
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+  await expect(mobilePage.locator('.capture-status').filter({ hasText: /^Added / })).toBeVisible()
+
+  await mobilePage.locator('.capture-native-input').setInputFiles(photoImage)
+  await expect(mobilePage.getByText('Choose a location', { exact: true })).toBeVisible()
+  await mobilePlan.click({
+    position: {
+      x: mobilePlanBox.width * 0.25,
+      y: mobilePlanBox.height * 0.75,
+    },
+  })
+  await mobilePage.getByRole('button', { name: 'Place Here' }).click()
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+
+  await mobilePage.locator('.capture-native-input').setInputFiles(photoImage)
+  await expect(mobilePage.getByText('Choose a location', { exact: true })).toBeVisible()
+  const defaultLocationDot = mobilePage.locator(
+    '.mobile-plan-placement__existing-marker[aria-pressed="true"]',
+  )
+  const defaultLocationPosition = await defaultLocationDot.evaluate((dot) => ({
+    left: Number.parseFloat(dot.style.left),
+    top: Number.parseFloat(dot.style.top),
+  }))
+  expect(defaultLocationPosition.left).toBeCloseTo(25, 0)
+  expect(defaultLocationPosition.top).toBeCloseTo(75, 0)
+  const locationDots = mobilePage.locator('.mobile-plan-placement__existing-marker')
+  const locationDotPositions = await locationDots.evaluateAll((dots) =>
+    dots.map((dot) => Number.parseFloat(dot.style.left)))
+  const firstLocationDot = locationDots.nth(
+    locationDotPositions.findIndex((left) => left > 50),
+  )
+  await expect(firstLocationDot.locator('span')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(firstLocationDot.locator('span')).toHaveCSS('border-top-color', 'rgb(200, 79, 79)')
+  await expect(firstLocationDot.locator('span')).toHaveCSS('border-top-style', 'solid')
+  await firstLocationDot.click()
+  await expect(firstLocationDot).toHaveAttribute('aria-pressed', 'true')
+  await expect(firstLocationDot.locator('span')).toHaveCSS('background-color', 'rgb(200, 79, 79)')
+  await mobilePage.getByRole('button', { name: 'Add to Location' }).click()
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+
+  await mobilePage.locator('.capture-native-input').setInputFiles(photoImage)
+  await expect(mobilePage.getByText('Choose a location', { exact: true })).toBeVisible()
+  await mobilePage.getByRole('button', { name: 'Skip', exact: true }).click()
+  await expect(mobilePage.getByText('Connected', { exact: true })).toBeVisible()
+  await expect(mobilePage.locator('.capture-status').filter({ hasText: /unplaced\.$/ })).toBeVisible()
+
+  const projectTree = await page.evaluate(async (name) => {
+    const projectsResponse = await fetch('/api/projects')
+    const projects = await projectsResponse.json()
+    const project = projects.find((candidate) => candidate.name === name)
+    const treeResponse = await fetch(`/api/projects/${project.id}/tree`)
+    return treeResponse.json()
+  }, projectName)
+  const photoNodes = projectTree.nodes.filter((node) => node.type === 'photo')
+  const placements = projectTree.project.floorPlans[0].placements
+  const firstPlacement = placements.find(
+    (placement) => Math.abs(placement.x - 0.75) < 0.05,
+  )
+  const secondPlacement = placements.find(
+    (placement) => Math.abs(placement.x - 0.25) < 0.05,
+  )
+
+  expect(photoNodes).toHaveLength(5)
+  expect(placements).toHaveLength(2)
+  expect(firstPlacement.y).toBeCloseTo(0.25, 1)
+  expect(secondPlacement.y).toBeCloseTo(0.75, 1)
+  expect(
+    photoNodes.filter((node) => node.parent_id === firstPlacement.nodeId),
+  ).toHaveLength(2)
+  expect(
+    photoNodes.filter((node) => node.parent_id === secondPlacement.nodeId),
+  ).toHaveLength(0)
+  expect(
+    photoNodes.filter((node) => node.parent_id === projectTree.root.id),
+  ).toHaveLength(3)
+
+  await mobilePage.close()
 })

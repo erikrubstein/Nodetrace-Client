@@ -78,7 +78,6 @@ import { useAppShellCommands } from './app/commands/appShellCommands'
 import { useTreeMutationCommands } from './app/commands/treeMutationCommands'
 import { getPresenceColor, getPresenceInitials } from './features/collaboration/presence'
 import FloorPlanAppearancePanel from './features/floor-plans/FloorPlanAppearancePanel'
-import FloorPlanLocationsPanel from './features/floor-plans/FloorPlanLocationsPanel'
 import FloorPlanWorkspace from './features/floor-plans/FloorPlanWorkspace'
 import WorkspaceModeTools from './features/floor-plans/WorkspaceModeTools'
 import useFloorPlanCommands from './features/floor-plans/useFloorPlanCommands'
@@ -93,7 +92,6 @@ import { buildTemplateFormState } from './features/node-editing/templateFormStat
 import {
   CameraIcon,
   GearIcon,
-  LocationIcon,
   PaletteIcon,
   IdentificationIcon,
   PencilIcon,
@@ -116,7 +114,6 @@ const PANEL_WINDOW_TITLES = {
   templates: 'Templates',
   settings: 'Project Settings',
   collaborators: 'Project Access',
-  locations: 'Locations',
   floorPlan: 'Plan',
 }
 
@@ -301,6 +298,33 @@ function MainApp() {
     () => desktopServerState.profiles.find((profile) => profile.id === desktopServerState.selectedProfileId) || null,
     [desktopServerState.profiles, desktopServerState.selectedProfileId],
   )
+  const mobileCaptureUrls = useMemo(() => {
+    if (desktopEnvironment) {
+      if (selectedDesktopServerProfile?.kind === 'local') {
+        return Array.from(
+          new Set(
+            (selectedDesktopServerProfile.captureUrls || [])
+              .map((url) => String(url || '').trim())
+              .filter(Boolean),
+          ),
+        )
+      }
+
+      try {
+        return selectedDesktopServerProfile?.baseUrl
+          ? [new URL('/capture', `${selectedDesktopServerProfile.baseUrl}/`).toString()]
+          : []
+      } catch {
+        return []
+      }
+    }
+
+    if (typeof window === 'undefined' || !['http:', 'https:'].includes(window.location.protocol)) {
+      return []
+    }
+
+    return [new URL('/capture', window.location.origin).toString()]
+  }, [desktopEnvironment, selectedDesktopServerProfile])
   const selectedProjectSummary = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) || null,
     [projects, selectedProjectId],
@@ -885,7 +909,7 @@ function MainApp() {
     : floorPlans[0]?.id || null
   const activeFloorPlan = floorPlans.find((floorPlan) => floorPlan.id === resolvedActiveFloorPlanId) || null
   const enabledPanelIds = useMemo(
-    () => floorPlanEnabled ? panelIds : panelIds.filter((panelId) => panelId !== 'locations' && panelId !== 'floorPlan'),
+    () => floorPlanEnabled ? panelIds : panelIds.filter((panelId) => panelId !== 'floorPlan'),
     [floorPlanEnabled],
   )
   const leftDockedPanelIds = useMemo(
@@ -2099,6 +2123,8 @@ function MainApp() {
   const { loadProjects, loadTree } = useProjectSync({
     clearHistory,
     captureSessionId: currentUser?.captureSessionId || '',
+    captureShowGrid: showGrid,
+    captureTheme: theme,
     currentUser,
     desktopEnvironment,
     desktopConnectionStatus: effectiveDesktopServerConnectionStatus,
@@ -2543,7 +2569,6 @@ function MainApp() {
 
   const {
     handleDeleteFloorPlan,
-    handleRemoveFloorPlanPlacement,
     handleSaveFloorPlanPlacement,
     handleUploadFloorPlan,
     handleUpdateFloorPlanAppearance,
@@ -5344,33 +5369,6 @@ function MainApp() {
           />
         ),
       },
-      locations: floorPlanEnabled ? {
-        id: 'locations',
-        title: 'Locations',
-        icon: <LocationIcon />,
-        allowPopout: false,
-        content: (
-          <FloorPlanLocationsPanel
-            activeFloorPlan={activeFloorPlan}
-            busy={busy}
-            nodes={tree?.nodes || []}
-            onBeginPlacement={(nodeId) => {
-              setPendingFloorPlanNodeId(nodeId)
-              if (nodeId) {
-                setWorkspaceModePreference('floor-plan')
-              }
-            }}
-            onRemovePlacement={(nodeId) => {
-              if (activeFloorPlan?.id) {
-                void handleRemoveFloorPlanPlacement(activeFloorPlan.id, nodeId)
-              }
-            }}
-            onSelectNode={selectFloorPlanNode}
-            pendingPlacementNodeId={pendingFloorPlanNodeId}
-            selectedNodeId={selectedNodeId}
-          />
-        ),
-      } : null,
       floorPlan: floorPlanEnabled ? {
         id: 'floorPlan',
         title: 'Plan',
@@ -5587,6 +5585,8 @@ function MainApp() {
         identificationTemplateRemovalCount={identificationTemplateRemovalCount}
         identificationTemplateRemovalNodes={identificationTemplateRemovalNodes}
         mergePhotoConfirmation={mergePhotoConfirmation}
+        mobileCaptureIsLocal={desktopEnvironment && selectedDesktopServerProfile?.kind === 'local'}
+        mobileCaptureUrls={mobileCaptureUrls}
         mobileConnectionCount={mobileConnectionCount}
         newNodeDialog={newNodeDialog}
         newNodeName={newNodeName}
@@ -5921,6 +5921,7 @@ function MainApp() {
                 : null
             }
             selectNodeFromPath={selectFloorPlanNode}
+            showGrid={showGrid}
             theme={theme}
             transform={resolvedActiveFloorPlanId ? floorPlanTransforms[resolvedActiveFloorPlanId] || null : null}
           />

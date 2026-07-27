@@ -9,7 +9,10 @@ files:
   - apps/renderer/public/**
   - packages/shared/**
   - build/**
+  - .local-server-runtime/**
   - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
 extraMetadata:
   main: apps/desktop/launcher.cjs
 mac:
@@ -20,6 +23,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.inherit.plist
   extendInfo:
     NSCameraUsageDescription: Nodetrace uses the camera to capture photos for project nodes.
+    NSLocalNetworkUsageDescription: Nodetrace uses the local network to connect mobile capture devices to Local Projects.
   target:
     - dmg
 dmg:

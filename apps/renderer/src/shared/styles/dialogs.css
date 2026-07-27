@@ -21,6 +21,10 @@
   width: min(760px, calc(100vw - 24px));
 }
 
+.dialog--mobile-capture {
+  width: min(460px, calc(100vw - 24px));
+}
+
 .dialog--frameless {
   padding: 0;
   background: transparent;
@@ -45,6 +49,31 @@
   letter-spacing: 0.08em;
   color: var(--text);
   padding: 12px 0 8px;
+}
+
+.mobile-capture__url-list {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-capture__url {
+  display: block;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.mobile-capture__session-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-align: center;
 }
 
 .project-list {
@@ -739,4 +768,3 @@
 .templates-panel__actions-bar .danger-button {
   width: auto;
 }
-
